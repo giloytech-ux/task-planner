@@ -1081,7 +1081,8 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
-            history.replaceState({ nav: 'dashboard' }, '');
+            history.replaceState({ nav: 'base' }, '');
+            history.pushState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
@@ -1090,7 +1091,8 @@
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
-            history.replaceState({ nav: 'dashboard' }, '');
+            history.replaceState({ nav: 'base' }, '');
+            history.pushState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
