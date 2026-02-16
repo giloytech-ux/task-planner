@@ -1059,6 +1059,7 @@
         }
 
         async function handleSignOut() {
+            clearTimeout(window.detailSaveTimeout);
             if (currentProjectId) {
                 await saveProject();
             }
@@ -1181,7 +1182,7 @@
                     .eq('project_id', id)
                     .order('created_at');
 
-                const loadedTasks = (taskData || []).map(t => ({
+                const rawTasks = (taskData || []).map(t => ({
                     id: t.task_number,
                     name: t.name,
                     start: t.start_date,
@@ -1199,6 +1200,14 @@
                     _lastSummaryHash: t.last_summary_hash || ''
                 }));
 
+                // Deduplicate by task id (safety net for race-condition duplicates)
+                const seen = new Set();
+                const loadedTasks = rawTasks.filter(t => {
+                    if (seen.has(t.id)) return false;
+                    seen.add(t.id);
+                    return true;
+                });
+
                 await hydrateAndMigrateFiles(loadedTasks);
 
                 const loadedHistory = (chatData || []).map(c => ({
@@ -1215,9 +1224,17 @@
             }
         }
 
+        let _saveInFlight = false;
+        let _saveQueued = false;
+
         async function saveProject() {
             if (!currentProjectId) return;
 
+            // Concurrency guard: prevent overlapping delete+insert causing duplicates
+            if (_saveInFlight) { _saveQueued = true; return; }
+            _saveInFlight = true;
+
+            try {
             if (currentUser) {
                 // Update project timestamp
                 await supabase
@@ -1272,6 +1289,13 @@
                     history: trimmedHistory
                 }));
                 updateRegistryMetadataLocal();
+            }
+            } finally {
+                _saveInFlight = false;
+                if (_saveQueued) {
+                    _saveQueued = false;
+                    saveProject();
+                }
             }
         }
 
@@ -1714,6 +1738,7 @@
         // =============================================
 
         async function showDashboard() {
+            clearTimeout(window.detailSaveTimeout);
             if (currentProjectId) {
                 await saveProject();
             }
