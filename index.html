@@ -819,6 +819,82 @@
             console.error('Supabase client init failed:', e);
         }
 
+        // ---- File Storage Helpers ----
+        // Stores file data separately from task records to avoid JSONB/localStorage size limits
+        async function saveFileData(fileId, data) {
+            if (currentUser && supabase && currentProjectId) {
+                try {
+                    const base64Data = data.split(',')[1];
+                    const mimeType = (data.split(';')[0].split(':')[1]) || 'application/octet-stream';
+                    const byteChars = atob(base64Data);
+                    const byteArray = new Uint8Array(byteChars.length);
+                    for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+                    const blob = new Blob([byteArray], { type: mimeType });
+                    const path = `${currentUser.id}/${currentProjectId}/${fileId}`;
+                    const { error } = await supabase.storage.from('task-files').upload(path, blob, { upsert: true });
+                    if (!error) return 'supabase';
+                    console.warn('Supabase Storage upload:', error.message);
+                } catch (e) {
+                    console.warn('Supabase Storage unavailable:', e.message);
+                }
+            }
+            try {
+                localStorage.setItem('planner_file_' + fileId, data);
+                return 'local';
+            } catch (e) {
+                console.warn('localStorage file save failed (quota?):', e.message);
+                return 'memory';
+            }
+        }
+
+        async function loadFileData(file) {
+            if (file.data) return file.data;
+            if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
+                try {
+                    const path = `${currentUser.id}/${currentProjectId}/${file.id}`;
+                    const { data, error } = await supabase.storage.from('task-files').download(path);
+                    if (data && !error) {
+                        return new Promise(resolve => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.readAsDataURL(data);
+                        });
+                    }
+                } catch (e) {}
+            }
+            const localData = localStorage.getItem('planner_file_' + file.id);
+            return localData || null;
+        }
+
+        async function deleteFileData(file) {
+            if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
+                try {
+                    const path = `${currentUser.id}/${currentProjectId}/${file.id}`;
+                    await supabase.storage.from('task-files').remove([path]);
+                } catch (e) {}
+            }
+            try { localStorage.removeItem('planner_file_' + file.id); } catch (e) {}
+        }
+
+        function stripFileData(filesArr) {
+            return (filesArr || []).map(f => {
+                const { data, ...meta } = f;
+                return meta;
+            });
+        }
+
+        async function hydrateAndMigrateFiles(tasksArr) {
+            for (const task of tasksArr) {
+                for (const file of (task.files || [])) {
+                    if (file.data && !file.storage) {
+                        file.storage = await saveFileData(file.id, file.data);
+                    } else if (!file.data) {
+                        file.data = await loadFileData(file);
+                    }
+                }
+            }
+        }
+
         // --- Configuration & State ---
         let tasks = [];
         let history = [];
@@ -1104,6 +1180,8 @@
                     _lastSummaryHash: t.last_summary_hash || ''
                 }));
 
+                await hydrateAndMigrateFiles(loadedTasks);
+
                 const loadedHistory = (chatData || []).map(c => ({
                     role: c.role,
                     text: c.message
@@ -1112,7 +1190,9 @@
                 return { tasks: loadedTasks, history: loadedHistory };
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
-                return raw ? JSON.parse(raw) : { tasks: [], history: [] };
+                const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [] };
+                await hydrateAndMigrateFiles(parsed.tasks);
+                return parsed;
             }
         }
 
@@ -1143,7 +1223,7 @@
                         locked: !!t.locked,
                         checklist: t.checklist || [],
                         activity: t.activity || [],
-                        files: t.files || [],
+                        files: stripFileData(t.files),
                         meetings: t.meetings || [],
                         last_summary: t._lastSummary || '',
                         last_summary_hash: t._lastSummaryHash || ''
@@ -1164,8 +1244,12 @@
                 }
             } else {
                 const trimmedHistory = history.slice(-40);
+                const tasksForSave = tasks.map(t => ({
+                    ...t,
+                    files: stripFileData(t.files)
+                }));
                 localStorage.setItem('planner_proj_' + currentProjectId, JSON.stringify({
-                    tasks: tasks,
+                    tasks: tasksForSave,
                     history: trimmedHistory
                 }));
                 updateRegistryMetadataLocal();
@@ -1255,7 +1339,7 @@
                         locked: !!t.locked,
                         checklist: t.checklist || [],
                         activity: t.activity || [],
-                        files: t.files || [],
+                        files: stripFileData(t.files),
                         meetings: t.meetings || [],
                         last_summary: t._lastSummary || '',
                         last_summary_hash: t._lastSummaryHash || ''
@@ -1278,7 +1362,11 @@
                     newEntry.color = original.color;
                     saveRegistryLocal(newRegistry);
                 }
-                localStorage.setItem('planner_proj_' + newId, JSON.stringify(sourceData));
+                const sourceForSave = {
+                    ...sourceData,
+                    tasks: sourceData.tasks.map(t => ({ ...t, files: stripFileData(t.files) }))
+                };
+                localStorage.setItem('planner_proj_' + newId, JSON.stringify(sourceForSave));
                 updateRegistryMetadataLocalForProject(newId);
             }
 
@@ -2620,6 +2708,8 @@
                 let preview = '';
                 if (isImage && file.data) {
                     preview = `<img src="${file.data}" class="file-thumb" onclick="previewFile(${i})" title="Click to preview">`;
+                } else if (isImage && !file.data) {
+                    preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded cursor-pointer" onclick="previewFile(${i})"><span class="material-icons-round text-2xl text-slate-500">image</span></div>`;
                 } else {
                     const icon = file.type && file.type.includes('pdf') ? 'picture_as_pdf' : 'description';
                     preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded"><span class="material-icons-round text-2xl text-slate-500">${icon}</span></div>`;
@@ -2651,14 +2741,18 @@
                     return;
                 }
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = async function(e) {
                     autoLockTask(task);
+                    const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                    const fileData = e.target.result;
+                    const storageType = await saveFileData(fileId, fileData);
                     task.files.push({
-                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                        id: fileId,
                         name: file.name,
                         size: file.size,
                         type: file.type,
-                        data: e.target.result,
+                        data: fileData,
+                        storage: storageType,
                         timestamp: new Date().toISOString()
                     });
                     addActivityEntry(task, 'system', `File attached: "${file.name}"`);
@@ -2674,24 +2768,30 @@
             document.getElementById('fileInput').value = '';
         }
 
-        function previewFile(index) {
+        async function previewFile(index) {
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
-            if (!file || !file.data) return;
+            if (!file) return;
+            let data = file.data || await loadFileData(file);
+            if (!data) { alert('File data not available'); return; }
+            file.data = data;
             const win = window.open('', '_blank');
             if (file.type && file.type.startsWith('image/')) {
-                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${file.data}"></body></html>`);
+                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${data}"></body></html>`);
             } else {
-                win.document.write(`<iframe src="${file.data}" style="width:100%;height:100%;border:none"></iframe>`);
+                win.document.write(`<iframe src="${data}" style="width:100%;height:100%;border:none"></iframe>`);
             }
         }
 
-        function downloadFile(index) {
+        async function downloadFile(index) {
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
-            if (!file || !file.data) return;
+            if (!file) return;
+            let data = file.data || await loadFileData(file);
+            if (!data) { alert('File data not available'); return; }
+            file.data = data;
             const a = document.createElement('a');
-            a.href = file.data;
+            a.href = data;
             a.download = file.name;
             a.click();
         }
@@ -2700,6 +2800,7 @@
             const task = tasks[currentTaskIndex];
             autoLockTask(task);
             const removed = task.files.splice(index, 1);
+            deleteFileData(removed[0]);
             addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
             renderFilesTab(task);
             renderTaskDetailHeader();
