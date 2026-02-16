@@ -2534,8 +2534,12 @@
 
             renderTaskDetailHeader();
             updateRowIndicators(currentTaskIndex);
+            renderMobileCards();
             clearTimeout(window.detailSaveTimeout);
-            window.detailSaveTimeout = setTimeout(() => saveProject(), 500);
+            window.detailSaveTimeout = setTimeout(() => {
+                renderTable();
+                saveProject();
+            }, 500);
         }
 
         // ---- DEPENDENCIES ----
