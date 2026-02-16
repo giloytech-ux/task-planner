@@ -1510,13 +1510,13 @@
                 tr.className = `hover:bg-slate-800/50 transition-colors ${isLocked ? 'opacity-80' : ''}`;
                 tr.innerHTML = `
                     <td class="p-2 text-center">
-                        <button onclick="toggleTaskLock(${index})" class="p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}" title="${isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI'}">
+                        <button id="lockBtn-${index}" onclick="toggleTaskLock(${index})" class="p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}" title="${isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI'}">
                             <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
                         </button>
                     </td>
                     <td class="p-3"><a href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
                     <td class="p-2 text-center">
-                        <button onclick="toggleRowSummary(${index}, this)" class="p-1 rounded transition-colors ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
+                        <button id="summaryBtn-${index}" onclick="toggleRowSummary(${index}, this)" class="p-1 rounded transition-colors ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
                             <span class="material-icons-round" style="font-size:16px">auto_awesome</span>
                         </button>
                     </td>
@@ -1552,10 +1552,33 @@
             });
         }
 
+        function updateRowIndicators(index) {
+            const task = tasks[index];
+            if (!task) return;
+            const isLocked = !!task.locked;
+            const hasContent = hasTaskContent(task);
+
+            const lockBtn = document.getElementById(`lockBtn-${index}`);
+            if (lockBtn) {
+                lockBtn.className = `p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}`;
+                lockBtn.title = isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI';
+                lockBtn.querySelector('.material-icons-round').textContent = isLocked ? 'lock' : 'lock_open';
+                lockBtn.closest('tr').className = `hover:bg-slate-800/50 transition-colors ${isLocked ? 'opacity-80' : ''}`;
+            }
+
+            const summaryBtn = document.getElementById(`summaryBtn-${index}`);
+            if (summaryBtn) {
+                summaryBtn.className = `p-1 rounded transition-colors ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}`;
+                summaryBtn.title = hasContent ? 'AI Summary' : 'No content to summarize';
+                summaryBtn.disabled = !hasContent;
+            }
+        }
+
         function autoLockTask(task) {
             if (!task.locked) {
                 task.locked = true;
                 addActivityEntry(task, 'system', 'Task auto-locked due to user edit');
+                updateRowIndicators(tasks.indexOf(task));
             }
         }
 
@@ -1578,7 +1601,7 @@
 
         function toggleTaskLock(index) {
             tasks[index].locked = !tasks[index].locked;
-            renderTable();
+            updateRowIndicators(index);
             saveProject();
         }
 
@@ -1729,6 +1752,7 @@
             }
 
             renderTaskDetailHeader();
+            updateRowIndicators(currentTaskIndex);
             clearTimeout(window.detailSaveTimeout);
             window.detailSaveTimeout = setTimeout(() => saveProject(), 500);
         }
@@ -1779,6 +1803,7 @@
                 const depTask = tasks.find(t => t.id === depId);
                 addActivityEntry(task, 'system', `Dependency added: "${depTask ? depTask.name : depId}"`);
                 renderDependencies(task);
+                updateRowIndicators(currentTaskIndex);
                 saveProject();
             }
         }
@@ -1794,6 +1819,7 @@
                 const depTask = tasks.find(t => t.id === depId);
                 addActivityEntry(task, 'system', `Dependency removed: "${depTask ? depTask.name : depId}"`);
                 renderDependencies(task);
+                updateRowIndicators(currentTaskIndex);
                 saveProject();
             }
         }
@@ -1833,6 +1859,7 @@
             input.value = '';
             renderChecklistTab(task);
             renderTaskDetailHeader();
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -1852,6 +1879,7 @@
 
             renderChecklistTab(task);
             renderTaskDetailHeader();
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -1868,6 +1896,7 @@
 
             renderChecklistTab(task);
             renderTaskDetailHeader();
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -1921,6 +1950,7 @@
             addActivityEntry(task, 'comment', val);
             input.value = '';
             renderActivityTab(task);
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -1985,6 +2015,7 @@
                     addActivityEntry(task, 'system', `File attached: "${file.name}"`);
                     renderFilesTab(task);
                     renderTaskDetailHeader();
+                    updateRowIndicators(currentTaskIndex);
                     saveProject();
                 };
                 reader.readAsDataURL(file);
@@ -2023,6 +2054,7 @@
             addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
             renderFilesTab(task);
             renderTaskDetailHeader();
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -2131,6 +2163,7 @@
             editingMeetingIndex = null;
             document.getElementById('meetingForm').classList.add('hidden');
             renderMeetingsTab(task);
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
@@ -2141,6 +2174,7 @@
             const removed = task.meetings.splice(index, 1);
             addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
             renderMeetingsTab(task);
+            updateRowIndicators(currentTaskIndex);
             saveProject();
         }
 
