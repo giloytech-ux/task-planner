@@ -44,6 +44,11 @@
         .gantt .tick { stroke: #1e293b !important; }
         .gantt .row-line { stroke: #1e293b !important; }
         .gantt-container { overflow: visible; }
+        @media (max-width: 767px) {
+            .gantt .upper-text, .gantt-sticky-header .upper-text { font-size: 10px !important; }
+            .gantt .lower-text, .gantt-sticky-header .lower-text { font-size: 9px !important; }
+            .gantt .bar-label { font-size: 10px !important; }
+        }
 
         /* Loader */
         .loader {
@@ -1984,6 +1989,20 @@
             }
         }
 
+        function compressGanttLabels() {
+            if (window.innerWidth >= 768) return;
+            const months = { 'January':'Jan','February':'Feb','March':'Mar','April':'Apr','May':'May','June':'Jun','July':'Jul','August':'Aug','September':'Sep','October':'Oct','November':'Nov','December':'Dec' };
+            document.querySelectorAll('.gantt .upper-text, .gantt-sticky-header .upper-text').forEach(el => {
+                let t = el.textContent;
+                for (const [full, short] of Object.entries(months)) {
+                    t = t.replace(full, short);
+                }
+                // Shorten "2026" → "'26"
+                t = t.replace(/\b(20)(\d{2})\b/, "'$2");
+                el.textContent = t;
+            });
+        }
+
         function setupGanttStickyHeader() {
             const container = document.getElementById('gantt-target');
             const ganttWrapper = container?.querySelector('.gantt-container');
@@ -2060,7 +2079,7 @@
             document.getElementById('ganttViewMode').textContent = mode;
             if (ganttChart) {
                 ganttChart.change_view_mode(mode);
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); scrollGanttToToday(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); scrollGanttToToday(); }, 200);
             }
         }
 
@@ -2100,7 +2119,7 @@
                     custom_popup_html: null
                 });
 
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); scrollGanttToToday(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); scrollGanttToToday(); }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
