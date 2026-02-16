@@ -1076,24 +1076,26 @@
             showAuthView();
         }
 
-        function continueAsGuest() {
+        async function continueAsGuest() {
             currentUser = null;
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
-            window.history.replaceState({ nav: 'base' }, '');
-            window.history.pushState({ nav: 'dashboard' }, '');
-            showDashboard();
+            await showDashboard();
+            try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
+            pushNavState('dashboard');
+            _navReady = true;
         }
 
-        function onUserLoggedIn() {
+        async function onUserLoggedIn() {
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
-            window.history.replaceState({ nav: 'base' }, '');
-            window.history.pushState({ nav: 'dashboard' }, '');
-            showDashboard();
+            await showDashboard();
+            try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
+            pushNavState('dashboard');
+            _navReady = true;
         }
 
         // Allow Enter key in auth form
@@ -1134,11 +1136,14 @@
         // =============================================
         // History API — Mobile back button navigation
         // =============================================
+        let _navReady = false;
+
         function pushNavState(state) {
-            window.history.pushState({ nav: state }, '');
+            try { window.history.pushState({ nav: state }, ''); } catch(e) {}
         }
 
         window.addEventListener('popstate', function(e) {
+            if (!_navReady) return;
             if (!document.getElementById('projectSummaryModal').classList.contains('hidden')) {
                 closeProjectSummary(); return;
             }
@@ -1160,7 +1165,7 @@
             if (currentProjectId) {
                 showDashboard(); return;
             }
-            window.history.pushState({ nav: 'dashboard' }, '');
+            pushNavState('dashboard');
         });
 
         // =============================================
@@ -1863,7 +1868,6 @@
         }
 
         async function openProject(id) {
-            pushNavState('project');
             currentProjectId = id;
             const data = await loadProject(id);
             tasks = data.tasks || [];
@@ -1898,6 +1902,7 @@
 
             // Render gantt & table
             renderGantt();
+            pushNavState('project');
         }
 
         function rebuildChatUI() {
@@ -2607,7 +2612,6 @@
         let _taskSnapshot = null; // snapshot for discard
 
         function openTaskDetail(index) {
-            pushNavState('taskDetail');
             currentTaskIndex = index;
             const task = tasks[index];
             ensureTaskRichData(task);
@@ -2619,6 +2623,7 @@
 
             renderTaskDetailHeader();
             switchDetailTab('details');
+            pushNavState('taskDetail');
         }
 
         function closeTaskDetail() {
