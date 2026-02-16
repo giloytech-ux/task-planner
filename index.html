@@ -1205,17 +1205,13 @@
                     _lastSummaryHash: t.last_summary_hash || ''
                 }));
 
-                // Deduplicate by content (name+start+end) — handles renumbered duplicates
-                const seen = new Set();
-                const deduped = rawTasks.filter(t => {
-                    const key = `${t.name}|${t.start}|${t.end}`;
-                    if (seen.has(key)) return false;
-                    seen.add(key);
+                // Only dedup exact task_number duplicates (from concurrent insert race)
+                const seenIds = new Set();
+                const loadedTasks = rawTasks.filter(t => {
+                    if (seenIds.has(t.id)) return false;
+                    seenIds.add(t.id);
                     return true;
                 });
-                // Renumber after dedup
-                const loadedTasks = deduped.map((t, i) => ({ ...t, id: String(i + 1) }));
-                const hadDuplicates = rawTasks.length !== loadedTasks.length;
 
                 await hydrateAndMigrateFiles(loadedTasks);
 
@@ -1224,7 +1220,7 @@
                     text: c.message
                 }));
 
-                return { tasks: loadedTasks, history: loadedHistory, hadDuplicates };
+                return { tasks: loadedTasks, history: loadedHistory };
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
                 const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [] };
@@ -1811,12 +1807,6 @@
 
             // Render gantt & table
             renderGantt();
-
-            // If duplicates were cleaned on load, save the deduped data back
-            if (data.hadDuplicates) {
-                console.log('Cleaned duplicate tasks, saving deduped data');
-                saveProject();
-            }
         }
 
         function rebuildChatUI() {
