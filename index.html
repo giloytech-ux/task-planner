@@ -1713,7 +1713,7 @@
             document.getElementById('projectView').classList.add('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
             document.getElementById('ganttSection').classList.remove('hidden');
-            document.getElementById('summaryPanel').classList.add('hidden');
+            document.getElementById('summaryPanel')?.classList.add('hidden');
             document.getElementById('breadcrumbSep').classList.add('hidden');
             document.getElementById('breadcrumbName').classList.add('hidden');
             document.getElementById('exportButtons').classList.add('hidden');
@@ -2427,7 +2427,7 @@
             currentTaskIndex = null;
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
-            document.getElementById('summaryPanel').classList.add('hidden');
+            document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
         }
 
@@ -2446,7 +2446,7 @@
             currentTaskIndex = null;
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
-            document.getElementById('summaryPanel').classList.add('hidden');
+            document.getElementById('summaryPanel')?.classList.add('hidden');
             saveProject();
             renderGantt();
         }
@@ -3011,7 +3011,7 @@
 
         function toggleSummaryPanel() {
             const panel = document.getElementById('summaryPanel');
-            panel.classList.toggle('hidden');
+            if (panel) panel.classList.toggle('hidden');
         }
 
         function regenerateRowSummary(index) {
@@ -3097,6 +3097,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
         async function showTaskSummary() {
             const task = tasks[currentTaskIndex];
             const panel = document.getElementById('summaryPanel');
+            if (!panel) return;
             ensureTaskRichData(task);
 
             // If panel is visible, toggle it off
