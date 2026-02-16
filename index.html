@@ -378,6 +378,7 @@
             <div id="statusIndicator" class="text-xs text-green-500 hidden">Ready</div>
             <!-- User menu -->
             <div id="userMenu" class="flex items-center gap-2 hidden">
+                <span id="tokenIndicator" class="text-xs text-slate-500 hidden sm:inline cursor-pointer hover:text-slate-300" onclick="showTokenDetails()" title="Token usage"></span>
                 <span id="userEmail" class="text-xs text-slate-400 max-w-[150px] truncate hidden sm:inline"></span>
                 <button onclick="handleSignOut()" class="flex items-center justify-center min-w-[44px] min-h-[44px] text-xs text-slate-400 hover:text-red-400 transition-colors" title="Sign Out">
                     <span class="material-icons-round text-sm">logout</span>
@@ -932,6 +933,12 @@
         let lastSummaryTime = 0;
         const SUMMARY_COOLDOWN_MS = 5000;
         const MAX_PROMPT_LENGTH = 2000;
+        const TIER_CONFIG = {
+            free:     { monthlyTokens: 100000,  maxProjects: 3,        label: 'Free' },
+            pro:      { monthlyTokens: 500000,  maxProjects: Infinity, label: 'Pro' },
+            pro_plus: { monthlyTokens: 2000000, maxProjects: Infinity, label: 'Pro+' }
+        };
+        let userProfile = null;
         let currentProjectId = null;
         let currentUser = null;     // null = guest mode
         let isAuthSignUp = false;   // toggle between sign-in / sign-up
@@ -1080,6 +1087,7 @@
             }
             await supabase.auth.signOut();
             currentUser = null;
+            userProfile = null;
             currentProjectId = null;
             tasks = [];
             history = [];
@@ -1088,6 +1096,7 @@
 
         async function continueAsGuest() {
             currentUser = null;
+            userProfile = null;
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
@@ -1102,10 +1111,121 @@
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
+            await loadUserProfile();
             await showDashboard();
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
             pushNavState('dashboard');
             _navReady = true;
+        }
+
+        // =============================================
+        // Token Tracking & Tier System
+        // =============================================
+
+        async function loadUserProfile() {
+            if (!currentUser) { userProfile = null; return; }
+            const { data, error } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (error && error.code === 'PGRST116') {
+                // First login — insert new row
+                const { data: newRow, error: insertErr } = await supabase
+                    .from('user_profiles')
+                    .insert({ id: currentUser.id })
+                    .select()
+                    .single();
+                if (insertErr) { console.error('Failed to create user profile:', insertErr); userProfile = null; return; }
+                userProfile = newRow;
+            } else if (error) {
+                console.error('Failed to load user profile:', error);
+                userProfile = null;
+                return;
+            } else {
+                userProfile = data;
+            }
+
+            // Monthly reset check
+            const cycleStart = new Date(userProfile.billing_cycle_start);
+            const nextCycle = new Date(cycleStart);
+            nextCycle.setMonth(nextCycle.getMonth() + 1);
+            if (new Date() >= nextCycle) {
+                const tierLimit = TIER_CONFIG[userProfile.tier]?.monthlyTokens || 0;
+                const consumedFromAddons = Math.max(0, userProfile.token_usage - tierLimit);
+                const newAddonTokens = Math.max(0, userProfile.addon_tokens - consumedFromAddons);
+                const { error: resetErr } = await supabase
+                    .from('user_profiles')
+                    .update({
+                        token_usage: 0,
+                        addon_tokens: newAddonTokens,
+                        billing_cycle_start: new Date().toISOString()
+                    })
+                    .eq('id', currentUser.id);
+                if (!resetErr) {
+                    userProfile.token_usage = 0;
+                    userProfile.addon_tokens = newAddonTokens;
+                    userProfile.billing_cycle_start = new Date().toISOString();
+                }
+            }
+            updateTokenDisplay();
+        }
+
+        function getTokenBudget() {
+            if (!userProfile) return null;
+            const tierLimit = TIER_CONFIG[userProfile.tier]?.monthlyTokens || 0;
+            const total = tierLimit + userProfile.addon_tokens;
+            const used = userProfile.token_usage;
+            return { remaining: total - used, total, used };
+        }
+
+        function trackTokenUsage(tokensUsed) {
+            if (!userProfile || !tokensUsed) return;
+            userProfile.token_usage += tokensUsed;
+            // Fire-and-forget Supabase update
+            supabase
+                .from('user_profiles')
+                .update({ token_usage: userProfile.token_usage })
+                .eq('id', userProfile.id)
+                .then(({ error }) => { if (error) console.error('Token usage update failed:', error); });
+            updateTokenDisplay();
+        }
+
+        function formatTokenCount(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1).replace(/\.0$/, '') + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'K';
+            return String(n);
+        }
+
+        function updateTokenDisplay() {
+            const el = document.getElementById('tokenIndicator');
+            if (!el) return;
+            const budget = getTokenBudget();
+            if (!budget) { el.textContent = ''; return; }
+            const pct = budget.total > 0 ? (budget.used / budget.total) * 100 : 0;
+            el.textContent = `${formatTokenCount(budget.used)} / ${formatTokenCount(budget.total)}`;
+            el.classList.remove('text-green-400', 'text-yellow-400', 'text-red-400', 'text-slate-500');
+            if (pct >= 90) el.classList.add('text-red-400');
+            else if (pct >= 70) el.classList.add('text-yellow-400');
+            else el.classList.add('text-green-400');
+        }
+
+        function showTokenDetails() {
+            const budget = getTokenBudget();
+            if (!budget || !userProfile) return;
+            const tierLabel = TIER_CONFIG[userProfile.tier]?.label || userProfile.tier;
+            const cycleStart = new Date(userProfile.billing_cycle_start);
+            const nextCycle = new Date(cycleStart);
+            nextCycle.setMonth(nextCycle.getMonth() + 1);
+            const daysLeft = Math.max(0, Math.ceil((nextCycle - new Date()) / (1000 * 60 * 60 * 24)));
+            alert(
+                `Plan: ${tierLabel}\n` +
+                `Tokens used: ${formatTokenCount(budget.used)} / ${formatTokenCount(budget.total)}\n` +
+                `Remaining: ${formatTokenCount(budget.remaining)}\n` +
+                (userProfile.addon_tokens > 0 ? `Add-on tokens: ${formatTokenCount(userProfile.addon_tokens)}\n` : '') +
+                `Resets in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+            );
         }
 
         // Allow Enter key in auth form
@@ -1439,6 +1559,16 @@
         }
 
         async function duplicateProject(id) {
+            if (currentUser && userProfile) {
+                const maxProjects = TIER_CONFIG[userProfile.tier]?.maxProjects ?? Infinity;
+                if (maxProjects < Infinity) {
+                    const registry = await loadRegistry();
+                    if (registry.length >= maxProjects) {
+                        alert(`Free plan allows up to ${maxProjects} projects. Upgrade to Pro for unlimited projects.`);
+                        return;
+                    }
+                }
+            }
             const registry = await loadRegistry();
             const original = registry.find(p => p.id === id);
             if (!original) return;
@@ -1524,6 +1654,12 @@
 
         const GEMINI_PROXY_URL = SUPABASE_URL + '/functions/v1/gemini-proxy';
         async function callGemini(payload, model) {
+            // Token budget check for authenticated users
+            const budget = getTokenBudget();
+            if (budget && budget.remaining <= 0) {
+                throw new Error('Monthly token limit reached. Upgrade your plan or wait for the next billing cycle.');
+            }
+
             const response = await fetch(GEMINI_PROXY_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1532,6 +1668,12 @@
             const data = await response.json();
             if (data.error) throw new Error(data.error.message || data.error);
             if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+            // Track token usage for authenticated users
+            if (data.usageMetadata && data.usageMetadata.totalTokenCount) {
+                trackTokenUsage(data.usageMetadata.totalTokenCount);
+            }
+
             return data;
         }
 
@@ -1831,6 +1973,16 @@
         }
 
         async function promptNewProject() {
+            if (currentUser && userProfile) {
+                const maxProjects = TIER_CONFIG[userProfile.tier]?.maxProjects ?? Infinity;
+                if (maxProjects < Infinity) {
+                    const registry = await loadRegistry();
+                    if (registry.length >= maxProjects) {
+                        alert(`Free plan allows up to ${maxProjects} projects. Upgrade to Pro for unlimited projects.`);
+                        return;
+                    }
+                }
+            }
             const name = prompt('Enter project name:');
             if (!name || !name.trim()) return;
             const id = await createProject(name.trim());
@@ -3272,6 +3424,16 @@
                 alert(`Please wait ${wait}s before generating another summary.`);
                 return true;
             }
+            // Authenticated users: token budget enforced in callGemini
+            if (currentUser) {
+                const budget = getTokenBudget();
+                if (budget && budget.remaining <= 0) {
+                    alert('Monthly token limit reached. Upgrade your plan or wait for the next billing cycle.');
+                    return true;
+                }
+                return false;
+            }
+            // Guests: localStorage daily count
             const today = new Date().toISOString().slice(0, 10);
             const countKey = `planner_summaryCount_${today}`;
             const count = parseInt(localStorage.getItem(countKey) || '0', 10);
@@ -3284,10 +3446,13 @@
 
         function incrementSummaryCount() {
             lastSummaryTime = Date.now();
-            const today = new Date().toISOString().slice(0, 10);
-            const countKey = `planner_summaryCount_${today}`;
-            const count = parseInt(localStorage.getItem(countKey) || '0', 10);
-            localStorage.setItem(countKey, String(count + 1));
+            // Only write localStorage counts for guests
+            if (!currentUser) {
+                const today = new Date().toISOString().slice(0, 10);
+                const countKey = `planner_summaryCount_${today}`;
+                const count = parseInt(localStorage.getItem(countKey) || '0', 10);
+                localStorage.setItem(countKey, String(count + 1));
+            }
         }
 
         async function toggleRowSummary(index, forceOpen = false) {
@@ -3875,17 +4040,26 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                 return;
             }
 
-            const today = new Date().toISOString().slice(0, 10);
-            const countKey = `planner_msgCount_${currentProjectId}_${today}`;
-            const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
-            if (dailyCount >= DAILY_MESSAGE_LIMIT) {
-                addToChat('model', `Daily limit reached (${DAILY_MESSAGE_LIMIT} messages). Try again tomorrow.`);
-                return;
+            // Authenticated users: token budget enforced in callGemini
+            // Guests: localStorage daily count
+            if (!currentUser) {
+                const today = new Date().toISOString().slice(0, 10);
+                const countKey = `planner_msgCount_${currentProjectId}_${today}`;
+                const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
+                if (dailyCount >= DAILY_MESSAGE_LIMIT) {
+                    addToChat('model', `Daily limit reached (${DAILY_MESSAGE_LIMIT} messages). Try again tomorrow.`);
+                    return;
+                }
             }
 
             // --- Passed all checks, commit to sending ---
             lastSendTime = now;
-            localStorage.setItem(countKey, String(dailyCount + 1));
+            if (!currentUser) {
+                const today = new Date().toISOString().slice(0, 10);
+                const countKey = `planner_msgCount_${currentProjectId}_${today}`;
+                const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
+                localStorage.setItem(countKey, String(dailyCount + 1));
+            }
 
             addToChat('user', escapeHtml(prompt));
             input.value = '';
