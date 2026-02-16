@@ -705,6 +705,15 @@
                             <div class="td-field-label">Description</div>
                             <textarea id="tdDescription" class="td-textarea" rows="4" placeholder="Add notes, context, or instructions..." onchange="updateTaskDetail('description', this.value)"></textarea>
                         </div>
+                        <!-- Save / Cancel actions -->
+                        <div class="flex items-center gap-3 pt-4 border-t border-slate-700/50">
+                            <button onclick="saveAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
+                                <span class="material-icons-round" style="font-size:15px">check</span> Save & Back
+                            </button>
+                            <button onclick="discardAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
+                                <span class="material-icons-round" style="font-size:15px">undo</span> Discard
+                            </button>
+                        </div>
                     </div>
 
                     <!-- ACTIVITY LOG TAB -->
@@ -2276,10 +2285,14 @@
             if (!task.meetings) task.meetings = [];
         }
 
+        let _taskSnapshot = null; // snapshot for discard
+
         function openTaskDetail(index) {
             currentTaskIndex = index;
             const task = tasks[index];
             ensureTaskRichData(task);
+            // Save snapshot for discard
+            _taskSnapshot = JSON.parse(JSON.stringify(task));
 
             document.getElementById('ganttSection').classList.add('hidden');
             document.getElementById('taskDetailView').classList.remove('hidden');
@@ -2290,10 +2303,31 @@
 
         function closeTaskDetail() {
             saveProject();
+            _taskSnapshot = null;
             currentTaskIndex = null;
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
             document.getElementById('summaryPanel').classList.add('hidden');
+            renderGantt();
+        }
+
+        function saveAndCloseDetail() {
+            saveProject();
+            _taskSnapshot = null;
+            closeTaskDetail();
+        }
+
+        function discardAndCloseDetail() {
+            if (_taskSnapshot && currentTaskIndex != null) {
+                // Restore the snapshot
+                tasks[currentTaskIndex] = _taskSnapshot;
+            }
+            _taskSnapshot = null;
+            currentTaskIndex = null;
+            document.getElementById('ganttSection').classList.remove('hidden');
+            document.getElementById('taskDetailView').classList.add('hidden');
+            document.getElementById('summaryPanel').classList.add('hidden');
+            saveProject();
             renderGantt();
         }
 
