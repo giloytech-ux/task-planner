@@ -520,7 +520,10 @@
                         </button>
                     </div>
                 </div>
-                <p class="text-[10px] text-slate-500 mt-2 text-center">Powered by Gemini 2.0 Flash Lite · Ctrl+Enter to send</p>
+                <div class="flex justify-between items-center mt-2">
+                    <span id="charCount" class="text-[10px] text-slate-500">0 / 2000</span>
+                    <p class="text-[10px] text-slate-500 text-center">Powered by Gemini 2.0 Flash Lite · Ctrl+Enter to send</p>
+                </div>
             </div>
         </aside>
 
@@ -922,6 +925,10 @@
         // --- Configuration & State ---
         let tasks = [];
         let history = [];
+        let lastSendTime = 0;
+        const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
+        const DAILY_MESSAGE_LIMIT = 50;
+        const MAX_PROMPT_LENGTH = 2000;
         let currentProjectId = null;
         let currentUser = null;     // null = guest mode
         let isAuthSignUp = false;   // toggle between sign-in / sign-up
@@ -1343,7 +1350,7 @@
 
                 // Replace chat history (trimmed to last 20 exchanges)
                 await supabase.from('chat_history').delete().eq('project_id', currentProjectId);
-                const trimmed = history.slice(-40);
+                const trimmed = history.slice(-20);
                 if (trimmed.length > 0) {
                     const chatRows = trimmed.map(h => ({
                         project_id: currentProjectId,
@@ -1353,7 +1360,7 @@
                     await supabase.from('chat_history').insert(chatRows);
                 }
             } else {
-                const trimmedHistory = history.slice(-40);
+                const trimmedHistory = history.slice(-20);
                 const tasksForSave = tasks.map(({ _rowId, ...t }) => ({
                     ...t,
                     files: stripFileData(t.files)
@@ -3818,14 +3825,41 @@ Be concise and actionable. Focus on insights, not just restating data.`;
 
             if (!prompt) return;
 
+            // --- Rate limit checks ---
+            if (prompt.length > MAX_PROMPT_LENGTH) {
+                addToChat('model', `Message too long (${prompt.length} chars). Please keep under ${MAX_PROMPT_LENGTH} characters.`);
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastSendTime < SEND_COOLDOWN_MS) {
+                const wait = Math.ceil((SEND_COOLDOWN_MS - (now - lastSendTime)) / 1000);
+                addToChat('model', `Please wait ${wait}s before sending another message.`);
+                return;
+            }
+
+            const today = new Date().toISOString().slice(0, 10);
+            const countKey = `planner_msgCount_${currentProjectId}_${today}`;
+            const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
+            if (dailyCount >= DAILY_MESSAGE_LIMIT) {
+                addToChat('model', `Daily limit reached (${DAILY_MESSAGE_LIMIT} messages). Try again tomorrow.`);
+                return;
+            }
+
+            // --- Passed all checks, commit to sending ---
+            lastSendTime = now;
+            localStorage.setItem(countKey, String(dailyCount + 1));
+
             addToChat('user', escapeHtml(prompt));
             input.value = '';
+            document.getElementById('charCount').textContent = `0 / ${MAX_PROMPT_LENGTH}`;
             document.getElementById('loadingOverlay').classList.remove('hidden');
             statusEl.innerText = "Connecting to Gemini...";
 
-            const conversation = history.map(h => ({
+            const recentHistory = history.slice(-6);
+            const conversation = recentHistory.map(h => ({
                 role: h.role,
-                parts: [{ text: h.text }]
+                parts: [{ text: h.role === 'model' ? '[AI returned updated task JSON]' : h.text }]
             }));
 
             conversation.push({ role: "user", parts: [{ text: prompt }] });
@@ -4153,6 +4187,17 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                 e.preventDefault();
                 handleSend();
             }
+        });
+
+        document.getElementById('userPrompt').addEventListener('input', function () {
+            const len = this.value.length;
+            const counter = document.getElementById('charCount');
+            counter.textContent = `${len} / ${MAX_PROMPT_LENGTH}`;
+            counter.className = len > MAX_PROMPT_LENGTH
+                ? 'text-[10px] text-red-400 font-semibold'
+                : len > MAX_PROMPT_LENGTH * 0.9
+                    ? 'text-[10px] text-yellow-400'
+                    : 'text-[10px] text-slate-500';
         });
 
         // =============================================
