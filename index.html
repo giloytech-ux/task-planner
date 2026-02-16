@@ -1081,8 +1081,8 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
-            history.replaceState({ nav: 'base' }, '');
-            history.pushState({ nav: 'dashboard' }, '');
+            window.history.replaceState({ nav: 'base' }, '');
+            window.history.pushState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
@@ -1091,8 +1091,8 @@
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
-            history.replaceState({ nav: 'base' }, '');
-            history.pushState({ nav: 'dashboard' }, '');
+            window.history.replaceState({ nav: 'base' }, '');
+            window.history.pushState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
@@ -1135,7 +1135,7 @@
         // History API — Mobile back button navigation
         // =============================================
         function pushNavState(state) {
-            history.pushState({ nav: state }, '');
+            window.history.pushState({ nav: state }, '');
         }
 
         window.addEventListener('popstate', function(e) {
@@ -1160,7 +1160,7 @@
             if (currentProjectId) {
                 showDashboard(); return;
             }
-            history.pushState({ nav: 'dashboard' }, '');
+            window.history.pushState({ nav: 'dashboard' }, '');
         });
 
         // =============================================
