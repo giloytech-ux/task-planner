@@ -2381,6 +2381,8 @@
         }
 
         function deleteTask(index) {
+            const task = tasks[index];
+            if (!confirm(`Delete "${task.name}"?`)) return;
             tasks.splice(index, 1);
             tasks.forEach((t, i) => { t.id = String(i + 1); });
             renderGantt();
@@ -3529,14 +3531,13 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                     if (aiTask.name !== ex.name) diffs.push(`name → "${aiTask.name}"`);
                     if (aiTask.start !== ex.start) diffs.push(`start → ${aiTask.start}`);
                     if (aiTask.end !== ex.end) diffs.push(`end → ${aiTask.end}`);
-                    if (String(aiTask.progress) !== String(ex.progress)) diffs.push(`progress → ${aiTask.progress}%`);
                     if ((aiTask.dependencies || '') !== (ex.dependencies || '')) diffs.push(`deps → "${aiTask.dependencies || 'none'}"`);
 
                     const mergedTask = { ...ex };
                     mergedTask.name = aiTask.name;
                     mergedTask.start = aiTask.start;
                     mergedTask.end = aiTask.end;
-                    mergedTask.progress = aiTask.progress;
+                    mergedTask.progress = ex.progress; // preserve user's progress, ignore AI
                     mergedTask.dependencies = aiTask.dependencies || '';
                     merged.push(mergedTask);
 
@@ -3550,6 +3551,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                     matchedAiIds.add(aiTask.id);
                     merged.push({
                         ...aiTask,
+                        progress: 0,
                         priority: 'medium',
                         description: '',
                         checklist: [],
