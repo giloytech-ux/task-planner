@@ -1552,7 +1552,15 @@
             });
         }
 
+        function autoLockTask(task) {
+            if (!task.locked) {
+                task.locked = true;
+                addActivityEntry(task, 'system', 'Task auto-locked due to user edit');
+            }
+        }
+
         function updateTask(index, field, value) {
+            autoLockTask(tasks[index]);
             tasks[index][field] = value;
             clearTimeout(window.renderTimeout);
             window.renderTimeout = setTimeout(() => {
@@ -1703,6 +1711,7 @@
 
         function updateTaskDetail(field, value) {
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             const oldValue = task[field];
             task[field] = value;
 
@@ -1762,6 +1771,7 @@
         function addDependency(depId) {
             if (!depId) return;
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             const depIds = (task.dependencies || '').split(',').map(s => s.trim()).filter(Boolean);
             if (!depIds.includes(depId)) {
                 depIds.push(depId);
@@ -1775,6 +1785,7 @@
 
         function removeDependency(depId) {
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             const depIds = (task.dependencies || '').split(',').map(s => s.trim()).filter(Boolean);
             const idx = depIds.indexOf(depId);
             if (idx > -1) {
@@ -1816,6 +1827,7 @@
             const val = input.value.trim();
             if (!val) return;
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             task.checklist.push({ id: Date.now().toString(36), label: val, checked: false });
             addActivityEntry(task, 'system', `Checklist item added: "${val}"`);
             input.value = '';
@@ -1826,6 +1838,7 @@
 
         function toggleChecklistItem(index) {
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             task.checklist[index].checked = !task.checklist[index].checked;
             const item = task.checklist[index];
             addActivityEntry(task, 'system', `${item.checked ? 'Completed' : 'Unchecked'}: "${item.label}"`);
@@ -1844,6 +1857,7 @@
 
         function deleteChecklistItem(index) {
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             const removed = task.checklist.splice(index, 1);
             addActivityEntry(task, 'system', `Checklist item removed: "${removed[0].label}"`);
 
@@ -1903,6 +1917,7 @@
             const val = input.value.trim();
             if (!val) return;
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             addActivityEntry(task, 'comment', val);
             input.value = '';
             renderActivityTab(task);
@@ -1958,6 +1973,7 @@
                 }
                 const reader = new FileReader();
                 reader.onload = function(e) {
+                    autoLockTask(task);
                     task.files.push({
                         id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                         name: file.name,
@@ -2002,6 +2018,7 @@
 
         function deleteFile(index) {
             const task = tasks[currentTaskIndex];
+            autoLockTask(task);
             const removed = task.files.splice(index, 1);
             addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
             renderFilesTab(task);
@@ -2102,6 +2119,7 @@
                 title, date, attendees, notes
             };
 
+            autoLockTask(task);
             if (editingMeetingIndex !== null) {
                 task.meetings[editingMeetingIndex] = mtgData;
                 addActivityEntry(task, 'system', `Meeting updated: "${title}"`);
@@ -2119,6 +2137,7 @@
         function deleteMeeting(index) {
             const task = tasks[currentTaskIndex];
             if (!confirm('Delete this meeting?')) return;
+            autoLockTask(task);
             const removed = task.meetings.splice(index, 1);
             addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
             renderMeetingsTab(task);
@@ -2130,17 +2149,16 @@
         // =============================================
 
         function getTaskDataHash(task) {
-            // Create a fingerprint of the data that matters for the summary
             const data = {
+                description: task.description || '',
                 checklist: (task.checklist || []).map(c => ({ label: c.label, checked: c.checked })),
                 meetings: (task.meetings || []).map(m => ({ title: m.title, date: m.date, notes: m.notes, attendees: m.attendees })),
-                comments: (task.activity || []).filter(a => a.type === 'comment').map(a => a.message),
+                activity: (task.activity || []).map(a => ({ type: a.type, message: a.message })),
                 progress: parseInt(task.progress) || 0,
                 name: task.name,
                 start: task.start,
                 end: task.end
             };
-            // Simple string hash
             const str = JSON.stringify(data);
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -2152,10 +2170,46 @@
         }
 
         function hasTaskContent(task) {
+            const hasDescription = !!(task.description || '').trim();
             const hasChecklist = (task.checklist || []).length > 0;
             const hasMeetings = (task.meetings || []).length > 0;
-            const hasComments = (task.activity || []).some(a => a.type === 'comment');
-            return hasChecklist || hasMeetings || hasComments;
+            const hasActivity = (task.activity || []).length > 0;
+            return hasDescription || hasChecklist || hasMeetings || hasActivity;
+        }
+
+        function buildSummaryContext(task) {
+            const status = getTaskStatus(task);
+            const pct = parseInt(task.progress) || 0;
+            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
+
+            if ((task.description || '').trim()) {
+                context += `\nDescription:\n${task.description}\n`;
+            }
+
+            if ((task.checklist || []).length > 0) {
+                const completed = task.checklist.filter(c => c.checked).length;
+                context += `\nChecklist (${completed}/${task.checklist.length} done):\n`;
+                task.checklist.forEach(c => { context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`; });
+            }
+
+            if ((task.meetings || []).length > 0) {
+                context += `\nMeetings:\n`;
+                task.meetings.forEach(m => {
+                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
+                    if (m.notes) context += `  Notes: ${m.notes}\n`;
+                });
+            }
+
+            if ((task.activity || []).length > 0) {
+                context += `\nActivity History:\n`;
+                task.activity.forEach(a => {
+                    const d = new Date(a.timestamp).toLocaleDateString();
+                    const prefix = a.type === 'comment' ? 'Comment' : 'Event';
+                    context += `- [${d}] (${prefix}) ${a.message}\n`;
+                });
+            }
+
+            return context;
         }
 
         function toggleSummaryPanel() {
@@ -2200,31 +2254,13 @@
             content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating...</span></div>';
             statusEl.textContent = '';
 
-            // Build context (same as showTaskSummary)
-            const status = getTaskStatus(task);
-            const pct = parseInt(task.progress) || 0;
-            const completedChecklist = (task.checklist || []).filter(c => c.checked);
-            const comments = (task.activity || []).filter(a => a.type === 'comment');
-
-            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
-            if (task.checklist.length > 0) {
-                context += `\nChecklist (${completedChecklist.length}/${task.checklist.length} done):\n`;
-                task.checklist.forEach(c => { context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`; });
-            }
-            if (task.meetings.length > 0) {
-                context += `\nMeetings:\n`;
-                task.meetings.forEach(m => {
-                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
-                    if (m.notes) context += `  Notes: ${m.notes}\n`;
-                });
-            }
-            if (comments.length > 0) {
-                context += `\nComments/Notes:\n`;
-                comments.forEach(c => { context += `- [${new Date(c.timestamp).toLocaleDateString()}] ${c.message}\n`; });
-            }
-            if (task.description) context += `\nDescription: ${task.description}\n`;
-
-            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state in 2-4 short bullet points. Focus on what's PENDING, key DECISIONS from meetings, and any RISKS. Be very brief.\n\n${context}`;
+            const context = buildSummaryContext(task);
+            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state in 2-4 short bullet points. Focus on:
+1. The task description and what it entails
+2. What's PENDING in the checklist and what's done
+3. Key DECISIONS or takeaways from meetings
+4. Notable patterns or RISKS from the activity history and comments
+Be very brief. Skip sections with no data.\n\n${context}`;
 
             try {
                 const apiKey = document.getElementById('apiKey').value;
@@ -2273,7 +2309,7 @@
                 document.getElementById('summaryContent').innerHTML = `
                     <div class="flex items-center gap-2 py-2 text-slate-500">
                         <span class="material-icons-round" style="font-size:16px">inbox</span>
-                        <span class="text-xs">Nothing to summarize yet. Add checklist items, meetings, or comments first.</span>
+                        <span class="text-xs">Nothing to summarize yet. Add a description, checklist items, or meetings first.</span>
                     </div>`;
                 document.getElementById('summaryStatus').textContent = '';
                 return;
@@ -2296,49 +2332,14 @@
                 </div>`;
             document.getElementById('summaryStatus').textContent = '';
 
-            // Build context for AI
-            const status = getTaskStatus(task);
-            const pct = parseInt(task.progress) || 0;
-            const pendingChecklist = (task.checklist || []).filter(c => !c.checked);
-            const completedChecklist = (task.checklist || []).filter(c => c.checked);
-            const comments = (task.activity || []).filter(a => a.type === 'comment');
-
-            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
-
-            if (task.checklist.length > 0) {
-                context += `\nChecklist (${completedChecklist.length}/${task.checklist.length} done):\n`;
-                task.checklist.forEach(c => {
-                    context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`;
-                });
-            }
-
-            if (task.meetings.length > 0) {
-                context += `\nMeetings:\n`;
-                task.meetings.forEach(m => {
-                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
-                    if (m.notes) context += `  Notes: ${m.notes}\n`;
-                });
-            }
-
-            if (comments.length > 0) {
-                context += `\nComments/Notes:\n`;
-                comments.forEach(c => {
-                    const d = new Date(c.timestamp).toLocaleDateString();
-                    context += `- [${d}] ${c.message}\n`;
-                });
-            }
-
-            if (task.description) {
-                context += `\nDescription: ${task.description}\n`;
-            }
-
+            const context = buildSummaryContext(task);
             const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state. Focus on:
-1. What's PENDING and needs action (unchecked items, upcoming deadlines)
-2. Key DECISIONS or takeaways from meetings
-3. Any RISKS or blockers mentioned in comments
-4. Brief overall status assessment
+1. The task description — what this task is about and its scope
+2. Checklist progress — what's been COMPLETED and what's still PENDING
+3. Key DECISIONS or takeaways from meetings
+4. Historical context — notable patterns, RISKS, or blockers from the activity history and user comments
 
-Be concise — use short bullet points. Skip sections that have nothing noteworthy. Do NOT repeat raw data. Provide actionable insight.
+Be concise — use short bullet points. Skip sections with no data. Do NOT repeat raw data. Provide actionable insight.
 
 ${context}`;
 
