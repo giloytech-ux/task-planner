@@ -3452,6 +3452,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
             renderGantt();
             addToChat('model', 'Changes applied successfully.');
             saveProject();
+            closeMobileSidebar();
         }
 
         function cancelPendingMerge() {
@@ -3532,6 +3533,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                         history.push({ role: "user", text: prompt });
                         history.push({ role: "model", text: aiText });
                         await saveProject();
+                        closeMobileSidebar();
                     } else if (!hasChanges) {
                         addToChat('model', "I analyzed your request but found no changes needed to the existing plan.");
                     } else {
