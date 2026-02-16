@@ -1081,6 +1081,7 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
+            history.replaceState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
@@ -1089,6 +1090,7 @@
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
+            history.replaceState({ nav: 'dashboard' }, '');
             showDashboard();
         }
 
@@ -1110,6 +1112,7 @@
             const panel = document.getElementById('sidebarPanel');
             const backdrop = document.getElementById('sidebarBackdrop');
             if (mobileSidebarOpen) {
+                pushNavState('sidebar');
                 panel.classList.remove('-translate-x-full');
                 panel.classList.add('translate-x-0');
                 backdrop.classList.add('active');
@@ -1125,6 +1128,38 @@
         function closeMobileSidebar() {
             if (mobileSidebarOpen) toggleMobileSidebar();
         }
+
+        // =============================================
+        // History API — Mobile back button navigation
+        // =============================================
+        function pushNavState(state) {
+            history.pushState({ nav: state }, '');
+        }
+
+        window.addEventListener('popstate', function(e) {
+            if (!document.getElementById('projectSummaryModal').classList.contains('hidden')) {
+                closeProjectSummary(); return;
+            }
+            if (!document.getElementById('colorPickerModal').classList.contains('hidden')) {
+                closeColorPicker(); return;
+            }
+            if (!document.getElementById('mobileSummaryPanel').classList.contains('hidden')) {
+                closeMobileSummaryPanel(); return;
+            }
+            if (!document.getElementById('meetingForm').classList.contains('hidden')) {
+                cancelMeeting(); return;
+            }
+            if (mobileSidebarOpen) {
+                closeMobileSidebar(); return;
+            }
+            if (currentTaskIndex !== null) {
+                closeTaskDetail(); return;
+            }
+            if (currentProjectId) {
+                showDashboard(); return;
+            }
+            history.pushState({ nav: 'dashboard' }, '');
+        });
 
         // =============================================
         // Data Layer — Dual mode (Supabase vs localStorage)
@@ -1826,6 +1861,7 @@
         }
 
         async function openProject(id) {
+            pushNavState('project');
             currentProjectId = id;
             const data = await loadProject(id);
             tasks = data.tasks || [];
@@ -2569,6 +2605,7 @@
         let _taskSnapshot = null; // snapshot for discard
 
         function openTaskDetail(index) {
+            pushNavState('taskDetail');
             currentTaskIndex = index;
             const task = tasks[index];
             ensureTaskRichData(task);
@@ -3045,6 +3082,7 @@
         }
 
         function showAddMeeting() {
+            pushNavState('modal');
             editingMeetingIndex = null;
             document.getElementById('mtgTitle').value = '';
             document.getElementById('mtgDate').value = new Date().toISOString().slice(0, 10);
@@ -3188,6 +3226,7 @@
         let _mobileSummaryIndex = null;
 
         function openMobileSummaryPanel(index) {
+            pushNavState('modal');
             _mobileSummaryIndex = index;
             const task = tasks[index];
             document.getElementById('mobileSummaryTitle').textContent = task ? task.name : 'AI Summary';
@@ -3488,6 +3527,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
         }
 
         async function showProjectSummary(projectId, projectName) {
+            pushNavState('modal');
             const modal = document.getElementById('projectSummaryModal');
             const content = document.getElementById('projectSummaryContent');
             const statusEl = document.getElementById('projectSummaryStatus');
@@ -3999,6 +4039,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
         let colorPickerTargetId = null;
 
         async function promptColorPicker(projectId) {
+            pushNavState('modal');
             colorPickerTargetId = projectId;
             const registry = await loadRegistry();
             const project = registry.find(p => p.id === projectId);
