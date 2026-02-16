@@ -1876,6 +1876,20 @@
             // No longer needed — sticky header uses CSS position:sticky
         }
 
+        function scrollGanttToToday() {
+            const container = document.getElementById('gantt-target');
+            const todayEl = container?.querySelector('.today-highlight');
+            if (!todayEl && container) {
+                // Fallback: look for the today marker line
+                const todayLine = container.querySelector('.gantt .today-highlight');
+                if (!todayLine) return;
+            }
+            if (!todayEl) return;
+            const todayX = parseFloat(todayEl.getAttribute('x')) || 0;
+            const padding = 60; // show a bit of context to the left
+            container.scrollLeft = Math.max(0, todayX - padding);
+        }
+
         function zoomGantt(direction) {
             const newZoom = currentGanttZoom + direction;
             if (newZoom < 0 || newZoom >= GANTT_VIEW_MODES.length) return;
@@ -1884,7 +1898,7 @@
             document.getElementById('ganttViewMode').textContent = mode;
             if (ganttChart) {
                 ganttChart.change_view_mode(mode);
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); scrollGanttToToday(); }, 200);
             }
         }
 
@@ -1924,7 +1938,7 @@
                     custom_popup_html: null
                 });
 
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); scrollGanttToToday(); }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
