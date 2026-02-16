@@ -529,17 +529,16 @@
                 <!-- Detail Tabs -->
                 <div class="td-tabs flex items-center px-5 bg-slate-900/50">
                     <button class="td-tab active" onclick="switchDetailTab('details')">Details</button>
-                    <button class="td-tab" onclick="switchDetailTab('checklist')">Checklist <span id="tdChecklistCount" class="text-[10px] ml-1 opacity-60"></span></button>
-                    <button class="td-tab" onclick="switchDetailTab('activity')">Activity</button>
-                    <button class="td-tab" onclick="switchDetailTab('files')">Files <span id="tdFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
                     <button class="td-tab" onclick="switchDetailTab('meetings')">Meetings</button>
+                    <button class="td-tab" onclick="switchDetailTab('activitylog')">Activity Log</button>
+                    <button class="td-tab" onclick="switchDetailTab('files')">Files <span id="tdFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
                 </div>
 
                 <!-- Tab Content -->
-                <div class="flex-1 overflow-auto p-5">
+                <div class="flex-1 overflow-hidden p-5 flex flex-col">
 
                     <!-- DETAILS TAB -->
-                    <div id="tabDetails" class="space-y-5">
+                    <div id="tabDetails" class="flex-1 overflow-y-auto space-y-5">
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <div class="td-field-label">Task Name</div>
@@ -585,39 +584,19 @@
                         </div>
                     </div>
 
-                    <!-- CHECKLIST TAB -->
-                    <div id="tabChecklist" class="hidden">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center gap-3">
-                                <span class="text-sm font-semibold text-white">Checklist</span>
-                                <span id="checklistProgress" class="text-xs text-slate-400"></span>
-                            </div>
-                            <div class="w-32 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                <div id="checklistBar" class="h-full bg-emerald-500 rounded-full transition-all" style="width:0%"></div>
-                            </div>
-                        </div>
-                        <div id="checklistItems" class="space-y-1 mb-3"></div>
-                        <div class="flex gap-2 mt-3">
-                            <input type="text" id="checklistInput" class="td-input flex-1" placeholder="Add checklist item..." onkeypress="if(event.key==='Enter'){addChecklistItem();event.preventDefault();}">
-                            <button onclick="addChecklistItem()" class="px-4 py-2 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors flex items-center gap-1">
-                                <span class="material-icons-round text-sm">add</span> Add
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- ACTIVITY TAB -->
-                    <div id="tabActivity" class="hidden">
-                        <div class="mb-4">
-                            <div class="flex gap-2">
-                                <input type="text" id="commentInput" class="td-input flex-1" placeholder="Add a comment..." onkeypress="if(event.key==='Enter'){addComment();event.preventDefault();}">
+                    <!-- ACTIVITY LOG TAB -->
+                    <div id="tabActivityLog" class="hidden flex-1 flex flex-col min-h-0">
+                        <div id="activityTimeline" class="flex-1 overflow-y-auto mb-3"></div>
+                        <div class="flex-shrink-0">
+                            <textarea id="commentInput" class="td-textarea w-full" rows="3" placeholder="Write an activity log entry..."></textarea>
+                            <div class="flex justify-end mt-2">
                                 <button onclick="addComment()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Post</button>
                             </div>
                         </div>
-                        <div id="activityTimeline" class="mt-4"></div>
                     </div>
 
                     <!-- FILES TAB -->
-                    <div id="tabFiles" class="hidden">
+                    <div id="tabFiles" class="hidden flex-1 overflow-y-auto">
                         <div id="fileDropZone" class="file-drop-zone mb-4" onclick="document.getElementById('fileInput').click()">
                             <span class="material-icons-round text-3xl text-slate-500 mb-2">cloud_upload</span>
                             <p class="text-sm text-slate-400">Drop files here or click to upload</p>
@@ -628,11 +607,11 @@
                     </div>
 
                     <!-- MEETINGS TAB -->
-                    <div id="tabMeetings" class="hidden">
-                        <button onclick="showAddMeeting()" class="mb-4 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1">
+                    <div id="tabMeetings" class="hidden flex-1 flex flex-col min-h-0">
+                        <button onclick="showAddMeeting()" class="mb-4 flex-shrink-0 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1 self-start">
                             <span class="material-icons-round text-sm">add</span> Add Meeting
                         </button>
-                        <div id="meetingForm" class="hidden glass-panel rounded-xl p-4 mb-4 space-y-3">
+                        <div id="meetingForm" class="hidden flex-shrink-0 glass-panel rounded-xl p-4 mb-4 space-y-3">
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <div class="td-field-label">Title</div>
@@ -656,7 +635,7 @@
                                 <button onclick="saveMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors">Save Meeting</button>
                             </div>
                         </div>
-                        <div id="meetingsList" class="space-y-3"></div>
+                        <div id="meetingsList" class="flex-1 overflow-y-auto space-y-3"></div>
                     </div>
 
                 </div>
@@ -1671,8 +1650,8 @@
         }
 
         function switchDetailTab(tabName) {
-            const tabs = ['details', 'checklist', 'activity', 'files', 'meetings'];
-            const tabIds = { details: 'tabDetails', checklist: 'tabChecklist', activity: 'tabActivity', files: 'tabFiles', meetings: 'tabMeetings' };
+            const tabs = ['details', 'meetings', 'activitylog', 'files'];
+            const tabIds = { details: 'tabDetails', meetings: 'tabMeetings', activitylog: 'tabActivityLog', files: 'tabFiles' };
 
             // Toggle tab buttons
             document.querySelectorAll('.td-tab').forEach((btn, i) => {
@@ -1685,8 +1664,7 @@
             // Render the selected tab
             const task = tasks[currentTaskIndex];
             if (tabName === 'details') renderDetailsTab(task);
-            else if (tabName === 'checklist') renderChecklistTab(task);
-            else if (tabName === 'activity') renderActivityTab(task);
+            else if (tabName === 'activitylog') renderActivityTab(task);
             else if (tabName === 'files') renderFilesTab(task);
             else if (tabName === 'meetings') renderMeetingsTab(task);
         }
@@ -1717,9 +1695,6 @@
             document.getElementById('tdStatusBadge').innerHTML = `<span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}`;
 
             // Tab counts
-            const cl = task.checklist || [];
-            const checked = cl.filter(c => c.checked).length;
-            document.getElementById('tdChecklistCount').textContent = cl.length > 0 ? `(${checked}/${cl.length})` : '';
             document.getElementById('tdFilesCount').textContent = (task.files || []).length > 0 ? `(${task.files.length})` : '';
         }
 
@@ -1827,82 +1802,6 @@
             }
         }
 
-        // ---- CHECKLIST TAB ----
-        function renderChecklistTab(task) {
-            const container = document.getElementById('checklistItems');
-            container.innerHTML = '';
-            const cl = task.checklist || [];
-            const checked = cl.filter(c => c.checked).length;
-
-            document.getElementById('checklistProgress').textContent = cl.length > 0 ? `${checked} of ${cl.length} done` : 'No items yet';
-            document.getElementById('checklistBar').style.width = cl.length > 0 ? ((checked / cl.length) * 100) + '%' : '0%';
-
-            cl.forEach((item, i) => {
-                const div = document.createElement('div');
-                div.className = 'checklist-item' + (item.checked ? ' checked' : '');
-                div.innerHTML = `
-                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleChecklistItem(${i})">
-                    <label class="flex-1 text-sm text-slate-200 cursor-pointer" onclick="toggleChecklistItem(${i})">${escapeHtml(item.label)}</label>
-                    <button onclick="deleteChecklistItem(${i})" class="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" style="opacity:0.3" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.3">
-                        <span class="material-icons-round text-sm">close</span>
-                    </button>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        function addChecklistItem() {
-            const input = document.getElementById('checklistInput');
-            const val = input.value.trim();
-            if (!val) return;
-            const task = tasks[currentTaskIndex];
-            autoLockTask(task);
-            task.checklist.push({ id: Date.now().toString(36), label: val, checked: false });
-            addActivityEntry(task, 'system', `Checklist item added: "${val}"`);
-            input.value = '';
-            renderChecklistTab(task);
-            renderTaskDetailHeader();
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
-        }
-
-        function toggleChecklistItem(index) {
-            const task = tasks[currentTaskIndex];
-            autoLockTask(task);
-            task.checklist[index].checked = !task.checklist[index].checked;
-            const item = task.checklist[index];
-            addActivityEntry(task, 'system', `${item.checked ? 'Completed' : 'Unchecked'}: "${item.label}"`);
-
-            // Auto-sync progress from checklist
-            const total = task.checklist.length;
-            const done = task.checklist.filter(c => c.checked).length;
-            if (total > 0) {
-                task.progress = Math.round((done / total) * 100);
-            }
-
-            renderChecklistTab(task);
-            renderTaskDetailHeader();
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
-        }
-
-        function deleteChecklistItem(index) {
-            const task = tasks[currentTaskIndex];
-            autoLockTask(task);
-            const removed = task.checklist.splice(index, 1);
-            addActivityEntry(task, 'system', `Checklist item removed: "${removed[0].label}"`);
-
-            // Re-sync progress
-            const total = task.checklist.length;
-            const done = task.checklist.filter(c => c.checked).length;
-            task.progress = total > 0 ? Math.round((done / total) * 100) : 0;
-
-            renderChecklistTab(task);
-            renderTaskDetailHeader();
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
-        }
-
         // ---- ACTIVITY TAB ----
         function addActivityEntry(task, type, message) {
             ensureTaskRichData(task);
@@ -1917,31 +1816,45 @@
         function renderActivityTab(task) {
             const container = document.getElementById('activityTimeline');
             container.innerHTML = '';
-            const items = [...(task.activity || [])].reverse();
+            const items = (task.activity || []).filter(a => a.type === 'comment');
 
             if (items.length === 0) {
-                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No activity yet.</p>';
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No entries yet.</p>';
                 return;
             }
 
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'activity-item';
-                const dotClass = item.type === 'comment' ? 'comment' : 'system';
                 const time = new Date(item.timestamp);
                 const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                const icon = item.type === 'comment' ? 'chat_bubble' : 'info';
                 div.innerHTML = `
-                    <div class="activity-dot ${dotClass}"></div>
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="flex-1">
-                            <span class="text-xs text-slate-300">${escapeHtml(item.message)}</span>
+                    <div class="activity-dot comment"></div>
+                    <div>
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="text-[10px] text-slate-500">${timeStr}</span>
+                            <div class="flex items-center gap-1">
+                                <button onclick="editActivityEntry('${item.id}')" class="text-slate-600 hover:text-blue-400 transition-colors p-0.5" title="Edit">
+                                    <span class="material-icons-round" style="font-size:14px">edit</span>
+                                </button>
+                                <button onclick="deleteActivityEntry('${item.id}')" class="text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                                    <span class="material-icons-round" style="font-size:14px">delete</span>
+                                </button>
+                            </div>
                         </div>
-                        <span class="text-[10px] text-slate-600 whitespace-nowrap">${timeStr}</span>
+                        <div id="activity-display-${item.id}" class="text-sm text-slate-300" style="white-space:pre-wrap">${escapeHtml(item.message)}</div>
+                        <div id="activity-edit-${item.id}" class="hidden">
+                            <textarea class="td-textarea w-full text-sm" rows="3">${escapeHtml(item.message)}</textarea>
+                            <div class="flex justify-end gap-2 mt-1">
+                                <button onclick="cancelActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
+                                <button onclick="saveActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
+                            </div>
+                        </div>
                     </div>
                 `;
                 container.appendChild(div);
             });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
         }
 
         function addComment() {
@@ -1952,6 +1865,42 @@
             autoLockTask(task);
             addActivityEntry(task, 'comment', val);
             input.value = '';
+            renderActivityTab(task);
+            updateRowIndicators(currentTaskIndex);
+            saveProject();
+        }
+
+        function editActivityEntry(id) {
+            document.getElementById('activity-display-' + id).classList.add('hidden');
+            document.getElementById('activity-edit-' + id).classList.remove('hidden');
+            const textarea = document.getElementById('activity-edit-' + id).querySelector('textarea');
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }
+
+        function cancelActivityEdit(id) {
+            document.getElementById('activity-display-' + id).classList.remove('hidden');
+            document.getElementById('activity-edit-' + id).classList.add('hidden');
+        }
+
+        function saveActivityEdit(id) {
+            const task = tasks[currentTaskIndex];
+            const entry = task.activity.find(a => a.id === id);
+            if (!entry) return;
+            const newVal = document.getElementById('activity-edit-' + id).querySelector('textarea').value.trim();
+            if (!newVal) return;
+            autoLockTask(task);
+            entry.message = newVal;
+            renderActivityTab(task);
+            saveProject();
+        }
+
+        function deleteActivityEntry(id) {
+            const task = tasks[currentTaskIndex];
+            const idx = task.activity.findIndex(a => a.id === id);
+            if (idx === -1) return;
+            autoLockTask(task);
+            task.activity.splice(idx, 1);
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
             saveProject();
@@ -2090,8 +2039,7 @@
                 return;
             }
 
-            [...meetings].reverse().forEach((mtg, ri) => {
-                const i = meetings.length - 1 - ri;
+            meetings.forEach((mtg, i) => {
                 const card = document.createElement('div');
                 card.className = 'meeting-card';
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -2114,6 +2062,7 @@
                 `;
                 container.appendChild(card);
             });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
         }
 
         function showAddMeeting() {
@@ -2188,9 +2137,8 @@
         function getTaskDataHash(task) {
             const data = {
                 description: task.description || '',
-                checklist: (task.checklist || []).map(c => ({ label: c.label, checked: c.checked })),
                 meetings: (task.meetings || []).map(m => ({ title: m.title, date: m.date, notes: m.notes, attendees: m.attendees })),
-                activity: (task.activity || []).map(a => ({ type: a.type, message: a.message })),
+                activity: (task.activity || []).filter(a => a.type === 'comment').map(a => ({ message: a.message })),
                 progress: parseInt(task.progress) || 0,
                 name: task.name,
                 start: task.start,
@@ -2208,45 +2156,39 @@
 
         function hasTaskContent(task) {
             const hasDescription = !!(task.description || '').trim();
-            const hasChecklist = (task.checklist || []).length > 0;
             const hasMeetings = (task.meetings || []).length > 0;
-            const hasActivity = (task.activity || []).length > 0;
-            return hasDescription || hasChecklist || hasMeetings || hasActivity;
+            const hasActivityLog = (task.activity || []).some(a => a.type === 'comment');
+            return hasDescription || hasMeetings || hasActivityLog;
         }
 
         function buildSummaryContext(task) {
             const status = getTaskStatus(task);
             const pct = parseInt(task.progress) || 0;
-            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
 
+            let description = `Task: "${task.name}" | Status: ${status.label} (${pct}% complete) | Dates: ${task.start} to ${task.end}`;
             if ((task.description || '').trim()) {
-                context += `\nDescription:\n${task.description}\n`;
+                description += `\n${task.description}`;
             }
 
-            if ((task.checklist || []).length > 0) {
-                const completed = task.checklist.filter(c => c.checked).length;
-                context += `\nChecklist (${completed}/${task.checklist.length} done):\n`;
-                task.checklist.forEach(c => { context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`; });
-            }
-
+            let meetingsText = '(none)';
             if ((task.meetings || []).length > 0) {
-                context += `\nMeetings:\n`;
-                task.meetings.forEach(m => {
-                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
-                    if (m.notes) context += `  Notes: ${m.notes}\n`;
-                });
+                meetingsText = task.meetings.map(m => {
+                    let line = `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
+                    if (m.notes) line += `\n  Notes: ${m.notes}`;
+                    return line;
+                }).join('\n');
             }
 
-            if ((task.activity || []).length > 0) {
-                context += `\nActivity History:\n`;
-                task.activity.forEach(a => {
+            let activitiesText = '(none)';
+            const logEntries = (task.activity || []).filter(a => a.type === 'comment');
+            if (logEntries.length > 0) {
+                activitiesText = logEntries.map(a => {
                     const d = new Date(a.timestamp).toLocaleDateString();
-                    const prefix = a.type === 'comment' ? 'Comment' : 'Event';
-                    context += `- [${d}] (${prefix}) ${a.message}\n`;
-                });
+                    return `- [${d}] ${a.message}`;
+                }).join('\n');
             }
 
-            return context;
+            return `--- CONTEXT START ---\n${description}\nMeetings:\n${meetingsText}\nActivities:\n${activitiesText}\n--- CONTEXT END ---`;
         }
 
         function toggleSummaryPanel() {
@@ -2302,12 +2244,18 @@
             statusEl.textContent = '';
 
             const context = buildSummaryContext(task);
-            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state in 2-4 short bullet points. Focus on:
-1. The task description and what it entails
-2. What's PENDING in the checklist and what's done
-3. Key DECISIONS or takeaways from meetings
-4. Notable patterns or RISKS from the activity history and comments
-Be very brief. Skip sections with no data.\n\n${context}`;
+            const summaryPrompt = `You are an expert project management assistant. Your task is to analyze the provided context for a subtask and generate a concise, structured summary that is useful for both the CEO and the Project Manager.
+
+Analyze the following data:
+${context}
+
+Based on the context provided, perform the following actions:
+1. **High-Level Summary:** Provide a brief overview of the subtask's purpose, current status, and its relevance to the overall project goals from a strategic perspective suitable for a CEO.
+2. **Key Decisions:** Highlight any critical decisions made during the meetings that impact project direction or resource allocation. Specify why these decisions are significant.
+3. **Pending Items:** List all key action items, questions, or activities that remain outstanding, indicating their importance to the project's success.
+4. **Operational Insights:** Provide relevant details that would help the Project Manager effectively track progress and manage resources, including any immediate next steps required.
+
+Ensure the output is clear, concise, and structured in a way that addresses the interests of both the CEO and the Project Manager.`;
 
             try {
                 const apiKey = document.getElementById('apiKey').value;
@@ -2358,7 +2306,7 @@ Be very brief. Skip sections with no data.\n\n${context}`;
                 document.getElementById('summaryContent').innerHTML = `
                     <div class="flex items-center gap-2 py-2 text-slate-500">
                         <span class="material-icons-round" style="font-size:16px">inbox</span>
-                        <span class="text-xs">Nothing to summarize yet. Add a description, checklist items, or meetings first.</span>
+                        <span class="text-xs">Nothing to summarize yet. Add a description, meetings, or activity log entries first.</span>
                     </div>`;
                 document.getElementById('summaryStatus').textContent = '';
                 return;
@@ -2382,15 +2330,18 @@ Be very brief. Skip sections with no data.\n\n${context}`;
             document.getElementById('summaryStatus').textContent = '';
 
             const context = buildSummaryContext(task);
-            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state. Focus on:
-1. The task description — what this task is about and its scope
-2. Checklist progress — what's been COMPLETED and what's still PENDING
-3. Key DECISIONS or takeaways from meetings
-4. Historical context — notable patterns, RISKS, or blockers from the activity history and user comments
+            const summaryPrompt = `You are an expert project management assistant. Your task is to analyze the provided context for a subtask and generate a concise, structured summary that is useful for both the CEO and the Project Manager.
 
-Be concise — use short bullet points. Skip sections with no data. Do NOT repeat raw data. Provide actionable insight.
+Analyze the following data:
+${context}
 
-${context}`;
+Based on the context provided, perform the following actions:
+1. **High-Level Summary:** Provide a brief overview of the subtask's purpose, current status, and its relevance to the overall project goals from a strategic perspective suitable for a CEO.
+2. **Key Decisions:** Highlight any critical decisions made during the meetings that impact project direction or resource allocation. Specify why these decisions are significant.
+3. **Pending Items:** List all key action items, questions, or activities that remain outstanding, indicating their importance to the project's success.
+4. **Operational Insights:** Provide relevant details that would help the Project Manager effectively track progress and manage resources, including any immediate next steps required.
+
+Ensure the output is clear, concise, and structured in a way that addresses the interests of both the CEO and the Project Manager.`;
 
             try {
                 const apiKey = document.getElementById('apiKey').value;
