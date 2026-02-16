@@ -35,6 +35,10 @@
         .gantt .bar-label { fill: #fff !important; font-size: 12px; }
         .gantt .bar-progress { fill: inherit !important; }
         .gantt .bar rect { transition: fill 0.2s ease; }
+        .gantt .today-highlight { fill: #3b82f6 !important; opacity: 0.18 !important; }
+        .gantt .upper-text, .gantt .lower-text { fill: #94a3b8 !important; }
+        .gantt .tick { stroke: #1e293b !important; }
+        .gantt .row-line { stroke: #1e293b !important; }
         .gantt-container { overflow-x: auto; }
 
         /* Loader */
@@ -459,7 +463,17 @@
                         <span class="material-icons-round text-sm">today</span>
                         <span id="todayDate"></span>
                     </div>
+                    <div class="w-px h-5 bg-slate-700"></div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="zoomGantt(-1)" class="text-slate-400 hover:text-white" title="Zoom out"><span class="material-icons-round text-sm">zoom_out</span></button>
+                        <span id="ganttViewMode" class="text-[10px] text-slate-400 w-16 text-center">Week</span>
+                        <button onclick="zoomGantt(1)" class="text-slate-400 hover:text-white" title="Zoom in"><span class="material-icons-round text-sm">zoom_in</span></button>
+                    </div>
                     <button onclick="renderGantt()" class="text-slate-400 hover:text-white"><span class="material-icons-round text-sm">refresh</span></button>
+                    <button onclick="showProjectSummary()" class="flex items-center gap-1 text-slate-400 hover:text-purple-400 transition-colors" title="AI Project Summary">
+                        <span class="material-icons-round text-sm">auto_awesome</span>
+                        <span class="text-xs">AI Project Summary</span>
+                    </button>
                 </div>
 
                 <!-- Gantt Container -->
@@ -492,7 +506,11 @@
                         <table class="w-full text-left border-collapse">
                             <thead class="bg-slate-800 sticky top-0 z-10">
                                 <tr>
-                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-8" title="Lock from AI"><span class="material-icons-round text-sm">lock</span></th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-8">
+                                        <button id="lockAllBtn" onclick="toggleAllLocks()" class="text-slate-400 hover:text-amber-400 transition-colors" title="Lock/unlock all tasks from AI">
+                                            <span class="material-icons-round text-sm">lock</span>
+                                        </button>
+                                    </th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase">Task Name</th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">Assigned</th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-24"><span class="material-icons-round text-sm text-purple-400 align-middle">auto_awesome</span> AI Summary</th>
@@ -745,6 +763,8 @@
         `;
 
         let ganttChart = null;
+        const GANTT_VIEW_MODES = ['Month', 'Week', 'Day'];
+        let currentGanttZoom = 1; // index into GANTT_VIEW_MODES, default 'Week'
 
         // =============================================
         // Auth UI
@@ -1190,7 +1210,21 @@
                     openProject(project.id);
                 };
                 card.innerHTML = `
-                    <div class="card-actions absolute top-3 right-3 flex gap-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="color-dot" style="background: ${project.color}"></span>
+                        <h3 class="font-semibold text-white text-sm truncate">${escapeHtml(project.name)}</h3>
+                    </div>
+                    <div class="progress-bar-bg mb-2">
+                        <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-slate-500 mb-3">
+                        <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
+                        <span>${updatedStr}</span>
+                    </div>
+                    <div class="card-actions flex items-center gap-1 pt-2 border-t border-slate-700/50">
+                        <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
+                            <span class="material-icons-round text-sm">auto_awesome</span>
+                        </button>
                         <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
                             <span class="material-icons-round text-sm">edit</span>
                         </button>
@@ -1200,20 +1234,10 @@
                         <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
                             <span class="material-icons-round text-sm">content_copy</span>
                         </button>
+                        <div class="flex-1"></div>
                         <button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
                             <span class="material-icons-round text-sm">delete</span>
                         </button>
-                    </div>
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="color-dot" style="background: ${project.color}"></span>
-                        <h3 class="font-semibold text-white text-sm truncate">${escapeHtml(project.name)}</h3>
-                    </div>
-                    <div class="progress-bar-bg mb-2">
-                        <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
-                    </div>
-                    <div class="flex justify-between items-center text-xs text-slate-500">
-                        <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
-                        <span>${updatedStr}</span>
                     </div>
                 `;
                 grid.appendChild(card);
@@ -1415,8 +1439,8 @@
         // Gantt & Table Rendering
         // =============================================
 
-        function getTaskStatus(task) {
-            const today = new Date();
+        function getTaskStatus(task, asOfDate) {
+            const today = asOfDate ? new Date(asOfDate.getTime()) : new Date();
             today.setHours(0, 0, 0, 0);
             const start = new Date(task.start + 'T00:00:00');
             const end = new Date(task.end + 'T00:00:00');
@@ -1440,6 +1464,109 @@
             if (gap <= 10) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
             if (gap <= 30) return { label: 'Attention', color: '#fbbf24', css: 'status-attention', icon: 'warning' };
             return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
+        }
+
+        function applyGanttColors() {
+            document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#0f172a');
+            document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
+            document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper, i) => {
+                const task = tasks[i];
+                if (!task) return;
+                const status = getTaskStatus(task);
+                const pct = parseInt(task.progress) || 0;
+                wrapper.querySelectorAll('.bar rect').forEach(rect => {
+                    rect.setAttribute('fill', status.color);
+                    rect.style.fill = status.color;
+                });
+                const label = wrapper.querySelector('.bar-label');
+                if (label) {
+                    label.setAttribute('fill', '#fff');
+                    label.style.fill = '#fff';
+                    label.textContent = `${task.name}  (${pct}%) - ${status.label}`;
+                }
+            });
+            // Add a vertical "today" line visible in all view modes
+            const svg = document.querySelector('.gantt');
+            if (svg && ganttChart && ganttChart.gantt_start) {
+                svg.querySelectorAll('.today-line-custom').forEach(el => el.remove());
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const start = ganttChart.gantt_start;
+                const mode = GANTT_VIEW_MODES[currentGanttZoom];
+                let x;
+                if (mode === 'Month') {
+                    const daysDiff = (today - start) / 86400000;
+                    x = (daysDiff * ganttChart.options.column_width) / 30;
+                } else {
+                    const hoursDiff = (today - start) / 3600000;
+                    x = (hoursDiff / ganttChart.options.step) * ganttChart.options.column_width;
+                }
+                const bg = svg.querySelector('.grid-background');
+                const h = bg ? parseFloat(bg.getAttribute('height')) : parseFloat(svg.getAttribute('height'));
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.classList.add('today-line-custom');
+                line.setAttribute('x1', x);
+                line.setAttribute('x2', x);
+                line.setAttribute('y1', 0);
+                line.setAttribute('y2', h);
+                line.setAttribute('stroke', '#3b82f6');
+                line.setAttribute('stroke-width', '2');
+                line.setAttribute('stroke-dasharray', '6,4');
+                line.setAttribute('opacity', '0.7');
+                svg.appendChild(line);
+            }
+        }
+
+        function setupGanttStickyHeader() {
+            const container = document.getElementById('gantt-target');
+            const svg = container?.querySelector('.gantt');
+            if (!svg) return;
+            // Clean up previous
+            svg.querySelector('.header-sticky')?.remove();
+            container.removeEventListener('scroll', handleGanttScroll);
+            // Create sticky group (appended last in SVG = renders on top)
+            const stickyGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            stickyGroup.classList.add('header-sticky');
+            // Move header elements into sticky group
+            const gridHeader = svg.querySelector('.grid-header');
+            if (gridHeader) {
+                gridHeader.style.fill = '#0f172a';
+                stickyGroup.appendChild(gridHeader);
+            }
+            svg.querySelectorAll('.upper-text').forEach(el => stickyGroup.appendChild(el));
+            svg.querySelectorAll('.lower-text').forEach(el => stickyGroup.appendChild(el));
+            // Add a bottom border line
+            const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
+            const borderLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            borderLine.setAttribute('x1', 0);
+            borderLine.setAttribute('x2', svgWidth);
+            borderLine.setAttribute('y1', 60);
+            borderLine.setAttribute('y2', 60);
+            borderLine.setAttribute('stroke', '#334155');
+            borderLine.setAttribute('stroke-width', '1');
+            stickyGroup.appendChild(borderLine);
+            svg.appendChild(stickyGroup);
+            container.addEventListener('scroll', handleGanttScroll);
+        }
+
+        function handleGanttScroll() {
+            const container = document.getElementById('gantt-target');
+            const svg = container?.querySelector('.gantt');
+            const stickyGroup = svg?.querySelector('.header-sticky');
+            if (!stickyGroup) return;
+            stickyGroup.setAttribute('transform', `translate(0, ${container.scrollTop})`);
+        }
+
+        function zoomGantt(direction) {
+            const newZoom = currentGanttZoom + direction;
+            if (newZoom < 0 || newZoom >= GANTT_VIEW_MODES.length) return;
+            currentGanttZoom = newZoom;
+            const mode = GANTT_VIEW_MODES[currentGanttZoom];
+            document.getElementById('ganttViewMode').textContent = mode;
+            if (ganttChart) {
+                ganttChart.change_view_mode(mode);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); }, 200);
+            }
         }
 
         function renderGantt() {
@@ -1472,35 +1599,12 @@
                     bar_corner_radius: 3,
                     arrow_curve: 5,
                     padding: 18,
-                    view_mode: 'Week',
+                    view_mode: GANTT_VIEW_MODES[currentGanttZoom],
                     date_format: 'YYYY-MM-DD',
                     custom_popup_html: null
                 });
 
-                setTimeout(() => {
-                    document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#94a3b8');
-                    document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
-
-                    document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper, i) => {
-                        const task = tasks[i];
-                        if (!task) return;
-                        const status = getTaskStatus(task);
-                        const pct = parseInt(task.progress) || 0;
-
-                        // Color ALL rects in the bar
-                        wrapper.querySelectorAll('.bar rect').forEach(rect => {
-                            rect.setAttribute('fill', status.color);
-                            rect.style.fill = status.color;
-                        });
-
-                        const label = wrapper.querySelector('.bar-label');
-                        if (label) {
-                            label.setAttribute('fill', '#fff');
-                            label.style.fill = '#fff';
-                            label.textContent = `${task.name}  (${pct}%) - ${status.label}`;
-                        }
-                    });
-                }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
@@ -1527,6 +1631,8 @@
 
             const today = new Date();
             today.setHours(0, 0, 0, 0);
+            // Look ahead to tomorrow: if no progress is made today, what would the status be?
+            const tomorrow = new Date(today.getTime() + 86400000);
 
             // Build scored list of tasks needing attention
             const focusTasks = [];
@@ -1539,16 +1645,17 @@
 
                 const start = new Date(task.start + 'T00:00:00');
                 const end = new Date(task.end + 'T00:00:00');
-                const status = getTaskStatus(task);
+                const status = getTaskStatus(task, tomorrow);
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
                 if (status.label === 'Overdue') {
-                    const daysOverdue = Math.ceil((today - end) / 86400000);
-                    focusTasks.push({ task, priority: 0, sort: daysOverdue, label: `${daysOverdue}d overdue`, color: '#ef4444', dotCss: 'bg-red-500' });
+                    const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
+                    const label = daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`;
+                    focusTasks.push({ task, priority: 0, sort: daysOverdue, label, color: '#ef4444', dotCss: 'bg-red-500' });
                     focusTaskIds.add(task.id);
                 } else if (status.label === 'Attention') {
                     const totalDays = Math.max((end - start) / 86400000, 1);
-                    const daysPassed = Math.max((today - start) / 86400000, 0);
+                    const daysPassed = Math.max((tomorrow - start) / 86400000, 0);
                     const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
                     const gap = expectedPct - pct;
                     focusTasks.push({ task, priority: 1, sort: gap, label: `${daysUntilEnd}d left`, color: '#fbbf24', dotCss: 'bg-amber-400' });
@@ -1638,7 +1745,7 @@
                             <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
                         </button>
                     </td>
-                    <td class="p-3"><a href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
+                    <td class="p-3"><a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
                     <td class="p-3">
                         <input type="text" value="${escapeHtml(task.assigned || '')}"
                                onchange="updateTask(${index}, 'assigned', this.value)"
@@ -1692,6 +1799,9 @@
             const isLocked = !!task.locked;
             const hasContent = hasTaskContent(task);
 
+            const nameLink = document.getElementById(`taskName-${index}`);
+            if (nameLink) nameLink.textContent = task.name;
+
             const lockBtn = document.getElementById(`lockBtn-${index}`);
             if (lockBtn) {
                 lockBtn.className = `p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}`;
@@ -1736,6 +1846,21 @@
         function toggleTaskLock(index) {
             tasks[index].locked = !tasks[index].locked;
             updateRowIndicators(index);
+            saveProject();
+        }
+
+        function toggleAllLocks() {
+            const allLocked = tasks.length > 0 && tasks.every(t => !!t.locked);
+            const newState = !allLocked;
+            tasks.forEach((t, i) => {
+                t.locked = newState;
+                updateRowIndicators(i);
+            });
+            const btn = document.getElementById('lockAllBtn');
+            if (btn) {
+                btn.className = `transition-colors ${newState ? 'text-amber-400 hover:text-slate-400' : 'text-slate-400 hover:text-amber-400'}`;
+                btn.title = newState ? 'All locked — click to unlock all' : 'Lock/unlock all tasks from AI';
+            }
             saveProject();
         }
 
@@ -2555,6 +2680,205 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
         // Summary panel is closed via toggleSummaryPanel()
 
         // =============================================
+        // Project-Level AI Summary
+        // =============================================
+
+        // Per-project cache: { projectId: { text: '', hash: '' } }
+        let _projectSummaryCache = {};
+        let _projectSummaryActiveId = null;   // tracks which project the modal is showing
+        let _projectSummaryActiveName = null;
+
+        function getProjectDataHash(taskList) {
+            const data = (taskList || tasks).map(t => ({
+                name: t.name, start: t.start, end: t.end,
+                progress: parseInt(t.progress) || 0,
+                assigned: t.assigned || '',
+                dependencies: t.dependencies || '',
+                description: (t.description || '').slice(0, 200),
+                meetingCount: (t.meetings || []).length,
+                activityCount: (t.activity || []).filter(a => a.type === 'comment').length
+            }));
+            const str = JSON.stringify(data);
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const chr = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + chr;
+                hash |= 0;
+            }
+            return hash.toString(36);
+        }
+
+        function buildProjectContext(taskList, projName) {
+            const tl = taskList || tasks;
+            const pn = projName || currentProjectName || 'Untitled Project';
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const total = tl.length;
+            const completed = tl.filter(t => (parseInt(t.progress) || 0) >= 100).length;
+            const overdue = tl.filter(t => getTaskStatus(t).label === 'Overdue').length;
+            const attention = tl.filter(t => getTaskStatus(t).label === 'Attention').length;
+
+            let context = `--- PROJECT CONTEXT ---\n`;
+            context += `Project: ${pn}\n`;
+            context += `Date: ${today.toISOString().split('T')[0]}\n`;
+            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Needs Attention: ${attention}\n\n`;
+
+            context += `--- TASKS ---\n`;
+            tl.forEach((t, i) => {
+                const status = getTaskStatus(t);
+                const pct = parseInt(t.progress) || 0;
+                context += `\n[${i + 1}] "${t.name}"\n`;
+                context += `    Assigned: ${(t.assigned || '').trim() || 'Unassigned'} | Status: ${status.label} (${pct}%) | ${t.start} to ${t.end}\n`;
+                if (t.dependencies) context += `    Dependencies: Task ${t.dependencies}\n`;
+                if ((t.description || '').trim()) context += `    Description: ${t.description.trim().slice(0, 300)}\n`;
+                const meetingCount = (t.meetings || []).length;
+                const activityCount = (t.activity || []).filter(a => a.type === 'comment').length;
+                if (meetingCount > 0) context += `    Meetings: ${meetingCount} recorded\n`;
+                if (activityCount > 0) context += `    Activity entries: ${activityCount}\n`;
+
+                // Include latest meeting notes if available
+                if (meetingCount > 0) {
+                    const latest = t.meetings[t.meetings.length - 1];
+                    context += `    Latest meeting (${latest.date}): "${latest.title}"`;
+                    if (latest.notes) context += ` — ${latest.notes.slice(0, 200)}`;
+                    context += `\n`;
+                }
+
+                // Include latest activity entry if available
+                if (activityCount > 0) {
+                    const entries = t.activity.filter(a => a.type === 'comment');
+                    const latest = entries[entries.length - 1];
+                    const d = new Date(latest.timestamp).toLocaleDateString();
+                    context += `    Latest activity (${d}): ${latest.message.slice(0, 200)}\n`;
+                }
+            });
+
+            // Today's Focus section
+            const focusTasks = tl.filter(t => {
+                const s = getTaskStatus(t);
+                return s.label === 'Overdue' || s.label === 'Attention';
+            });
+            if (focusTasks.length > 0) {
+                context += `\n--- TODAY'S FOCUS ---\n`;
+                focusTasks.forEach(t => {
+                    const s = getTaskStatus(t);
+                    context += `- [${s.label}] "${t.name}" (${parseInt(t.progress) || 0}%)\n`;
+                });
+            }
+
+            context += `\n--- END ---`;
+            return context;
+        }
+
+        async function showProjectSummary(projectId, projectName) {
+            const modal = document.getElementById('projectSummaryModal');
+            const content = document.getElementById('projectSummaryContent');
+            const statusEl = document.getElementById('projectSummaryStatus');
+
+            // Determine which project and task list to use
+            const projId = projectId || currentProjectId;
+            let projName = projectName || currentProjectName || 'Project';
+            let taskList;
+
+            _projectSummaryActiveId = projId;
+            _projectSummaryActiveName = projName;
+            modal.classList.remove('hidden');
+
+            if (projectId && projectId !== currentProjectId) {
+                // Called from dashboard — need to load the project's tasks
+                content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Loading project data...</span></div>';
+                statusEl.textContent = '';
+                try {
+                    const data = await loadProject(projectId);
+                    taskList = data.tasks || [];
+                } catch (err) {
+                    content.innerHTML = `<div class="text-center py-8"><span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span><p class="text-red-400 text-sm">Failed to load project data.</p></div>`;
+                    return;
+                }
+            } else {
+                // Called from within the open project
+                taskList = tasks;
+            }
+
+            if (taskList.length === 0) {
+                content.innerHTML = '<span class="text-slate-500">No tasks to summarize. Create a project plan first.</span>';
+                statusEl.textContent = '';
+                return;
+            }
+
+            const currentHash = getProjectDataHash(taskList);
+            const cached = _projectSummaryCache[projId];
+
+            if (cached && cached.hash === currentHash) {
+                content.innerHTML = formatSummary(cached.text);
+                statusEl.textContent = 'Cached — no changes';
+                return;
+            }
+
+            content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating project summary...</span></div>';
+            statusEl.textContent = '';
+
+            const context = buildProjectContext(taskList, projName);
+            const prompt = `You are an expert project management assistant. Analyze the following project data and generate a concise, structured project summary for executive review.
+
+${context}
+
+Generate a summary with these sections:
+1. **Executive Overview** — Overall project health, timeline status, and completion trajectory in 2-3 sentences.
+2. **Key Highlights** — Important progress made, milestones reached, or notable achievements (bullet points).
+3. **Risks & Blockers** — Overdue tasks, tasks needing attention, bottlenecks, or dependency issues (bullet points). If none, say so.
+4. **Action Items** — What needs to happen next, prioritized by urgency (bullet points).
+5. **Decision Points** — Any pending decisions surfaced from the task data that need stakeholder input (bullet points). If none, say so.
+
+Be concise and actionable. Focus on insights, not just restating data.`;
+
+            try {
+                const apiKey = document.getElementById('apiKey').value;
+                if (!apiKey) throw new Error('No API key configured. Add your Gemini API key in settings.');
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                        generationConfig: { maxOutputTokens: 4096, thinkingConfig: { thinkingBudget: 0 } }
+                    })
+                });
+
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                const parts = data.candidates[0].content.parts;
+                const aiText = parts.filter(p => !p.thought).map(p => p.text).join('');
+
+                _projectSummaryCache[projId] = { text: aiText, hash: currentHash };
+
+                content.innerHTML = formatSummary(aiText);
+                statusEl.textContent = 'Generated just now';
+            } catch (err) {
+                console.error('Project summary error:', err);
+                content.innerHTML = `<div class="text-center py-8"><span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span><p class="text-red-400 text-sm">${escapeHtml(err.message)}</p></div>`;
+            }
+        }
+
+        function regenerateProjectSummary() {
+            if (_projectSummaryActiveId) {
+                delete _projectSummaryCache[_projectSummaryActiveId];
+            }
+            // Re-invoke with same project context
+            if (_projectSummaryActiveId && _projectSummaryActiveId !== currentProjectId) {
+                showProjectSummary(_projectSummaryActiveId, _projectSummaryActiveName);
+            } else {
+                showProjectSummary();
+            }
+        }
+
+        function closeProjectSummary() {
+            document.getElementById('projectSummaryModal').classList.add('hidden');
+        }
+
+        // =============================================
         // Chat & API Logic
         // =============================================
 
@@ -3162,5 +3486,23 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
         // Boot
         initApp();
     </script>
+
+    <!-- Project Summary Modal -->
+    <div id="projectSummaryModal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="material-icons-round text-purple-400">auto_awesome</span>
+            <span class="text-sm font-semibold text-white">Project Summary</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="projectSummaryStatus" class="text-[10px] text-slate-500"></span>
+            <button onclick="regenerateProjectSummary()" class="text-slate-400 hover:text-white" title="Regenerate"><span class="material-icons-round text-sm">refresh</span></button>
+            <button onclick="closeProjectSummary()" class="text-slate-400 hover:text-white"><span class="material-icons-round text-sm">close</span></button>
+          </div>
+        </div>
+        <div id="projectSummaryContent" class="flex-1 overflow-y-auto px-5 py-4 text-xs text-slate-300 leading-relaxed"></div>
+      </div>
+    </div>
 </body>
 </html>
