@@ -928,6 +928,9 @@
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
         const DAILY_MESSAGE_LIMIT = 50;
+        const DAILY_SUMMARY_LIMIT = 30;
+        let lastSummaryTime = 0;
+        const SUMMARY_COOLDOWN_MS = 5000;
         const MAX_PROMPT_LENGTH = 2000;
         let currentProjectId = null;
         let currentUser = null;     // null = guest mode
@@ -3262,6 +3265,31 @@
             }
         }
 
+        function checkSummaryRateLimit() {
+            const now = Date.now();
+            if (now - lastSummaryTime < SUMMARY_COOLDOWN_MS) {
+                const wait = Math.ceil((SUMMARY_COOLDOWN_MS - (now - lastSummaryTime)) / 1000);
+                alert(`Please wait ${wait}s before generating another summary.`);
+                return true;
+            }
+            const today = new Date().toISOString().slice(0, 10);
+            const countKey = `planner_summaryCount_${today}`;
+            const count = parseInt(localStorage.getItem(countKey) || '0', 10);
+            if (count >= DAILY_SUMMARY_LIMIT) {
+                alert(`Daily summary limit reached (${DAILY_SUMMARY_LIMIT}). Try again tomorrow.`);
+                return true;
+            }
+            return false;
+        }
+
+        function incrementSummaryCount() {
+            lastSummaryTime = Date.now();
+            const today = new Date().toISOString().slice(0, 10);
+            const countKey = `planner_summaryCount_${today}`;
+            const count = parseInt(localStorage.getItem(countKey) || '0', 10);
+            localStorage.setItem(countKey, String(count + 1));
+        }
+
         async function toggleRowSummary(index, forceOpen = false) {
             const isMobile = window.innerWidth < 768;
 
@@ -3309,6 +3337,8 @@
                 return;
             }
 
+            if (checkSummaryRateLimit()) return;
+
             // Loading
             if (mContent) mContent.innerHTML = '<div class="flex items-center gap-2 py-4 justify-center"><div class="loader"></div><span class="text-slate-400">Generating summary...</span></div>';
             if (mStatus) mStatus.textContent = '';
@@ -3337,6 +3367,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
 
                 task._lastSummary = aiText;
                 task._lastSummaryHash = currentHash;
+                incrementSummaryCount();
                 saveProject();
 
                 if (mContent) mContent.innerHTML = formatSummary(aiText);
@@ -3381,6 +3412,8 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 return;
             }
 
+            if (checkSummaryRateLimit()) return;
+
             // Show loading
             document.getElementById('summaryContent').innerHTML = `
                 <div class="flex items-center gap-3 py-3">
@@ -3415,6 +3448,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 // Cache the summary
                 task._lastSummary = aiText;
                 task._lastSummaryHash = currentHash;
+                incrementSummaryCount();
                 saveProject();
 
                 document.getElementById('summaryContent').innerHTML = formatSummary(aiText);
@@ -3586,6 +3620,8 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 return;
             }
 
+            if (checkSummaryRateLimit()) return;
+
             content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating project summary...</span></div>';
             statusEl.textContent = '';
 
@@ -3612,6 +3648,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
                 const aiText = parts.filter(p => !p.thought).map(p => p.text).join('');
 
                 _projectSummaryCache[projId] = { text: aiText, hash: currentHash };
+                incrementSummaryCount();
 
                 content.innerHTML = formatSummary(aiText);
                 statusEl.textContent = 'Generated just now';
