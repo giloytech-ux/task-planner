@@ -1870,7 +1870,9 @@
         // =============================================
 
         function getTaskStatus(task, asOfDate) {
+            // Default: look ahead to tomorrow (proactive warnings)
             const today = asOfDate ? new Date(asOfDate.getTime()) : new Date();
+            if (!asOfDate) today.setDate(today.getDate() + 1);
             today.setHours(0, 0, 0, 0);
             const start = new Date(task.start + 'T00:00:00');
             const end = new Date(task.end + 'T00:00:00');
