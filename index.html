@@ -415,7 +415,7 @@
     <main id="projectView" class="flex-1 flex overflow-hidden hidden">
 
         <!-- Left: Chat / Prompt Interface -->
-        <aside class="w-1/3 min-w-[350px] border-r border-slate-700 flex flex-col bg-slate-900/50">
+        <aside class="w-1/4 min-w-[300px] border-r border-slate-700 flex flex-col bg-slate-900/50">
             <!-- Chat History -->
             <div id="chatHistory" class="flex-1 overflow-y-auto p-4 space-y-4">
                 <!-- Chat messages injected here -->
@@ -425,11 +425,16 @@
             <div class="p-4 border-t border-slate-700 bg-slate-900">
                 <div class="relative">
                     <textarea id="userPrompt" rows="3"
-                        class="w-full bg-slate-800 text-white rounded-lg p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                        class="w-full bg-slate-800 text-white rounded-lg p-3 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
                         placeholder="e.g., 'Project: Annual Statement. Due Apr 24, 2026. Needs 50 exhibits.'"></textarea>
-                    <button onclick="handleSend()" class="absolute bottom-2 right-2 p-2 bg-blue-600 hover:bg-blue-500 rounded-full text-white transition-colors flex items-center justify-center shadow-lg">
-                        <span class="material-icons-round text-sm">send</span>
-                    </button>
+                    <div class="absolute bottom-2 right-2 flex items-center gap-1">
+                        <button id="voiceBtn" onclick="toggleVoiceInput()" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300 transition-colors flex items-center justify-center shadow-lg" title="Voice input">
+                            <span class="material-icons-round text-sm">mic</span>
+                        </button>
+                        <button onclick="handleSend()" class="p-2 bg-blue-600 hover:bg-blue-500 rounded-full text-white transition-colors flex items-center justify-center shadow-lg">
+                            <span class="material-icons-round text-sm">send</span>
+                        </button>
+                    </div>
                 </div>
                 <p class="text-[10px] text-slate-500 mt-2 text-center">Using Gemini 2.5 Flash. Requires API Key.</p>
             </div>
@@ -459,21 +464,38 @@
 
                 <!-- Gantt Container -->
                 <div class="flex-1 overflow-hidden flex flex-col">
-                    <div class="h-1/2 p-4 overflow-auto border-b border-slate-800" id="gantt-target">
+                    <div class="flex-1 min-h-0 p-4 overflow-auto border-b border-slate-800" id="gantt-target">
                         <div class="h-full flex flex-col items-center justify-center text-slate-600">
                             <span class="material-icons-round text-4xl mb-2">bar_chart</span>
                             <p>No plan generated yet.</p>
                         </div>
                     </div>
 
+                    <!-- Today's Focus Panel -->
+                    <div id="todaysFocus" class="hidden px-4 py-2 bg-slate-900/80 border-b border-slate-800 shrink-0">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="material-icons-round text-amber-400" style="font-size:16px">flag</span>
+                        <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Today's Focus</span>
+                      </div>
+                      <div id="focusItems" class="flex flex-wrap gap-2"></div>
+                      <div id="suggestedRow" class="hidden mt-1.5">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="material-icons-round text-slate-400" style="font-size:14px">tips_and_updates</span>
+                          <span class="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Suggested</span>
+                        </div>
+                        <div id="suggestedItems" class="flex flex-wrap gap-2"></div>
+                      </div>
+                    </div>
+
                     <!-- Editable Data Table -->
-                    <div class="h-1/2 overflow-auto bg-slate-900">
+                    <div class="flex-1 min-h-0 overflow-auto bg-slate-900">
                         <table class="w-full text-left border-collapse">
                             <thead class="bg-slate-800 sticky top-0 z-10">
                                 <tr>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-8" title="Lock from AI"><span class="material-icons-round text-sm">lock</span></th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase">Task Name</th>
-                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-10" title="AI Summary"><span class="material-icons-round text-sm text-purple-400">auto_awesome</span></th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">Assigned</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-24"><span class="material-icons-round text-sm text-purple-400 align-middle">auto_awesome</span> AI Summary</th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">Start</th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">End</th>
                                     <th class="p-3 text-xs font-medium text-slate-400 uppercase w-24">Progress</th>
@@ -539,10 +561,15 @@
 
                     <!-- DETAILS TAB -->
                     <div id="tabDetails" class="flex-1 overflow-y-auto space-y-5">
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-3 gap-4">
                             <div>
                                 <div class="td-field-label">Task Name</div>
                                 <input type="text" id="tdName" class="td-input" onchange="updateTaskDetail('name', this.value)">
+                            </div>
+                            <div>
+                                <div class="td-field-label">Assigned To</div>
+                                <input type="text" id="tdAssigned" class="td-input" placeholder="e.g., John, Sarah"
+                                       onchange="updateTaskDetail('assigned', this.value)">
                             </div>
                             <div>
                                 <div class="td-field-label">Priority</div>
@@ -709,6 +736,12 @@
         3. Break large projects into specific subtasks (Prep, Review, Execution, etc.).
         4. Dates must be realistic. 'dependencies' is the ID of the previous task (optional).
         5. If the user asks for changes (e.g., "Make review longer"), modify the existing JSON structure and return the FULL updated JSON.
+        6. SCHEDULING CONSTRAINTS (IMPORTANT):
+           - The user has ~5-6 productive work hours per day. Size task durations accordingly.
+           - Limit concurrent (parallel) tasks to 2-3 at most. Stagger start dates.
+           - Use 'dependencies' to chain tasks logically — finishing task A should unlock task B.
+           - Account for weekends (Sat/Sun are non-work days) — extend durations that span them.
+           - Leave at least 1 day buffer between a task's end and its dependent task's start.
         `;
 
         let ganttChart = null;
@@ -1416,6 +1449,7 @@
             if (tasks.length === 0) {
                 target.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-slate-600"><span class="material-icons-round text-4xl mb-2">bar_chart</span><p>No plan generated yet.</p></div>`;
                 document.getElementById('taskTableBody').innerHTML = '';
+                renderTodaysFocus();
                 return;
             }
 
@@ -1473,12 +1507,123 @@
             }
 
             renderTable();
+            renderTodaysFocus();
+        }
+
+        function renderTodaysFocus() {
+            const panel = document.getElementById('todaysFocus');
+            const container = document.getElementById('focusItems');
+            const suggestedRow = document.getElementById('suggestedRow');
+            const suggestedContainer = document.getElementById('suggestedItems');
+            if (!panel || !container) return;
+            container.innerHTML = '';
+            if (suggestedContainer) suggestedContainer.innerHTML = '';
+            if (suggestedRow) suggestedRow.classList.add('hidden');
+
+            if (tasks.length === 0) {
+                panel.classList.add('hidden');
+                return;
+            }
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Build scored list of tasks needing attention
+            const focusTasks = [];
+            const suggestedTasks = [];
+            const focusTaskIds = new Set();
+
+            tasks.forEach(task => {
+                const pct = parseInt(task.progress) || 0;
+                if (pct >= 100) return; // skip completed
+
+                const start = new Date(task.start + 'T00:00:00');
+                const end = new Date(task.end + 'T00:00:00');
+                const status = getTaskStatus(task);
+                const daysUntilEnd = Math.ceil((end - today) / 86400000);
+
+                if (status.label === 'Overdue') {
+                    const daysOverdue = Math.ceil((today - end) / 86400000);
+                    focusTasks.push({ task, priority: 0, sort: daysOverdue, label: `${daysOverdue}d overdue`, color: '#ef4444', dotCss: 'bg-red-500' });
+                    focusTaskIds.add(task.id);
+                } else if (status.label === 'Attention') {
+                    const totalDays = Math.max((end - start) / 86400000, 1);
+                    const daysPassed = Math.max((today - start) / 86400000, 0);
+                    const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
+                    const gap = expectedPct - pct;
+                    focusTasks.push({ task, priority: 1, sort: gap, label: `${daysUntilEnd}d left`, color: '#fbbf24', dotCss: 'bg-amber-400' });
+                    focusTaskIds.add(task.id);
+                } else if (today >= start && daysUntilEnd <= 3 && daysUntilEnd >= 0) {
+                    focusTasks.push({ task, priority: 2, sort: daysUntilEnd, label: `${daysUntilEnd}d left`, color: '#3b82f6', dotCss: 'bg-blue-500' });
+                    focusTaskIds.add(task.id);
+                }
+            });
+
+            // Suggested: active on-track tasks the user can work on today (not already in focus)
+            tasks.forEach(task => {
+                const pct = parseInt(task.progress) || 0;
+                if (pct >= 100) return;
+                if (focusTaskIds.has(task.id)) return;
+
+                const start = new Date(task.start + 'T00:00:00');
+                const end = new Date(task.end + 'T00:00:00');
+                if (today >= start && today <= end) {
+                    const daysUntilEnd = Math.ceil((end - today) / 86400000);
+                    suggestedTasks.push({ task, sort: daysUntilEnd, label: `${pct}% · ${daysUntilEnd}d left` });
+                }
+            });
+            // Sort suggested by nearest deadline first
+            suggestedTasks.sort((a, b) => a.sort - b.sort);
+
+            if (focusTasks.length === 0 && suggestedTasks.length === 0) {
+                // All on track, nothing active today
+                panel.classList.remove('hidden');
+                container.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>All on track</span>`;
+                return;
+            }
+
+            // Render focus chips (urgent items)
+            if (focusTasks.length === 0) {
+                container.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>All on track</span>`;
+            } else {
+                // Sort: by priority tier, then by sort value
+                focusTasks.sort((a, b) => {
+                    if (a.priority !== b.priority) return a.priority - b.priority;
+                    if (a.priority === 2) return a.sort - b.sort; // nearest deadline first
+                    return b.sort - a.sort; // most overdue / biggest gap first
+                });
+
+                const bgMap = { 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+                focusTasks.slice(0, 4).forEach(item => {
+                    const chip = document.createElement('span');
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
+                    chip.onclick = () => openTaskDetail(tasks.indexOf(item.task));
+                    container.appendChild(chip);
+                });
+            }
+
+            // Render suggested chips (active on-track tasks for today)
+            if (suggestedTasks.length > 0 && suggestedRow && suggestedContainer) {
+                suggestedTasks.slice(0, 3).forEach(item => {
+                    const chip = document.createElement('span');
+                    chip.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition bg-slate-500/10 text-slate-400 border-slate-500/20';
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
+                    chip.onclick = () => openTaskDetail(tasks.indexOf(item.task));
+                    suggestedContainer.appendChild(chip);
+                });
+                suggestedRow.classList.remove('hidden');
+            }
+
+            panel.classList.remove('hidden');
         }
 
         function renderTable() {
             const tbody = document.getElementById('taskTableBody');
             tbody.innerHTML = '';
-            const colCount = 8; // total columns in table
+            const colCount = 9; // total columns in table
 
             tasks.forEach((task, index) => {
                 const status = getTaskStatus(task);
@@ -1494,9 +1639,16 @@
                         </button>
                     </td>
                     <td class="p-3"><a href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
+                    <td class="p-3">
+                        <input type="text" value="${escapeHtml(task.assigned || '')}"
+                               onchange="updateTask(${index}, 'assigned', this.value)"
+                               class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 w-full"
+                               placeholder="Unassigned">
+                    </td>
                     <td class="p-2 text-center">
-                        <button id="summaryBtn-${index}" onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
+                        <button id="summaryBtn-${index}" onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors flex items-center gap-1 mx-auto ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
                             <span class="material-icons-round" style="font-size:16px">auto_awesome</span>
+                            <span class="text-[10px]">Summary</span>
                         </button>
                     </td>
                     <td class="p-3"><input type="date" value="${task.start}" onchange="updateTask(${index}, 'start', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300"></td>
@@ -1597,6 +1749,7 @@
             tasks.push({
                 id: String(tasks.length + 1),
                 name: 'New Task',
+                assigned: '',
                 start: startStr,
                 end: endStr,
                 progress: 0,
@@ -1620,6 +1773,7 @@
         let editingMeetingIndex = null;
 
         function ensureTaskRichData(task) {
+            if (!task.assigned) task.assigned = '';
             if (!task.priority) task.priority = 'medium';
             if (!task.description) task.description = '';
             if (!task.checklist) task.checklist = [];
@@ -1701,6 +1855,7 @@
         // ---- DETAILS TAB ----
         function renderDetailsTab(task) {
             document.getElementById('tdName').value = task.name;
+            document.getElementById('tdAssigned').value = task.assigned || '';
             document.getElementById('tdPriority').value = task.priority || 'medium';
             document.getElementById('tdStart').value = task.start;
             document.getElementById('tdEnd').value = task.end;
@@ -2165,7 +2320,7 @@
             const status = getTaskStatus(task);
             const pct = parseInt(task.progress) || 0;
 
-            let description = `Task: "${task.name}" | Status: ${status.label} (${pct}% complete) | Dates: ${task.start} to ${task.end}`;
+            let description = `Task: "${task.name}" | Assigned: ${(task.assigned || '').trim() || 'Unassigned'} | Status: ${status.label} (${pct}% complete) | Dates: ${task.start} to ${task.end}`;
             if ((task.description || '').trim()) {
                 description += `\n${task.description}`;
             }
@@ -2933,6 +3088,76 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 handleSend();
             }
         });
+
+        // =============================================
+        // Voice Input (Speech-to-Text)
+        // =============================================
+        let recognition = null;
+        let isRecording = false;
+
+        function toggleVoiceInput() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            const btn = document.getElementById('voiceBtn');
+            const input = document.getElementById('userPrompt');
+            const existingText = input.value;
+
+            recognition.onstart = function() {
+                isRecording = true;
+                btn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'text-slate-300');
+                btn.classList.add('bg-red-600', 'hover:bg-red-500', 'text-white', 'animate-pulse');
+                btn.title = 'Stop recording';
+            };
+
+            recognition.onresult = function(event) {
+                let finalTranscript = '';
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                const separator = existingText.trim() ? ' ' : '';
+                input.value = existingText + separator + finalTranscript + interimTranscript;
+            };
+
+            recognition.onend = function() {
+                isRecording = false;
+                btn.classList.remove('bg-red-600', 'hover:bg-red-500', 'text-white', 'animate-pulse');
+                btn.classList.add('bg-slate-700', 'hover:bg-slate-600', 'text-slate-300');
+                btn.title = 'Voice input';
+                // Finalize: keep only final text (remove interim)
+                const finalText = input.value;
+                input.value = finalText;
+            };
+
+            recognition.onerror = function(event) {
+                if (event.error !== 'aborted') {
+                    console.error('Speech recognition error:', event.error);
+                    if (event.error === 'not-allowed') {
+                        alert('Microphone access denied. Please allow microphone permissions.');
+                    }
+                }
+            };
+
+            recognition.start();
+        }
 
         // Boot
         initApp();
