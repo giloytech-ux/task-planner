@@ -1192,6 +1192,7 @@
                     .order('created_at');
 
                 const rawTasks = (taskData || []).map(t => ({
+                    _rowId: t.id,
                     id: t.task_number,
                     name: t.name,
                     start: t.start_date,
@@ -1209,22 +1210,14 @@
                     _lastSummaryHash: t.last_summary_hash || ''
                 }));
 
-                // Only dedup exact task_number duplicates (from concurrent insert race)
-                const seenIds = new Set();
-                const loadedTasks = rawTasks.filter(t => {
-                    if (seenIds.has(t.id)) return false;
-                    seenIds.add(t.id);
-                    return true;
-                });
-
-                await hydrateAndMigrateFiles(loadedTasks);
+                await hydrateAndMigrateFiles(rawTasks);
 
                 const loadedHistory = (chatData || []).map(c => ({
                     role: c.role,
                     text: c.message
                 }));
 
-                return { tasks: loadedTasks, history: loadedHistory };
+                return { tasks: rawTasks, history: loadedHistory };
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
                 const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [] };
@@ -1251,29 +1244,59 @@
                     .update({ updated_at: new Date().toISOString() })
                     .eq('id', currentProjectId);
 
-                // Replace all tasks: delete then insert
-                await supabase.from('tasks').delete().eq('project_id', currentProjectId);
+                // Upsert tasks: update existing rows, insert new ones (safe — no delete-first)
                 if (tasks.length > 0) {
-                    const taskRows = tasks.map((t, i) => ({
-                        project_id: currentProjectId,
-                        task_number: t.id,
-                        name: t.name,
-                        start_date: t.start,
-                        end_date: t.end,
-                        progress: parseInt(t.progress) || 0,
-                        dependencies: t.dependencies || '',
-                        sort_order: i,
-                        priority: t.priority || 'medium',
-                        description: t.description || '',
-                        locked: !!t.locked,
-                        checklist: t.checklist || [],
-                        activity: t.activity || [],
-                        files: stripFileData(t.files),
-                        meetings: t.meetings || [],
-                        last_summary: t._lastSummary || '',
-                        last_summary_hash: t._lastSummaryHash || ''
-                    }));
-                    await supabase.from('tasks').insert(taskRows);
+                    const taskRows = tasks.map((t, i) => {
+                        const row = {
+                            project_id: currentProjectId,
+                            task_number: t.id,
+                            name: t.name,
+                            start_date: t.start,
+                            end_date: t.end,
+                            progress: parseInt(t.progress) || 0,
+                            dependencies: t.dependencies || '',
+                            sort_order: i,
+                            priority: t.priority || 'medium',
+                            description: t.description || '',
+                            locked: !!t.locked,
+                            checklist: t.checklist || [],
+                            activity: t.activity || [],
+                            files: stripFileData(t.files),
+                            meetings: t.meetings || [],
+                            last_summary: t._lastSummary || '',
+                            last_summary_hash: t._lastSummaryHash || ''
+                        };
+                        if (t._rowId) row.id = t._rowId;
+                        return row;
+                    });
+                    const { data: upsertedRows, error } = await supabase
+                        .from('tasks')
+                        .upsert(taskRows)
+                        .select('id, task_number');
+                    if (!error && upsertedRows) {
+                        // Sync _rowId back to in-memory tasks for newly inserted rows
+                        for (const row of upsertedRows) {
+                            const task = tasks.find(t => String(t.id) === String(row.task_number));
+                            if (task && !task._rowId) task._rowId = row.id;
+                        }
+                        // Delete orphaned rows (tasks user removed) — only if upsert succeeded
+                        const currentRowIds = upsertedRows.map(r => r.id);
+                        const { data: allRows } = await supabase
+                            .from('tasks')
+                            .select('id')
+                            .eq('project_id', currentProjectId);
+                        if (allRows) {
+                            const orphanIds = allRows
+                                .map(r => r.id)
+                                .filter(id => !currentRowIds.includes(id));
+                            if (orphanIds.length > 0) {
+                                await supabase.from('tasks').delete().in('id', orphanIds);
+                            }
+                        }
+                    }
+                } else {
+                    // No tasks left — safe to delete all rows for this project
+                    await supabase.from('tasks').delete().eq('project_id', currentProjectId);
                 }
 
                 // Replace chat history (trimmed to last 20 exchanges)
@@ -1289,7 +1312,7 @@
                 }
             } else {
                 const trimmedHistory = history.slice(-40);
-                const tasksForSave = tasks.map(t => ({
+                const tasksForSave = tasks.map(({ _rowId, ...t }) => ({
                     ...t,
                     files: stripFileData(t.files)
                 }));
