@@ -2318,8 +2318,7 @@ Be very brief. Skip sections with no data.\n\n${context}`;
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
-                        generationConfig: { maxOutputTokens: 2048 },
-                        thinkingConfig: { thinkingBudget: 0 }
+                        generationConfig: { maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }
                     })
                 });
 
@@ -2402,8 +2401,7 @@ ${context}`;
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
-                        generationConfig: { maxOutputTokens: 2048 },
-                        thinkingConfig: { thinkingBudget: 0 }
+                        generationConfig: { maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }
                     })
                 });
 
