@@ -707,11 +707,11 @@
                         </div>
                         <!-- Save / Cancel actions -->
                         <div class="flex items-center gap-3 pt-4 border-t border-slate-700/50">
-                            <button onclick="saveAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
-                                <span class="material-icons-round" style="font-size:15px">check</span> Save & Back
-                            </button>
                             <button onclick="discardAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
                                 <span class="material-icons-round" style="font-size:15px">undo</span> Discard
+                            </button>
+                            <button onclick="saveAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
+                                <span class="material-icons-round" style="font-size:15px">check</span> Save & Back
                             </button>
                         </div>
                     </div>
@@ -1700,6 +1700,8 @@
             }
             currentProjectId = null;
             currentProjectName = '';
+            currentTaskIndex = null;
+            _taskSnapshot = null;
             tasks = [];
             history = [];
 
@@ -1709,6 +1711,9 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('dashboardView').classList.remove('hidden');
             document.getElementById('projectView').classList.add('hidden');
+            document.getElementById('taskDetailView').classList.add('hidden');
+            document.getElementById('ganttSection').classList.remove('hidden');
+            document.getElementById('summaryPanel').classList.add('hidden');
             document.getElementById('breadcrumbSep').classList.add('hidden');
             document.getElementById('breadcrumbName').classList.add('hidden');
             document.getElementById('exportButtons').classList.add('hidden');
@@ -2623,7 +2628,8 @@
 
             items.forEach(item => {
                 const div = document.createElement('div');
-                div.className = 'activity-item';
+                div.className = 'activity-item cursor-pointer';
+                div.onclick = (e) => { if (!e.target.closest('.activity-delete-btn') && !e.target.closest('.activity-edit-area')) editActivityEntry(item.id); };
                 const time = new Date(item.timestamp);
                 const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                 div.innerHTML = `
@@ -2632,20 +2638,17 @@
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <span class="text-[10px] text-slate-500">${timeStr}</span>
                             <div class="flex items-center gap-1">
-                                <button onclick="editActivityEntry('${item.id}')" class="text-slate-600 hover:text-blue-400 transition-colors p-0.5" title="Edit">
-                                    <span class="material-icons-round" style="font-size:14px">edit</span>
-                                </button>
-                                <button onclick="deleteActivityEntry('${item.id}')" class="text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                                <button onclick="event.stopPropagation(); deleteActivityEntry('${item.id}')" class="activity-delete-btn text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
                                     <span class="material-icons-round" style="font-size:14px">delete</span>
                                 </button>
                             </div>
                         </div>
                         <div id="activity-display-${item.id}" class="text-sm text-slate-300" style="white-space:pre-wrap">${escapeHtml(item.message)}</div>
-                        <div id="activity-edit-${item.id}" class="hidden">
+                        <div id="activity-edit-${item.id}" class="activity-edit-area hidden">
                             <textarea class="td-textarea w-full text-sm" rows="3">${escapeHtml(item.message)}</textarea>
                             <div class="flex justify-end gap-2 mt-1">
-                                <button onclick="cancelActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
-                                <button onclick="saveActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
+                                <button onclick="event.stopPropagation(); cancelActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
+                                <button onclick="event.stopPropagation(); saveActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
                             </div>
                         </div>
                     </div>
@@ -2852,7 +2855,8 @@
 
             meetings.forEach((mtg, i) => {
                 const card = document.createElement('div');
-                card.className = 'meeting-card';
+                card.className = 'meeting-card cursor-pointer hover:border-slate-600';
+                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editMeeting(i); };
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-3">
@@ -2866,8 +2870,7 @@
                             ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">${escapeHtml(mtg.notes)}</p>` : ''}
                         </div>
                         <div class="flex gap-1 flex-shrink-0">
-                            <button onclick="editMeeting(${i})" class="p-1 text-slate-500 hover:text-blue-400 transition-colors" title="Edit"><span class="material-icons-round text-sm">edit</span></button>
-                            <button onclick="deleteMeeting(${i})" class="p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
+                            <button onclick="event.stopPropagation(); deleteMeeting(${i})" class="meeting-delete-btn p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
                         </div>
                     </div>
                 `;
