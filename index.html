@@ -932,7 +932,16 @@
                     start: t.start_date,
                     end: t.end_date,
                     progress: t.progress,
-                    dependencies: t.dependencies || ''
+                    dependencies: t.dependencies || '',
+                    priority: t.priority || 'medium',
+                    description: t.description || '',
+                    locked: !!t.locked,
+                    checklist: t.checklist || [],
+                    activity: t.activity || [],
+                    files: t.files || [],
+                    meetings: t.meetings || [],
+                    _lastSummary: t.last_summary || '',
+                    _lastSummaryHash: t.last_summary_hash || ''
                 }));
 
                 const loadedHistory = (chatData || []).map(c => ({
@@ -968,7 +977,16 @@
                         end_date: t.end,
                         progress: parseInt(t.progress) || 0,
                         dependencies: t.dependencies || '',
-                        sort_order: i
+                        sort_order: i,
+                        priority: t.priority || 'medium',
+                        description: t.description || '',
+                        locked: !!t.locked,
+                        checklist: t.checklist || [],
+                        activity: t.activity || [],
+                        files: t.files || [],
+                        meetings: t.meetings || [],
+                        last_summary: t._lastSummary || '',
+                        last_summary_hash: t._lastSummaryHash || ''
                     }));
                     await supabase.from('tasks').insert(taskRows);
                 }
@@ -1068,7 +1086,16 @@
                         end_date: t.end,
                         progress: parseInt(t.progress) || 0,
                         dependencies: t.dependencies || '',
-                        sort_order: i
+                        sort_order: i,
+                        priority: t.priority || 'medium',
+                        description: t.description || '',
+                        locked: !!t.locked,
+                        checklist: t.checklist || [],
+                        activity: t.activity || [],
+                        files: t.files || [],
+                        meetings: t.meetings || [],
+                        last_summary: t._lastSummary || '',
+                        last_summary_hash: t._lastSummaryHash || ''
                     }));
                     await supabase.from('tasks').insert(taskRows);
                 }
