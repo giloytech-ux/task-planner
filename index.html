@@ -2281,6 +2281,17 @@
                             <span class="material-icons-round" style="font-size:16px">close</span>
                         </button>
                     </div>
+                    <div id="mobileSummary-${index}" class="hidden mt-2 pt-2 border-t border-purple-500/10">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="material-icons-round text-purple-400" style="font-size:14px">auto_awesome</span>
+                            <span class="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">AI Summary</span>
+                            <button onclick="event.stopPropagation(); regenerateRowSummary(${index})" class="ml-auto p-1 rounded text-slate-600 hover:text-purple-400 hover:bg-purple-500/10 transition-colors" title="Regenerate">
+                                <span class="material-icons-round" style="font-size:14px">refresh</span>
+                            </button>
+                            <span id="mobileSummaryStatus-${index}" class="text-[10px] text-slate-600"></span>
+                        </div>
+                        <div id="mobileSummaryContent-${index}" class="text-xs text-slate-300 leading-relaxed"></div>
+                    </div>
                 `;
                 container.appendChild(card);
             });
@@ -3027,26 +3038,51 @@
         }
 
         async function toggleRowSummary(index, forceOpen = false) {
+            // Desktop elements (table row)
             const row = document.getElementById(`summaryRow-${index}`);
             const content = document.getElementById(`summaryRowContent-${index}`);
             const statusEl = document.getElementById(`summaryRowStatus-${index}`);
+            // Mobile elements (card inline)
+            const mobileRow = document.getElementById(`mobileSummary-${index}`);
+            const mobileContent = document.getElementById(`mobileSummaryContent-${index}`);
+            const mobileStatusEl = document.getElementById(`mobileSummaryStatus-${index}`);
+
+            const isMobileVisible = mobileRow && mobileRow.offsetParent !== null || (mobileRow && window.innerWidth < 768);
 
             // Toggle visibility (skip if forcing open for regenerate)
-            if (!forceOpen && !row.classList.contains('hidden')) {
-                row.classList.add('hidden');
-                return;
+            if (!forceOpen) {
+                if (isMobileVisible && mobileRow && !mobileRow.classList.contains('hidden')) {
+                    mobileRow.classList.add('hidden');
+                    return;
+                }
+                if (!isMobileVisible && row && !row.classList.contains('hidden')) {
+                    row.classList.add('hidden');
+                    return;
+                }
             }
 
             // Close any other open summary rows
             document.querySelectorAll('[id^="summaryRow-"]').forEach(r => r.classList.add('hidden'));
-            row.classList.remove('hidden');
+            document.querySelectorAll('[id^="mobileSummary-"]').forEach(r => r.classList.add('hidden'));
+            if (row) row.classList.remove('hidden');
+            if (mobileRow) mobileRow.classList.remove('hidden');
+
+            // Helper to set content on both desktop and mobile
+            function setContent(html) {
+                if (content) content.innerHTML = html;
+                if (mobileContent) mobileContent.innerHTML = html;
+            }
+            function setStatus(text) {
+                if (statusEl) statusEl.textContent = text;
+                if (mobileStatusEl) mobileStatusEl.textContent = text;
+            }
 
             const task = tasks[index];
             ensureTaskRichData(task);
 
             if (!hasTaskContent(task)) {
-                content.innerHTML = '<span class="text-slate-500">Nothing to summarize yet.</span>';
-                statusEl.textContent = '';
+                setContent('<span class="text-slate-500">Nothing to summarize yet.</span>');
+                setStatus('');
                 return;
             }
 
@@ -3054,14 +3090,14 @@
 
             // Cached — no changes
             if (task._lastSummary && task._lastSummaryHash === currentHash) {
-                content.innerHTML = formatSummary(task._lastSummary);
-                statusEl.textContent = 'Cached — no changes';
+                setContent(formatSummary(task._lastSummary));
+                setStatus('Cached — no changes');
                 return;
             }
 
             // Loading
-            content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating...</span></div>';
-            statusEl.textContent = '';
+            setContent('<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating...</span></div>');
+            setStatus('');
 
             const context = buildSummaryContext(task);
             const summaryPrompt = `You are an expert project management assistant. Your task is to analyze the provided context for a subtask and generate a concise, structured summary that is useful for both the CEO and the Project Manager.
@@ -3089,10 +3125,10 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 task._lastSummaryHash = currentHash;
                 saveProject();
 
-                content.innerHTML = formatSummary(aiText);
-                statusEl.textContent = 'Generated just now';
+                setContent(formatSummary(aiText));
+                setStatus('Generated just now');
             } catch (err) {
-                content.innerHTML = `<span class="text-red-400 text-xs">${escapeHtml(err.message)}</span>`;
+                setContent(`<span class="text-red-400 text-xs">${escapeHtml(err.message)}</span>`);
             }
         }
 
