@@ -926,6 +926,7 @@
         // --- Configuration & State ---
         let tasks = [];
         let history = [];
+        let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
         const DAILY_MESSAGE_LIMIT = 50;
@@ -1091,6 +1092,7 @@
             currentProjectId = null;
             tasks = [];
             history = [];
+            _pendingDeletes = [];
             showAuthView();
         }
 
@@ -1416,7 +1418,18 @@
                     .update({ updated_at: new Date().toISOString() })
                     .eq('id', currentProjectId);
 
-                // Upsert tasks: update existing rows, insert new ones (safe — no delete-first)
+                // Step 1: Explicit deletes — remove only tasks the user actually deleted
+                if (_pendingDeletes.length > 0) {
+                    const { error: delError } = await supabase.from('tasks').delete().in('id', _pendingDeletes);
+                    if (delError) {
+                        alert('Failed to delete tasks from server. Will retry on next save.');
+                        // Keep _pendingDeletes for retry on next save
+                    } else {
+                        _pendingDeletes = [];
+                    }
+                }
+
+                // Step 2: Upsert tasks
                 if (tasks.length > 0) {
                     const taskRows = tasks.map((t, i) => {
                         const row = {
@@ -1445,29 +1458,17 @@
                         .from('tasks')
                         .upsert(taskRows)
                         .select('id, task_number');
-                    if (!error && upsertedRows) {
+                    if (error) {
+                        alert('Failed to save tasks to server. Your changes are preserved locally.');
+                    } else if (upsertedRows) {
                         // Sync _rowId back to in-memory tasks for newly inserted rows
                         for (const row of upsertedRows) {
                             const task = tasks.find(t => String(t.id) === String(row.task_number));
                             if (task && !task._rowId) task._rowId = row.id;
                         }
-                        // Delete orphaned rows (tasks user removed) — only if upsert succeeded
-                        const currentRowIds = upsertedRows.map(r => r.id);
-                        const { data: allRows } = await supabase
-                            .from('tasks')
-                            .select('id')
-                            .eq('project_id', currentProjectId);
-                        if (allRows) {
-                            const orphanIds = allRows
-                                .map(r => r.id)
-                                .filter(id => !currentRowIds.includes(id));
-                            if (orphanIds.length > 0) {
-                                await supabase.from('tasks').delete().in('id', orphanIds);
-                            }
-                        }
                     }
-                } else {
-                    // No tasks left — safe to delete all rows for this project
+                } else if (_pendingDeletes.length === 0) {
+                    // No tasks left and no pending deletes stuck — safe to delete all rows
                     await supabase.from('tasks').delete().eq('project_id', currentProjectId);
                 }
 
@@ -1552,6 +1553,7 @@
                 currentProjectId = null;
                 tasks = [];
                 history = [];
+                _pendingDeletes = [];
                 showDashboard();
             } else {
                 await renderDashboard();
@@ -2010,6 +2012,7 @@
             _taskSnapshot = null;
             tasks = [];
             history = [];
+            _pendingDeletes = [];
 
             closeMobileSidebar();
             document.getElementById('mobileSidebarToggle').classList.add('hidden');
@@ -2034,6 +2037,7 @@
             const data = await loadProject(id);
             tasks = data.tasks || [];
             history = data.history || [];
+            _pendingDeletes = [];
 
             // Update UI
             document.getElementById('authView').classList.add('hidden');
@@ -2701,8 +2705,26 @@
         function deleteTask(index) {
             const task = tasks[index];
             if (!confirm(`Delete "${task.name}"?`)) return;
+            // Capture _rowId for pending DB deletion before removing from array
+            if (task._rowId) _pendingDeletes.push(task._rowId);
+            const deletedId = task.id;
             tasks.splice(index, 1);
-            tasks.forEach((t, i) => { t.id = String(i + 1); });
+            // Renumber IDs (required by Gantt + dependencies)
+            const oldToNew = {};
+            tasks.forEach((t, i) => {
+                const newId = String(i + 1);
+                oldToNew[t.id] = newId;
+                t.id = newId;
+            });
+            // Remap dependency references and remove references to deleted task
+            tasks.forEach(t => {
+                if (!t.dependencies) return;
+                const deps = t.dependencies.split(',').map(d => d.trim()).filter(Boolean);
+                const remapped = deps
+                    .filter(d => d !== deletedId)
+                    .map(d => oldToNew[d] || d);
+                t.dependencies = remapped.join(',');
+            });
             renderGantt();
             saveProject();
         }
@@ -3995,6 +4017,13 @@ Be concise and actionable. Focus on insights, not just restating data.`;
 
         function applyPendingMerge() {
             if (!pendingMerge) return;
+            // Track _rowIds of existing tasks not present in merge result
+            const mergeRowIds = new Set(pendingMerge.filter(t => t._rowId).map(t => t._rowId));
+            for (const t of tasks) {
+                if (t._rowId && !mergeRowIds.has(t._rowId)) {
+                    _pendingDeletes.push(t._rowId);
+                }
+            }
             tasks = pendingMerge;
 
             // Log in history
