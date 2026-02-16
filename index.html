@@ -1141,9 +1141,10 @@
                 // Get task counts + deadline in one query
                 const { data: allTasks } = await supabase
                     .from('tasks')
-                    .select('project_id, progress, end_date');
+                    .select('project_id, progress, end_date, start_date, name');
 
                 const taskMap = {};
+                const projectTasksMap = {};
                 (allTasks || []).forEach(t => {
                     if (!taskMap[t.project_id]) taskMap[t.project_id] = { total: 0, completed: 0, deadline: null };
                     taskMap[t.project_id].total++;
@@ -1151,6 +1152,8 @@
                     if (t.end_date && (!taskMap[t.project_id].deadline || t.end_date > taskMap[t.project_id].deadline)) {
                         taskMap[t.project_id].deadline = t.end_date;
                     }
+                    if (!projectTasksMap[t.project_id]) projectTasksMap[t.project_id] = [];
+                    projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress });
                 });
 
                 return (projects || []).map(p => ({
@@ -1161,7 +1164,8 @@
                     completedCount: taskMap[p.id] ? taskMap[p.id].completed : 0,
                     deadline: taskMap[p.id] ? taskMap[p.id].deadline : null,
                     createdAt: p.created_at,
-                    updatedAt: p.updated_at
+                    updatedAt: p.updated_at,
+                    _tasks: projectTasksMap[p.id] || []
                 }));
             } else {
                 const raw = localStorage.getItem('planner_registry');
@@ -1540,6 +1544,31 @@
                     : 0;
                 const updatedStr = timeAgo(project.updatedAt);
 
+                // Load tasks for focus computation (guest mode)
+                if (!currentUser && !project._tasks) {
+                    const raw = localStorage.getItem('planner_proj_' + project.id);
+                    const parsed = raw ? JSON.parse(raw) : { tasks: [] };
+                    project._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+                }
+
+                // Focus summary
+                let focusHtml = '';
+                if (project._tasks && project._tasks.length > 0 && progress < 100) {
+                    const focus = computeProjectFocus(project._tasks);
+                    const pills = [];
+                    if (focus.overdue > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`);
+                    if (focus.attention > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`);
+                    if (focus.nearDeadline > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`);
+
+                    if (pills.length > 0) {
+                        const hintItems = focus.items.slice(0, 2).map(i => escapeHtml(i.name)).join(', ');
+                        const hintHtml = hintItems ? `<div class="text-[10px] text-slate-500 truncate mt-0.5">${hintItems}</div>` : '';
+                        focusHtml = `<div class="mb-2">${pills.join(' ')}${hintHtml}</div>`;
+                    } else {
+                        focusHtml = `<div class="mb-2"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>All on track</span></div>`;
+                    }
+                }
+
                 // Deadline display
                 let deadlineHtml = '';
                 if (project.deadline) {
@@ -1580,6 +1609,7 @@
                         ${isArchived ? '<span class="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">Archived</span>' : ''}
                     </div>
                     ${deadlineHtml}
+                    ${focusHtml}
                     <div class="progress-bar-bg mb-2">
                         <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
                     </div>
@@ -2118,6 +2148,47 @@
             renderTable();
             renderMobileCards();
             renderTodaysFocus();
+        }
+
+        function computeProjectFocus(projectTasks) {
+            const result = { overdue: 0, attention: 0, nearDeadline: 0, total: 0, items: [] };
+            if (!projectTasks || projectTasks.length === 0) return result;
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today.getTime() + 86400000);
+
+            projectTasks.forEach(task => {
+                const pct = parseInt(task.progress) || 0;
+                if (pct >= 100) return;
+
+                const start = new Date(task.start + 'T00:00:00');
+                const end = new Date(task.end + 'T00:00:00');
+                const status = getTaskStatus(task, tomorrow);
+                const daysUntilEnd = Math.ceil((end - today) / 86400000);
+
+                if (status.label === 'Overdue') {
+                    result.overdue++;
+                    const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
+                    const label = daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`;
+                    result.items.push({ name: task.name, label, priority: 0, sort: daysOverdue });
+                } else if (status.label === 'Attention') {
+                    result.attention++;
+                    result.items.push({ name: task.name, label: `${daysUntilEnd}d left`, priority: 1, sort: daysUntilEnd });
+                } else if (today >= start && daysUntilEnd <= 3 && daysUntilEnd >= 0) {
+                    result.nearDeadline++;
+                    result.items.push({ name: task.name, label: `${daysUntilEnd}d left`, priority: 2, sort: daysUntilEnd });
+                }
+            });
+
+            result.total = result.overdue + result.attention + result.nearDeadline;
+            result.items.sort((a, b) => {
+                if (a.priority !== b.priority) return a.priority - b.priority;
+                if (a.priority === 2) return a.sort - b.sort;
+                return b.sort - a.sort;
+            });
+
+            return result;
         }
 
         function renderTodaysFocus() {
