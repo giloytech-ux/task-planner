@@ -1542,7 +1542,10 @@
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="material-icons-round text-purple-400" style="font-size:14px">auto_awesome</span>
                                 <span class="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">AI Summary</span>
-                                <span id="summaryRowStatus-${index}" class="text-[10px] text-slate-600 ml-auto"></span>
+                                <button onclick="regenerateRowSummary(${index})" class="ml-auto p-1 rounded text-slate-600 hover:text-purple-400 hover:bg-purple-500/10 transition-colors" title="Regenerate summary">
+                                    <span class="material-icons-round" style="font-size:14px">refresh</span>
+                                </button>
+                                <span id="summaryRowStatus-${index}" class="text-[10px] text-slate-600"></span>
                             </div>
                             <div id="summaryRowContent-${index}" class="text-xs text-slate-300 leading-relaxed"></div>
                         </div>
@@ -2251,13 +2254,23 @@
             panel.classList.toggle('hidden');
         }
 
-        async function toggleRowSummary(index) {
+        function regenerateRowSummary(index) {
+            const task = tasks[index];
+            if (task) {
+                task._lastSummary = '';
+                task._lastSummaryHash = '';
+            }
+            // Force open (skip the toggle-off check)
+            toggleRowSummary(index, true);
+        }
+
+        async function toggleRowSummary(index, forceOpen = false) {
             const row = document.getElementById(`summaryRow-${index}`);
             const content = document.getElementById(`summaryRowContent-${index}`);
             const statusEl = document.getElementById(`summaryRowStatus-${index}`);
 
-            // Toggle visibility
-            if (!row.classList.contains('hidden')) {
+            // Toggle visibility (skip if forcing open for regenerate)
+            if (!forceOpen && !row.classList.contains('hidden')) {
                 row.classList.add('hidden');
                 return;
             }
@@ -2305,13 +2318,16 @@ Be very brief. Skip sections with no data.\n\n${context}`;
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
-                        generationConfig: { maxOutputTokens: 300 }
+                        generationConfig: { maxOutputTokens: 2048 },
+                        thinkingConfig: { thinkingBudget: 0 }
                     })
                 });
 
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error.message);
-                const aiText = data.candidates[0].content.parts[0].text;
+                const parts = data.candidates[0].content.parts;
+                const aiText = parts.filter(p => !p.thought).map(p => p.text).join('');
 
                 task._lastSummary = aiText;
                 task._lastSummaryHash = currentHash;
@@ -2386,14 +2402,17 @@ ${context}`;
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
-                        generationConfig: { maxOutputTokens: 500 }
+                        generationConfig: { maxOutputTokens: 2048 },
+                        thinkingConfig: { thinkingBudget: 0 }
                     })
                 });
 
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error.message);
 
-                const aiText = data.candidates[0].content.parts[0].text;
+                const parts = data.candidates[0].content.parts;
+                const aiText = parts.filter(p => !p.thought).map(p => p.text).join('');
 
                 // Cache the summary
                 task._lastSummary = aiText;
