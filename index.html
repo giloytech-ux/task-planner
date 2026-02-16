@@ -1,0 +1,2911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Project Planner (Gemini Powered)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Frappe Gantt CSS & JS -->
+    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
+    <!-- Google Icon Font -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <!-- PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* Custom Dark Mode Tweaks */
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Gantt Customization */
+        .gantt .bar-label { fill: #fff !important; font-size: 12px; }
+        .gantt .bar-progress { fill: inherit !important; }
+        .gantt .bar rect { transition: fill 0.2s ease; }
+        .gantt-container { overflow-x: auto; }
+
+        /* Loader */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Dashboard Cards */
+        .project-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .project-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        .project-card .card-actions {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .project-card:hover .card-actions {
+            opacity: 1;
+        }
+        .new-project-card {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .new-project-card:hover {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* Color dot */
+        .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* Color picker palette */
+        .color-option {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.15s ease;
+        }
+        .color-option:hover, .color-option.selected {
+            border-color: white;
+            transform: scale(1.2);
+        }
+
+        /* Breadcrumb */
+        .breadcrumb-name {
+            cursor: pointer;
+            border-bottom: 1px dashed rgba(255,255,255,0.3);
+        }
+        .breadcrumb-name:hover {
+            border-bottom-color: rgba(59, 130, 246, 0.7);
+            color: #93c5fd;
+        }
+
+        /* Progress bar */
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            height: 6px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .status-on-track { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .status-attention { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+        .status-overdue { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+        /* Task Detail Page */
+        .td-header { border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .td-tabs { border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .td-tab {
+            padding: 10px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .td-tab:hover { color: #94a3b8; }
+        .td-tab.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+        .td-field-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .td-input {
+            width: 100%;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #e2e8f0;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .td-input:focus { border-color: #3b82f6; }
+        .td-textarea {
+            width: 100%;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #e2e8f0;
+            font-size: 13px;
+            outline: none;
+            resize: vertical;
+            min-height: 80px;
+            transition: border-color 0.2s;
+        }
+        .td-textarea:focus { border-color: #3b82f6; }
+        .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .priority-critical { background: #ef4444; }
+        .priority-high { background: #f97316; }
+        .priority-medium { background: #3b82f6; }
+        .priority-low { background: #6b7280; }
+
+        /* Checklist */
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+        .checklist-item:hover { background: rgba(255,255,255,0.03); }
+        .checklist-item.checked label { text-decoration: line-through; color: #64748b; }
+        .checklist-cb { width: 16px; height: 16px; accent-color: #22c55e; cursor: pointer; }
+
+        /* Activity timeline */
+        .activity-item {
+            position: relative;
+            padding-left: 24px;
+            padding-bottom: 16px;
+        }
+        .activity-item::before {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 8px;
+            bottom: 0;
+            width: 1px;
+            background: #334155;
+        }
+        .activity-item:last-child::before { display: none; }
+        .activity-dot {
+            position: absolute;
+            left: 0;
+            top: 6px;
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            border: 2px solid #334155;
+            background: #0f172a;
+        }
+        .activity-dot.system { border-color: #3b82f6; }
+        .activity-dot.comment { border-color: #22c55e; background: #22c55e; }
+
+        /* File grid */
+        .file-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            transition: border-color 0.2s;
+            cursor: default;
+        }
+        .file-card:hover { border-color: #475569; }
+        .file-drop-zone {
+            border: 2px dashed #334155;
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .file-drop-zone:hover, .file-drop-zone.dragover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+        .file-thumb {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+
+        /* Meeting card */
+        .meeting-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 16px;
+            transition: border-color 0.2s;
+        }
+        .meeting-card:hover { border-color: #475569; }
+
+        /* Dependency chips */
+        .dep-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 500;
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+        }
+        .dep-chip button { color: inherit; opacity: 0.6; cursor: pointer; }
+        .dep-chip button:hover { opacity: 1; color: #f87171; }
+
+        /* Auth form */
+        .auth-input {
+            width: 100%;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e2e8f0;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .auth-input:focus {
+            border-color: #3b82f6;
+        }
+        .auth-input::placeholder {
+            color: #64748b;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="h-16 border-b border-slate-700 flex items-center justify-between px-6 bg-slate-900 z-10">
+        <div class="flex items-center gap-3">
+            <!-- Home Button -->
+            <button onclick="showDashboard()" class="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors" title="Back to Dashboard">
+                <span class="material-icons-round">home</span>
+            </button>
+            <div class="w-px h-6 bg-slate-700"></div>
+            <span class="material-icons-round text-blue-500">auto_fix_high</span>
+            <h1 class="font-bold text-lg tracking-wide">Gemini Project Planner</h1>
+            <!-- Breadcrumb (visible in project view) -->
+            <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
+            <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden" onclick="renameCurrentProject()" title="Click to rename"></span>
+        </div>
+        <div class="flex items-center gap-4">
+            <!-- Export buttons (project view only) -->
+            <div id="exportButtons" class="flex items-center gap-2 hidden">
+                <button onclick="exportCSV()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors" title="Export CSV">
+                    <span class="material-icons-round text-sm">download</span> CSV
+                </button>
+                <button onclick="exportPDF()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors" title="Export PDF">
+                    <span class="material-icons-round text-sm">picture_as_pdf</span> PDF
+                </button>
+            </div>
+            <input type="hidden" id="apiKey" value="AIzaSyABfVOLCa6_CypYFfM8ZikKywuXegbfevk">
+            <div id="statusIndicator" class="text-xs text-green-500">Ready</div>
+            <!-- User menu -->
+            <div id="userMenu" class="flex items-center gap-2 hidden">
+                <span id="userEmail" class="text-xs text-slate-400 max-w-[150px] truncate"></span>
+                <button onclick="handleSignOut()" class="flex items-center gap-1 px-2 py-1 text-xs text-slate-400 hover:text-red-400 transition-colors" title="Sign Out">
+                    <span class="material-icons-round text-sm">logout</span>
+                </button>
+            </div>
+            <div id="signInHeaderBtn" class="hidden">
+                <button onclick="showAuthView()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors">
+                    <span class="material-icons-round text-sm">login</span> Sign In
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Auth View (visible by default) -->
+    <main id="authView" class="flex-1 flex items-center justify-center p-8">
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-8">
+                <span class="material-icons-round text-5xl text-blue-500 mb-3 block">auto_fix_high</span>
+                <h2 class="text-2xl font-bold text-white mb-1">Gemini Project Planner</h2>
+                <p class="text-sm text-slate-400">Sign in to sync your projects across devices.</p>
+            </div>
+
+            <div class="glass-panel rounded-xl p-6 space-y-4">
+                <div id="authError" class="hidden text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg p-3"></div>
+                <div id="authSuccess" class="hidden text-xs text-green-400 bg-green-400/10 border border-green-400/20 rounded-lg p-3"></div>
+
+                <div>
+                    <label class="text-xs font-medium text-slate-400 mb-1 block">Email</label>
+                    <input type="email" id="authEmail" class="auth-input" placeholder="you@example.com">
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-slate-400 mb-1 block">Password</label>
+                    <input type="password" id="authPassword" class="auth-input" placeholder="Min. 6 characters">
+                </div>
+
+                <button type="button" id="authSubmitBtn" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+                    Sign In
+                </button>
+                <div class="text-center text-xs text-slate-500">
+                    <span id="authToggleText">Don't have an account?</span>
+                    <button onclick="toggleAuthMode()" class="text-blue-400 hover:text-blue-300 ml-1" id="authToggleBtn">Sign Up</button>
+                </div>
+            </div>
+
+            <div class="text-center mt-6">
+                <button onclick="continueAsGuest()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                    Continue as Guest (offline only)
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Dashboard View -->
+    <main id="dashboardView" class="flex-1 overflow-auto p-8 hidden">
+        <div class="max-w-6xl mx-auto">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects</h2>
+                <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
+            </div>
+            <div id="projectGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                <!-- Project cards injected here -->
+            </div>
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden flex-col items-center justify-center py-20 text-center">
+                <span class="material-icons-round text-6xl text-slate-700 mb-4">folder_open</span>
+                <h3 class="text-xl font-semibold text-slate-400 mb-2">No projects yet</h3>
+                <p class="text-sm text-slate-500 mb-6">Create your first project to get started with AI-powered planning.</p>
+                <button onclick="promptNewProject()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2">
+                    <span class="material-icons-round text-sm">add</span> Create Project
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Project View (hidden by default) -->
+    <main id="projectView" class="flex-1 flex overflow-hidden hidden">
+
+        <!-- Left: Chat / Prompt Interface -->
+        <aside class="w-1/3 min-w-[350px] border-r border-slate-700 flex flex-col bg-slate-900/50">
+            <!-- Chat History -->
+            <div id="chatHistory" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- Chat messages injected here -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 border-t border-slate-700 bg-slate-900">
+                <div class="relative">
+                    <textarea id="userPrompt" rows="3"
+                        class="w-full bg-slate-800 text-white rounded-lg p-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                        placeholder="e.g., 'Project: Annual Statement. Due Apr 24, 2026. Needs 50 exhibits.'"></textarea>
+                    <button onclick="handleSend()" class="absolute bottom-2 right-2 p-2 bg-blue-600 hover:bg-blue-500 rounded-full text-white transition-colors flex items-center justify-center shadow-lg">
+                        <span class="material-icons-round text-sm">send</span>
+                    </button>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-2 text-center">Using Gemini 2.5 Flash. Requires API Key.</p>
+            </div>
+        </aside>
+
+        <!-- Right: Visualization & Editor -->
+        <section class="flex-1 flex flex-col bg-slate-950 overflow-hidden relative">
+
+            <!-- ===== GANTT SECTION ===== -->
+            <div id="ganttSection" class="flex-1 flex flex-col overflow-hidden">
+                <!-- Tabs/Toolbar -->
+                <div class="h-12 border-b border-slate-800 flex items-center px-4 bg-slate-900/80 gap-4">
+                    <button class="text-xs font-semibold uppercase tracking-wider text-blue-400 border-b-2 border-blue-400 h-full px-2">Gantt Chart</button>
+                    <div class="flex-1"></div>
+                    <div class="flex items-center gap-3 text-[10px] text-slate-500">
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> On Track</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Attention</span>
+                        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Overdue</span>
+                    </div>
+                    <div class="w-px h-5 bg-slate-700"></div>
+                    <div class="flex items-center gap-1 text-xs text-slate-400">
+                        <span class="material-icons-round text-sm">today</span>
+                        <span id="todayDate"></span>
+                    </div>
+                    <button onclick="renderGantt()" class="text-slate-400 hover:text-white"><span class="material-icons-round text-sm">refresh</span></button>
+                </div>
+
+                <!-- Gantt Container -->
+                <div class="flex-1 overflow-hidden flex flex-col">
+                    <div class="h-1/2 p-4 overflow-auto border-b border-slate-800" id="gantt-target">
+                        <div class="h-full flex flex-col items-center justify-center text-slate-600">
+                            <span class="material-icons-round text-4xl mb-2">bar_chart</span>
+                            <p>No plan generated yet.</p>
+                        </div>
+                    </div>
+
+                    <!-- Editable Data Table -->
+                    <div class="h-1/2 overflow-auto bg-slate-900">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-slate-800 sticky top-0 z-10">
+                                <tr>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-8" title="Lock from AI"><span class="material-icons-round text-sm">lock</span></th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase">Task Name</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-10" title="AI Summary"><span class="material-icons-round text-sm text-purple-400">auto_awesome</span></th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">Start</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-32">End</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-24">Progress</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-28">Status</th>
+                                    <th class="p-3 text-xs font-medium text-slate-400 uppercase w-16"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="taskTableBody" class="divide-y divide-slate-800 text-sm text-slate-300">
+                            </tbody>
+                        </table>
+                        <div class="p-2 border-t border-slate-800">
+                            <button onclick="addTask()" class="w-full flex items-center justify-center gap-1 py-2 text-xs text-slate-400 hover:text-blue-400 hover:bg-slate-800/50 rounded transition-colors">
+                                <span class="material-icons-round text-sm">add</span> Add Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TASK DETAIL VIEW ===== -->
+            <div id="taskDetailView" class="flex-1 flex flex-col overflow-hidden hidden">
+
+                <!-- Detail Header -->
+                <div class="td-header px-5 py-4 bg-slate-900/80">
+                    <div class="flex items-center gap-3 mb-3">
+                        <button onclick="closeTaskDetail()" class="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-400 transition-colors">
+                            <span class="material-icons-round text-sm">arrow_back</span> Back to Gantt
+                        </button>
+                    </div>
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex-1 min-w-0">
+                            <h2 id="tdTaskName" class="text-lg font-bold text-white truncate"></h2>
+                            <div class="flex items-center gap-3 mt-2 text-xs text-slate-400">
+                                <span id="tdTaskDates" class="flex items-center gap-1"><span class="material-icons-round text-sm">date_range</span></span>
+                                <span id="tdTaskDaysLeft" class="flex items-center gap-1"><span class="material-icons-round text-sm">schedule</span></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 flex-shrink-0">
+                            <div class="text-right">
+                                <div class="text-xs text-slate-500 mb-1">Progress</div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                        <div id="tdProgressBar" class="h-full rounded-full transition-all" style="width:0%"></div>
+                                    </div>
+                                    <span id="tdProgressPct" class="text-xs font-bold text-white">0%</span>
+                                </div>
+                            </div>
+                            <span id="tdStatusBadge" class="status-badge"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detail Tabs -->
+                <div class="td-tabs flex items-center px-5 bg-slate-900/50">
+                    <button class="td-tab active" onclick="switchDetailTab('details')">Details</button>
+                    <button class="td-tab" onclick="switchDetailTab('checklist')">Checklist <span id="tdChecklistCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab" onclick="switchDetailTab('activity')">Activity</button>
+                    <button class="td-tab" onclick="switchDetailTab('files')">Files <span id="tdFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab" onclick="switchDetailTab('meetings')">Meetings</button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="flex-1 overflow-auto p-5">
+
+                    <!-- DETAILS TAB -->
+                    <div id="tabDetails" class="space-y-5">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <div class="td-field-label">Task Name</div>
+                                <input type="text" id="tdName" class="td-input" onchange="updateTaskDetail('name', this.value)">
+                            </div>
+                            <div>
+                                <div class="td-field-label">Priority</div>
+                                <select id="tdPriority" class="td-input" onchange="updateTaskDetail('priority', this.value)">
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <div class="td-field-label">Start Date</div>
+                                <input type="date" id="tdStart" class="td-input" onchange="updateTaskDetail('start', this.value)">
+                            </div>
+                            <div>
+                                <div class="td-field-label">End Date</div>
+                                <input type="date" id="tdEnd" class="td-input" onchange="updateTaskDetail('end', this.value)">
+                            </div>
+                            <div>
+                                <div class="td-field-label">Progress</div>
+                                <div class="flex items-center gap-2">
+                                    <input type="range" id="tdProgress" min="0" max="100" class="flex-1 accent-blue-500" oninput="updateTaskDetail('progress', this.value)">
+                                    <span id="tdProgressVal" class="text-sm font-bold text-white w-10 text-right">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="td-field-label">Dependencies</div>
+                            <div id="tdDepsContainer" class="flex flex-wrap gap-2 mb-2"></div>
+                            <select id="tdDepsSelect" class="td-input" onchange="addDependency(this.value); this.value='';">
+                                <option value="">+ Add dependency...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="td-field-label">Description</div>
+                            <textarea id="tdDescription" class="td-textarea" rows="4" placeholder="Add notes, context, or instructions..." onchange="updateTaskDetail('description', this.value)"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- CHECKLIST TAB -->
+                    <div id="tabChecklist" class="hidden">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm font-semibold text-white">Checklist</span>
+                                <span id="checklistProgress" class="text-xs text-slate-400"></span>
+                            </div>
+                            <div class="w-32 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                <div id="checklistBar" class="h-full bg-emerald-500 rounded-full transition-all" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div id="checklistItems" class="space-y-1 mb-3"></div>
+                        <div class="flex gap-2 mt-3">
+                            <input type="text" id="checklistInput" class="td-input flex-1" placeholder="Add checklist item..." onkeypress="if(event.key==='Enter'){addChecklistItem();event.preventDefault();}">
+                            <button onclick="addChecklistItem()" class="px-4 py-2 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors flex items-center gap-1">
+                                <span class="material-icons-round text-sm">add</span> Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ACTIVITY TAB -->
+                    <div id="tabActivity" class="hidden">
+                        <div class="mb-4">
+                            <div class="flex gap-2">
+                                <input type="text" id="commentInput" class="td-input flex-1" placeholder="Add a comment..." onkeypress="if(event.key==='Enter'){addComment();event.preventDefault();}">
+                                <button onclick="addComment()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Post</button>
+                            </div>
+                        </div>
+                        <div id="activityTimeline" class="mt-4"></div>
+                    </div>
+
+                    <!-- FILES TAB -->
+                    <div id="tabFiles" class="hidden">
+                        <div id="fileDropZone" class="file-drop-zone mb-4" onclick="document.getElementById('fileInput').click()">
+                            <span class="material-icons-round text-3xl text-slate-500 mb-2">cloud_upload</span>
+                            <p class="text-sm text-slate-400">Drop files here or click to upload</p>
+                            <p class="text-[10px] text-slate-600 mt-1">Max 5 MB per file. Images, PDFs, documents.</p>
+                            <input type="file" id="fileInput" class="hidden" multiple onchange="handleFileUpload(this.files)">
+                        </div>
+                        <div id="fileGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+                    </div>
+
+                    <!-- MEETINGS TAB -->
+                    <div id="tabMeetings" class="hidden">
+                        <button onclick="showAddMeeting()" class="mb-4 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1">
+                            <span class="material-icons-round text-sm">add</span> Add Meeting
+                        </button>
+                        <div id="meetingForm" class="hidden glass-panel rounded-xl p-4 mb-4 space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <div class="td-field-label">Title</div>
+                                    <input type="text" id="mtgTitle" class="td-input" placeholder="Meeting title">
+                                </div>
+                                <div>
+                                    <div class="td-field-label">Date</div>
+                                    <input type="date" id="mtgDate" class="td-input">
+                                </div>
+                            </div>
+                            <div>
+                                <div class="td-field-label">Attendees</div>
+                                <input type="text" id="mtgAttendees" class="td-input" placeholder="e.g., John, Sarah, Mike">
+                            </div>
+                            <div>
+                                <div class="td-field-label">Notes</div>
+                                <textarea id="mtgNotes" class="td-textarea" rows="3" placeholder="Meeting notes, decisions, discussion points..."></textarea>
+                            </div>
+                            <div class="flex justify-end gap-2">
+                                <button onclick="cancelMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors">Cancel</button>
+                                <button onclick="saveMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors">Save Meeting</button>
+                            </div>
+                        </div>
+                        <div id="meetingsList" class="space-y-3"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                <div class="flex flex-col items-center gap-3">
+                    <div class="loader"></div>
+                    <span class="text-sm font-medium text-blue-400">AI is thinking...</span>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Color Picker Modal -->
+    <div id="colorPickerModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-2xl max-w-xs w-full">
+            <h3 class="text-sm font-semibold text-white mb-4">Choose Project Color</h3>
+            <div id="colorPalette" class="flex gap-3 flex-wrap justify-center mb-4">
+                <!-- Color options injected -->
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeColorPicker()" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global error catcher — shows errors on page
+        window.onerror = function(msg, url, line) {
+            const d = document.getElementById('debugOutput');
+            if (d) { d.classList.remove('hidden'); d.textContent = 'JS Error: ' + msg + ' (line ' + line + ')'; }
+            return false;
+        };
+
+        // =============================================
+        // Supabase Setup
+        // =============================================
+        const SUPABASE_URL = 'https://epplyypkvimntwyqusme.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGx5eXBrdmltbnR3eXF1c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzc4MzYsImV4cCI6MjA4Njc1MzgzNn0.17jWZppDbE4q71vCNjkkhL77BZwi7aJ6J3XZFsUkhpE';
+        const _supabaseLib = window.supabase; // save CDN reference before overwriting
+        var supabase = null;
+        try {
+            supabase = _supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('Supabase client initialized successfully');
+        } catch (e) {
+            console.error('Supabase client init failed:', e);
+        }
+
+        // --- Configuration & State ---
+        let tasks = [];
+        let history = [];
+        let currentProjectId = null;
+        let currentUser = null;     // null = guest mode
+        let isAuthSignUp = false;   // toggle between sign-in / sign-up
+        let currentProjectName = ''; // cached for export functions in guest mode
+
+        const PROJECT_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+        const SYSTEM_PROMPT = `
+        You are an expert Project Manager AI.
+        Current Date: February 16, 2026.
+
+        Your Goal: Break down user requests into a logical project schedule.
+
+        CRITICAL OUTPUT RULES:
+        1. You must ONLY respond with a valid JSON object. No markdown, no conversational text.
+        2. Structure: { "tasks": [ { "id": "1", "name": "Task Name", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "progress": 0, "dependencies": "" } ] }
+        3. Break large projects into specific subtasks (Prep, Review, Execution, etc.).
+        4. Dates must be realistic. 'dependencies' is the ID of the previous task (optional).
+        5. If the user asks for changes (e.g., "Make review longer"), modify the existing JSON structure and return the FULL updated JSON.
+        `;
+
+        let ganttChart = null;
+
+        // =============================================
+        // Auth UI
+        // =============================================
+
+        function showAuthView() {
+            document.getElementById('authView').classList.remove('hidden');
+            document.getElementById('dashboardView').classList.add('hidden');
+            document.getElementById('projectView').classList.add('hidden');
+            document.getElementById('breadcrumbSep').classList.add('hidden');
+            document.getElementById('breadcrumbName').classList.add('hidden');
+            document.getElementById('exportButtons').classList.add('hidden');
+            document.getElementById('userMenu').classList.add('hidden');
+            document.getElementById('signInHeaderBtn').classList.add('hidden');
+            clearAuthMessages();
+        }
+
+        function toggleAuthMode() {
+            isAuthSignUp = !isAuthSignUp;
+            document.getElementById('authSubmitBtn').textContent = isAuthSignUp ? 'Create Account' : 'Sign In';
+            document.getElementById('authToggleText').textContent = isAuthSignUp ? 'Already have an account?' : "Don't have an account?";
+            document.getElementById('authToggleBtn').textContent = isAuthSignUp ? 'Sign In' : 'Sign Up';
+            clearAuthMessages();
+        }
+
+        function clearAuthMessages() {
+            document.getElementById('authError').classList.add('hidden');
+            document.getElementById('authSuccess').classList.add('hidden');
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('authError');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            document.getElementById('authSuccess').classList.add('hidden');
+        }
+
+        function showAuthSuccess(msg) {
+            const el = document.getElementById('authSuccess');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+            document.getElementById('authError').classList.add('hidden');
+        }
+
+        async function handleAuthSubmit() {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            clearAuthMessages();
+
+            if (!supabase) {
+                showAuthError('Supabase failed to load. Please refresh the page or try a different browser.');
+                return;
+            }
+
+            if (!email || !password) {
+                showAuthError('Please enter both email and password.');
+                return;
+            }
+            if (password.length < 6) {
+                showAuthError('Password must be at least 6 characters.');
+                return;
+            }
+
+            const btn = document.getElementById('authSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = isAuthSignUp ? 'Creating account...' : 'Signing in...';
+
+            try {
+                if (isAuthSignUp) {
+                    console.log('Attempting sign up for:', email);
+                    const { data, error } = await supabase.auth.signUp({ email, password });
+                    console.log('SignUp response:', { data, error });
+                    if (error) throw error;
+                    if (data.user && !data.session) {
+                        showAuthSuccess('Account created! Check your email to confirm, then sign in.');
+                        isAuthSignUp = false;
+                        document.getElementById('authSubmitBtn').textContent = 'Sign In';
+                        document.getElementById('authToggleText').textContent = "Don't have an account?";
+                        document.getElementById('authToggleBtn').textContent = 'Sign Up';
+                    } else {
+                        currentUser = data.user;
+                        onUserLoggedIn();
+                    }
+                } else {
+                    console.log('Attempting sign in for:', email);
+                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                    console.log('SignIn response:', { data, error });
+                    if (error) throw error;
+                    currentUser = data.user;
+                    onUserLoggedIn();
+                }
+            } catch (err) {
+                console.error('Auth error:', err);
+                showAuthError(err.message || 'Authentication failed. Check console for details.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = isAuthSignUp ? 'Create Account' : 'Sign In';
+            }
+        }
+
+        async function handleSignOut() {
+            if (currentProjectId) {
+                await saveProject();
+            }
+            await supabase.auth.signOut();
+            currentUser = null;
+            currentProjectId = null;
+            tasks = [];
+            history = [];
+            showAuthView();
+        }
+
+        function continueAsGuest() {
+            currentUser = null;
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('signInHeaderBtn').classList.remove('hidden');
+            document.getElementById('userMenu').classList.add('hidden');
+            showDashboard();
+        }
+
+        function onUserLoggedIn() {
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('userMenu').classList.remove('hidden');
+            document.getElementById('signInHeaderBtn').classList.add('hidden');
+            document.getElementById('userEmail').textContent = currentUser.email;
+            showDashboard();
+        }
+
+        // Allow Enter key in auth form
+        document.getElementById('authPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') handleAuthSubmit();
+        });
+        document.getElementById('authEmail').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('authPassword').focus();
+        });
+
+        // =============================================
+        // Data Layer — Dual mode (Supabase vs localStorage)
+        // =============================================
+
+        async function loadRegistry() {
+            if (currentUser) {
+                const { data: projects, error } = await supabase
+                    .from('projects')
+                    .select('*')
+                    .order('created_at');
+                if (error) { console.error('loadRegistry error:', error); return []; }
+
+                // Get task counts in one query
+                const { data: allTasks } = await supabase
+                    .from('tasks')
+                    .select('project_id, progress');
+
+                const taskMap = {};
+                (allTasks || []).forEach(t => {
+                    if (!taskMap[t.project_id]) taskMap[t.project_id] = { total: 0, completed: 0 };
+                    taskMap[t.project_id].total++;
+                    if (parseInt(t.progress) >= 100) taskMap[t.project_id].completed++;
+                });
+
+                return (projects || []).map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    color: p.color || '#3b82f6',
+                    taskCount: taskMap[p.id] ? taskMap[p.id].total : 0,
+                    completedCount: taskMap[p.id] ? taskMap[p.id].completed : 0,
+                    createdAt: p.created_at,
+                    updatedAt: p.updated_at
+                }));
+            } else {
+                const raw = localStorage.getItem('planner_registry');
+                return raw ? JSON.parse(raw) : [];
+            }
+        }
+
+        function saveRegistryLocal(registry) {
+            localStorage.setItem('planner_registry', JSON.stringify(registry));
+        }
+
+        async function loadProject(id) {
+            if (currentUser) {
+                const { data: taskData } = await supabase
+                    .from('tasks')
+                    .select('*')
+                    .eq('project_id', id)
+                    .order('sort_order');
+
+                const { data: chatData } = await supabase
+                    .from('chat_history')
+                    .select('*')
+                    .eq('project_id', id)
+                    .order('created_at');
+
+                const loadedTasks = (taskData || []).map(t => ({
+                    id: t.task_number,
+                    name: t.name,
+                    start: t.start_date,
+                    end: t.end_date,
+                    progress: t.progress,
+                    dependencies: t.dependencies || ''
+                }));
+
+                const loadedHistory = (chatData || []).map(c => ({
+                    role: c.role,
+                    text: c.message
+                }));
+
+                return { tasks: loadedTasks, history: loadedHistory };
+            } else {
+                const raw = localStorage.getItem('planner_proj_' + id);
+                return raw ? JSON.parse(raw) : { tasks: [], history: [] };
+            }
+        }
+
+        async function saveProject() {
+            if (!currentProjectId) return;
+
+            if (currentUser) {
+                // Update project timestamp
+                await supabase
+                    .from('projects')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('id', currentProjectId);
+
+                // Replace all tasks: delete then insert
+                await supabase.from('tasks').delete().eq('project_id', currentProjectId);
+                if (tasks.length > 0) {
+                    const taskRows = tasks.map((t, i) => ({
+                        project_id: currentProjectId,
+                        task_number: t.id,
+                        name: t.name,
+                        start_date: t.start,
+                        end_date: t.end,
+                        progress: parseInt(t.progress) || 0,
+                        dependencies: t.dependencies || '',
+                        sort_order: i
+                    }));
+                    await supabase.from('tasks').insert(taskRows);
+                }
+
+                // Replace chat history (trimmed to last 20 exchanges)
+                await supabase.from('chat_history').delete().eq('project_id', currentProjectId);
+                const trimmed = history.slice(-40);
+                if (trimmed.length > 0) {
+                    const chatRows = trimmed.map(h => ({
+                        project_id: currentProjectId,
+                        role: h.role,
+                        message: h.text
+                    }));
+                    await supabase.from('chat_history').insert(chatRows);
+                }
+            } else {
+                const trimmedHistory = history.slice(-40);
+                localStorage.setItem('planner_proj_' + currentProjectId, JSON.stringify({
+                    tasks: tasks,
+                    history: trimmedHistory
+                }));
+                updateRegistryMetadataLocal();
+            }
+        }
+
+        async function createProject(name) {
+            if (currentUser) {
+                const colorIndex = (await loadRegistry()).length % PROJECT_COLORS.length;
+                const { data, error } = await supabase
+                    .from('projects')
+                    .insert({
+                        user_id: currentUser.id,
+                        name: name,
+                        color: PROJECT_COLORS[colorIndex]
+                    })
+                    .select()
+                    .single();
+                if (error) { console.error('createProject error:', error); return null; }
+                return data.id;
+            } else {
+                const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+                const registry = await loadRegistry();
+                registry.push({
+                    id: id,
+                    name: name,
+                    color: PROJECT_COLORS[registry.length % PROJECT_COLORS.length],
+                    taskCount: 0,
+                    completedCount: 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                saveRegistryLocal(registry);
+                localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [] }));
+                return id;
+            }
+        }
+
+        async function deleteProject(id) {
+            if (currentUser) {
+                await supabase.from('projects').delete().eq('id', id);
+            } else {
+                let registry = await loadRegistry();
+                registry = registry.filter(p => p.id !== id);
+                saveRegistryLocal(registry);
+                localStorage.removeItem('planner_proj_' + id);
+            }
+
+            if (currentProjectId === id) {
+                currentProjectId = null;
+                tasks = [];
+                history = [];
+                showDashboard();
+            } else {
+                await renderDashboard();
+            }
+        }
+
+        async function duplicateProject(id) {
+            const registry = await loadRegistry();
+            const original = registry.find(p => p.id === id);
+            if (!original) return;
+
+            const sourceData = await loadProject(id);
+            const newId = await createProject(original.name + ' (Copy)');
+            if (!newId) return;
+
+            if (currentUser) {
+                // Set same color
+                await supabase.from('projects').update({ color: original.color }).eq('id', newId);
+                // Copy tasks
+                if (sourceData.tasks.length > 0) {
+                    const taskRows = sourceData.tasks.map((t, i) => ({
+                        project_id: newId,
+                        task_number: t.id,
+                        name: t.name,
+                        start_date: t.start,
+                        end_date: t.end,
+                        progress: parseInt(t.progress) || 0,
+                        dependencies: t.dependencies || '',
+                        sort_order: i
+                    }));
+                    await supabase.from('tasks').insert(taskRows);
+                }
+                // Copy chat history
+                if (sourceData.history.length > 0) {
+                    const chatRows = sourceData.history.map(h => ({
+                        project_id: newId,
+                        role: h.role,
+                        message: h.text
+                    }));
+                    await supabase.from('chat_history').insert(chatRows);
+                }
+            } else {
+                const newRegistry = await loadRegistry();
+                const newEntry = newRegistry.find(p => p.id === newId);
+                if (newEntry) {
+                    newEntry.color = original.color;
+                    saveRegistryLocal(newRegistry);
+                }
+                localStorage.setItem('planner_proj_' + newId, JSON.stringify(sourceData));
+                updateRegistryMetadataLocalForProject(newId);
+            }
+
+            await renderDashboard();
+        }
+
+        function updateRegistryMetadataLocal() {
+            if (!currentProjectId) return;
+            updateRegistryMetadataLocalForProject(currentProjectId);
+        }
+
+        function updateRegistryMetadataLocalForProject(projectId) {
+            const raw = localStorage.getItem('planner_registry');
+            const registry = raw ? JSON.parse(raw) : [];
+            const entry = registry.find(p => p.id === projectId);
+            if (!entry) return;
+            const projRaw = localStorage.getItem('planner_proj_' + projectId);
+            const data = projRaw ? JSON.parse(projRaw) : { tasks: [] };
+            entry.taskCount = data.tasks.length;
+            entry.completedCount = data.tasks.filter(t => parseInt(t.progress) >= 100).length;
+            entry.updatedAt = new Date().toISOString();
+            saveRegistryLocal(registry);
+        }
+
+        function saveApiKey() {}
+        function restoreApiKey() {}
+
+        // =============================================
+        // Dashboard View
+        // =============================================
+
+        async function renderDashboard() {
+            const registry = await loadRegistry();
+            const grid = document.getElementById('projectGrid');
+            const emptyState = document.getElementById('emptyState');
+
+            grid.innerHTML = '';
+
+            if (registry.length === 0) {
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+                return;
+            }
+
+            grid.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            emptyState.classList.remove('flex');
+
+            registry.forEach(project => {
+                const progress = project.taskCount > 0
+                    ? Math.round((project.completedCount / project.taskCount) * 100)
+                    : 0;
+                const updatedStr = timeAgo(project.updatedAt);
+
+                const card = document.createElement('div');
+                card.className = 'project-card rounded-xl p-5 relative';
+                card.onclick = (e) => {
+                    if (e.target.closest('.card-actions')) return;
+                    openProject(project.id);
+                };
+                card.innerHTML = `
+                    <div class="card-actions absolute top-3 right-3 flex gap-1">
+                        <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
+                            <span class="material-icons-round text-sm">edit</span>
+                        </button>
+                        <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
+                            <span class="material-icons-round text-sm">palette</span>
+                        </button>
+                        <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
+                            <span class="material-icons-round text-sm">content_copy</span>
+                        </button>
+                        <button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
+                            <span class="material-icons-round text-sm">delete</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="color-dot" style="background: ${project.color}"></span>
+                        <h3 class="font-semibold text-white text-sm truncate">${escapeHtml(project.name)}</h3>
+                    </div>
+                    <div class="progress-bar-bg mb-2">
+                        <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-slate-500">
+                        <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
+                        <span>${updatedStr}</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            // Add "New Project" card
+            const newCard = document.createElement('div');
+            newCard.className = 'new-project-card rounded-xl p-5 flex flex-col items-center justify-center min-h-[140px]';
+            newCard.onclick = () => promptNewProject();
+            newCard.innerHTML = `
+                <span class="material-icons-round text-3xl text-slate-500 mb-2">add_circle_outline</span>
+                <span class="text-sm font-medium text-slate-400">New Project</span>
+            `;
+            grid.appendChild(newCard);
+        }
+
+        function timeAgo(dateStr) {
+            const now = new Date();
+            const then = new Date(dateStr);
+            const diffMs = now - then;
+            const diffMins = Math.floor(diffMs / 60000);
+            if (diffMins < 1) return 'just now';
+            if (diffMins < 60) return diffMins + 'm ago';
+            const diffHrs = Math.floor(diffMins / 60);
+            if (diffHrs < 24) return diffHrs + 'h ago';
+            const diffDays = Math.floor(diffHrs / 24);
+            if (diffDays < 30) return diffDays + 'd ago';
+            return then.toLocaleDateString();
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function escapeAttr(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        async function promptNewProject() {
+            const name = prompt('Enter project name:');
+            if (!name || !name.trim()) return;
+            const id = await createProject(name.trim());
+            if (id) await openProject(id);
+        }
+
+        async function confirmDeleteProject(id, name) {
+            if (confirm(`Delete project "${name}"? This cannot be undone.`)) {
+                await deleteProject(id);
+            }
+        }
+
+        // =============================================
+        // Navigation
+        // =============================================
+
+        async function showDashboard() {
+            if (currentProjectId) {
+                await saveProject();
+            }
+            currentProjectId = null;
+            currentProjectName = '';
+            tasks = [];
+            history = [];
+
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('dashboardView').classList.remove('hidden');
+            document.getElementById('projectView').classList.add('hidden');
+            document.getElementById('breadcrumbSep').classList.add('hidden');
+            document.getElementById('breadcrumbName').classList.add('hidden');
+            document.getElementById('exportButtons').classList.add('hidden');
+
+            localStorage.removeItem('planner_lastProject');
+
+            await renderDashboard();
+        }
+
+        async function openProject(id) {
+            currentProjectId = id;
+            const data = await loadProject(id);
+            tasks = data.tasks || [];
+            history = data.history || [];
+
+            // Update UI
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('dashboardView').classList.add('hidden');
+            document.getElementById('projectView').classList.remove('hidden');
+            document.getElementById('projectView').classList.add('flex');
+            document.getElementById('exportButtons').classList.remove('hidden');
+
+            // Breadcrumb
+            const registry = await loadRegistry();
+            const project = registry.find(p => p.id === id);
+            if (project) {
+                currentProjectName = project.name;
+                document.getElementById('breadcrumbSep').classList.remove('hidden');
+                document.getElementById('breadcrumbName').classList.remove('hidden');
+                document.getElementById('breadcrumbName').textContent = project.name;
+            }
+
+            // Remember last project
+            localStorage.setItem('planner_lastProject', id);
+
+            // Rebuild chat
+            rebuildChatUI();
+
+            // Render gantt & table
+            renderGantt();
+        }
+
+        function rebuildChatUI() {
+            const container = document.getElementById('chatHistory');
+            container.innerHTML = '';
+
+            addToChatDirect('model', "Hello! I'm ready to plan. Tell me about your project, deadlines, and requirements. I'll generate a Gantt chart for you.");
+
+            for (let i = 0; i < history.length; i++) {
+                const h = history[i];
+                if (h.role === 'user') {
+                    addToChatDirect('user', h.text);
+                } else if (h.role === 'model') {
+                    addToChatDirect('model', "I've updated the plan based on your request.");
+                }
+            }
+        }
+
+        function addToChatDirect(role, text) {
+            const container = document.getElementById('chatHistory');
+            const div = document.createElement('div');
+            div.className = "flex gap-3 mb-4";
+
+            const isUser = role === 'user';
+            const icon = isUser ? 'person' : 'smart_toy';
+            const align = isUser ? 'flex-row-reverse' : 'flex-row';
+            const rounded = isUser ? 'rounded-tr-none' : 'rounded-tl-none';
+            const bgColor = isUser ? 'bg-slate-700' : 'bg-slate-800';
+            const iconBg = isUser ? 'bg-slate-700' : 'bg-blue-600';
+
+            div.innerHTML = `
+                <div class="flex ${align} gap-3 w-full">
+                    <div class="w-8 h-8 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0">
+                        <span class="material-icons-round text-sm">${icon}</span>
+                    </div>
+                    <div class="${bgColor} p-3 rounded-lg ${rounded} text-sm text-slate-200 max-w-[85%]">
+                        ${escapeHtml(text)}
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function renameCurrentProject() {
+            if (!currentProjectId) return;
+            const registry = await loadRegistry();
+            const project = registry.find(p => p.id === currentProjectId);
+            if (!project) return;
+            const newName = prompt('Rename project:', project.name);
+            if (!newName || !newName.trim()) return;
+
+            if (currentUser) {
+                await supabase.from('projects').update({
+                    name: newName.trim(),
+                    updated_at: new Date().toISOString()
+                }).eq('id', currentProjectId);
+            } else {
+                project.name = newName.trim();
+                project.updatedAt = new Date().toISOString();
+                saveRegistryLocal(registry);
+            }
+            currentProjectName = newName.trim();
+            document.getElementById('breadcrumbName').textContent = newName.trim();
+        }
+
+        async function renameProject(id, currentName) {
+            const newName = prompt('Rename project:', currentName);
+            if (!newName || !newName.trim() || newName.trim() === currentName) return;
+
+            if (currentUser) {
+                await supabase.from('projects').update({
+                    name: newName.trim(),
+                    updated_at: new Date().toISOString()
+                }).eq('id', id);
+            } else {
+                const raw = localStorage.getItem('planner_registry');
+                const registry = raw ? JSON.parse(raw) : [];
+                const project = registry.find(p => p.id === id);
+                if (project) {
+                    project.name = newName.trim();
+                    project.updatedAt = new Date().toISOString();
+                    saveRegistryLocal(registry);
+                }
+            }
+            await renderDashboard();
+        }
+
+        // =============================================
+        // Gantt & Table Rendering
+        // =============================================
+
+        function getTaskStatus(task) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const start = new Date(task.start + 'T00:00:00');
+            const end = new Date(task.end + 'T00:00:00');
+            const pct = parseInt(task.progress) || 0;
+
+            // Complete
+            if (pct >= 100) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
+
+            // Past end date and not complete
+            if (today > end) return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
+
+            // Not yet started (before start date)
+            if (today < start && pct === 0) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'schedule' };
+
+            // In-progress window: compare actual vs expected progress
+            const totalDays = Math.max((end - start) / 86400000, 1);
+            const daysPassed = Math.max((today - start) / 86400000, 0);
+            const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
+            const gap = expectedPct - pct;
+
+            if (gap <= 10) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
+            if (gap <= 30) return { label: 'Attention', color: '#fbbf24', css: 'status-attention', icon: 'warning' };
+            return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
+        }
+
+        function renderGantt() {
+            const target = document.getElementById('gantt-target');
+            target.innerHTML = '';
+
+            if (tasks.length === 0) {
+                target.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-slate-600"><span class="material-icons-round text-4xl mb-2">bar_chart</span><p>No plan generated yet.</p></div>`;
+                document.getElementById('taskTableBody').innerHTML = '';
+                return;
+            }
+
+            const formattedTasks = tasks.map(t => ({
+                id: t.id,
+                name: t.name,
+                start: t.start,
+                end: t.end,
+                progress: parseInt(t.progress) || 0,
+                dependencies: t.dependencies
+            }));
+
+            try {
+                ganttChart = new Gantt("#gantt-target", formattedTasks, {
+                    header_height: 50,
+                    column_width: 30,
+                    step: 24,
+                    view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
+                    bar_height: 20,
+                    bar_corner_radius: 3,
+                    arrow_curve: 5,
+                    padding: 18,
+                    view_mode: 'Week',
+                    date_format: 'YYYY-MM-DD',
+                    custom_popup_html: null
+                });
+
+                setTimeout(() => {
+                    document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#94a3b8');
+                    document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
+
+                    document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper, i) => {
+                        const task = tasks[i];
+                        if (!task) return;
+                        const status = getTaskStatus(task);
+                        const pct = parseInt(task.progress) || 0;
+
+                        // Color ALL rects in the bar
+                        wrapper.querySelectorAll('.bar rect').forEach(rect => {
+                            rect.setAttribute('fill', status.color);
+                            rect.style.fill = status.color;
+                        });
+
+                        const label = wrapper.querySelector('.bar-label');
+                        if (label) {
+                            label.setAttribute('fill', '#fff');
+                            label.style.fill = '#fff';
+                            label.textContent = `${task.name}  (${pct}%) - ${status.label}`;
+                        }
+                    });
+                }, 200);
+
+            } catch (e) {
+                console.error("Gantt Error", e);
+            }
+
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('taskTableBody');
+            tbody.innerHTML = '';
+            const colCount = 8; // total columns in table
+
+            tasks.forEach((task, index) => {
+                const status = getTaskStatus(task);
+                const hasContent = hasTaskContent(task);
+                const isLocked = !!task.locked;
+
+                const tr = document.createElement('tr');
+                tr.className = `hover:bg-slate-800/50 transition-colors ${isLocked ? 'opacity-80' : ''}`;
+                tr.innerHTML = `
+                    <td class="p-2 text-center">
+                        <button onclick="toggleTaskLock(${index})" class="p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}" title="${isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI'}">
+                            <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
+                        </button>
+                    </td>
+                    <td class="p-3"><a href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
+                    <td class="p-2 text-center">
+                        <button onclick="toggleRowSummary(${index}, this)" class="p-1 rounded transition-colors ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
+                            <span class="material-icons-round" style="font-size:16px">auto_awesome</span>
+                        </button>
+                    </td>
+                    <td class="p-3"><input type="date" value="${task.start}" onchange="updateTask(${index}, 'start', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300"></td>
+                    <td class="p-3"><input type="date" value="${task.end}" onchange="updateTask(${index}, 'end', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300"></td>
+                    <td class="p-3"><input type="number" value="${task.progress}" min="0" max="100" onchange="updateTask(${index}, 'progress', this.value)" class="bg-transparent border-none text-slate-200 focus:outline-none w-12 text-right"> %</td>
+                    <td class="p-3"><span class="status-badge ${status.css}"><span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}</span></td>
+                    <td class="p-3 text-center">
+                        <button onclick="deleteTask(${index})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete task">
+                            <span class="material-icons-round text-sm">close</span>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+
+                // Hidden summary row
+                const summaryTr = document.createElement('tr');
+                summaryTr.id = `summaryRow-${index}`;
+                summaryTr.className = 'hidden';
+                summaryTr.innerHTML = `
+                    <td colspan="${colCount}" class="p-0">
+                        <div class="px-5 py-3 bg-purple-500/5 border-y border-purple-500/10">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="material-icons-round text-purple-400" style="font-size:14px">auto_awesome</span>
+                                <span class="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">AI Summary</span>
+                                <span id="summaryRowStatus-${index}" class="text-[10px] text-slate-600 ml-auto"></span>
+                            </div>
+                            <div id="summaryRowContent-${index}" class="text-xs text-slate-300 leading-relaxed"></div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(summaryTr);
+            });
+        }
+
+        function updateTask(index, field, value) {
+            tasks[index][field] = value;
+            clearTimeout(window.renderTimeout);
+            window.renderTimeout = setTimeout(() => {
+                renderGantt();
+                saveProject();
+            }, 500);
+        }
+
+        function deleteTask(index) {
+            tasks.splice(index, 1);
+            tasks.forEach((t, i) => { t.id = String(i + 1); });
+            renderGantt();
+            saveProject();
+        }
+
+        function toggleTaskLock(index) {
+            tasks[index].locked = !tasks[index].locked;
+            renderTable();
+            saveProject();
+        }
+
+        function addTask() {
+            const today = new Date();
+            const startStr = today.toISOString().slice(0, 10);
+            const end = new Date(today);
+            end.setDate(end.getDate() + 7);
+            const endStr = end.toISOString().slice(0, 10);
+
+            tasks.push({
+                id: String(tasks.length + 1),
+                name: 'New Task',
+                start: startStr,
+                end: endStr,
+                progress: 0,
+                dependencies: '',
+                priority: 'medium',
+                description: '',
+                checklist: [],
+                activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
+                files: [],
+                meetings: []
+            });
+            renderGantt();
+            saveProject();
+        }
+
+        // =============================================
+        // Task Detail View
+        // =============================================
+
+        let currentTaskIndex = null;
+        let editingMeetingIndex = null;
+
+        function ensureTaskRichData(task) {
+            if (!task.priority) task.priority = 'medium';
+            if (!task.description) task.description = '';
+            if (!task.checklist) task.checklist = [];
+            if (!task.activity) task.activity = [];
+            if (!task.files) task.files = [];
+            if (!task.meetings) task.meetings = [];
+        }
+
+        function openTaskDetail(index) {
+            currentTaskIndex = index;
+            const task = tasks[index];
+            ensureTaskRichData(task);
+
+            document.getElementById('ganttSection').classList.add('hidden');
+            document.getElementById('taskDetailView').classList.remove('hidden');
+
+            renderTaskDetailHeader();
+            switchDetailTab('details');
+        }
+
+        function closeTaskDetail() {
+            saveProject();
+            currentTaskIndex = null;
+            document.getElementById('ganttSection').classList.remove('hidden');
+            document.getElementById('taskDetailView').classList.add('hidden');
+            document.getElementById('summaryPanel').classList.add('hidden');
+            renderGantt();
+        }
+
+        function switchDetailTab(tabName) {
+            const tabs = ['details', 'checklist', 'activity', 'files', 'meetings'];
+            const tabIds = { details: 'tabDetails', checklist: 'tabChecklist', activity: 'tabActivity', files: 'tabFiles', meetings: 'tabMeetings' };
+
+            // Toggle tab buttons
+            document.querySelectorAll('.td-tab').forEach((btn, i) => {
+                btn.classList.toggle('active', tabs[i] === tabName);
+            });
+            // Toggle tab content
+            tabs.forEach(t => {
+                document.getElementById(tabIds[t]).classList.toggle('hidden', t !== tabName);
+            });
+            // Render the selected tab
+            const task = tasks[currentTaskIndex];
+            if (tabName === 'details') renderDetailsTab(task);
+            else if (tabName === 'checklist') renderChecklistTab(task);
+            else if (tabName === 'activity') renderActivityTab(task);
+            else if (tabName === 'files') renderFilesTab(task);
+            else if (tabName === 'meetings') renderMeetingsTab(task);
+        }
+
+        function renderTaskDetailHeader() {
+            const task = tasks[currentTaskIndex];
+            const status = getTaskStatus(task);
+            const pct = parseInt(task.progress) || 0;
+
+            document.getElementById('tdTaskName').textContent = task.name;
+            document.getElementById('tdTaskDates').innerHTML = `<span class="material-icons-round text-sm">date_range</span> ${task.start} → ${task.end}`;
+
+            // Days left
+            const today = new Date(); today.setHours(0,0,0,0);
+            const end = new Date(task.end + 'T00:00:00');
+            const daysLeft = Math.ceil((end - today) / 86400000);
+            let daysText = '';
+            if (pct >= 100) daysText = 'Complete';
+            else if (daysLeft < 0) daysText = `${Math.abs(daysLeft)}d overdue`;
+            else if (daysLeft === 0) daysText = 'Due today';
+            else daysText = `${daysLeft}d left`;
+            document.getElementById('tdTaskDaysLeft').innerHTML = `<span class="material-icons-round text-sm">schedule</span> ${daysText}`;
+
+            document.getElementById('tdProgressBar').style.width = pct + '%';
+            document.getElementById('tdProgressBar').style.background = status.color;
+            document.getElementById('tdProgressPct').textContent = pct + '%';
+            document.getElementById('tdStatusBadge').className = 'status-badge ' + status.css;
+            document.getElementById('tdStatusBadge').innerHTML = `<span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}`;
+
+            // Tab counts
+            const cl = task.checklist || [];
+            const checked = cl.filter(c => c.checked).length;
+            document.getElementById('tdChecklistCount').textContent = cl.length > 0 ? `(${checked}/${cl.length})` : '';
+            document.getElementById('tdFilesCount').textContent = (task.files || []).length > 0 ? `(${task.files.length})` : '';
+        }
+
+        // ---- DETAILS TAB ----
+        function renderDetailsTab(task) {
+            document.getElementById('tdName').value = task.name;
+            document.getElementById('tdPriority').value = task.priority || 'medium';
+            document.getElementById('tdStart').value = task.start;
+            document.getElementById('tdEnd').value = task.end;
+            document.getElementById('tdProgress').value = parseInt(task.progress) || 0;
+            document.getElementById('tdProgressVal').textContent = (parseInt(task.progress) || 0) + '%';
+            document.getElementById('tdDescription').value = task.description || '';
+            renderDependencies(task);
+        }
+
+        function updateTaskDetail(field, value) {
+            const task = tasks[currentTaskIndex];
+            const oldValue = task[field];
+            task[field] = value;
+
+            if (field === 'progress') {
+                document.getElementById('tdProgressVal').textContent = value + '%';
+            }
+
+            // Auto-log changes
+            if (field === 'progress' && oldValue !== value) {
+                addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
+            } else if (field === 'start' || field === 'end') {
+                addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
+            } else if (field === 'priority' && oldValue !== value) {
+                addActivityEntry(task, 'system', `Priority changed to ${value}`);
+            }
+
+            renderTaskDetailHeader();
+            clearTimeout(window.detailSaveTimeout);
+            window.detailSaveTimeout = setTimeout(() => saveProject(), 500);
+        }
+
+        // ---- DEPENDENCIES ----
+        function renderDependencies(task) {
+            const container = document.getElementById('tdDepsContainer');
+            const select = document.getElementById('tdDepsSelect');
+            container.innerHTML = '';
+
+            // Parse current dependencies (comma-separated IDs)
+            const depIds = (task.dependencies || '').split(',').map(s => s.trim()).filter(Boolean);
+
+            // Render chips for current dependencies
+            depIds.forEach(depId => {
+                const depTask = tasks.find(t => t.id === depId);
+                if (!depTask) return;
+                const chip = document.createElement('span');
+                chip.className = 'dep-chip';
+                chip.innerHTML = `<span class="material-icons-round" style="font-size:12px">link</span> ${escapeHtml(depTask.name)} <button onclick="removeDependency('${depId}')"><span class="material-icons-round" style="font-size:12px">close</span></button>`;
+                container.appendChild(chip);
+            });
+
+            if (depIds.length === 0) {
+                container.innerHTML = '<span class="text-xs text-slate-600">No dependencies</span>';
+            }
+
+            // Populate dropdown with available tasks (exclude self and already selected)
+            select.innerHTML = '<option value="">+ Add dependency...</option>';
+            tasks.forEach(t => {
+                if (t.id === task.id) return;
+                if (depIds.includes(t.id)) return;
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = `Task ${t.id}: ${t.name}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function addDependency(depId) {
+            if (!depId) return;
+            const task = tasks[currentTaskIndex];
+            const depIds = (task.dependencies || '').split(',').map(s => s.trim()).filter(Boolean);
+            if (!depIds.includes(depId)) {
+                depIds.push(depId);
+                task.dependencies = depIds.join(', ');
+                const depTask = tasks.find(t => t.id === depId);
+                addActivityEntry(task, 'system', `Dependency added: "${depTask ? depTask.name : depId}"`);
+                renderDependencies(task);
+                saveProject();
+            }
+        }
+
+        function removeDependency(depId) {
+            const task = tasks[currentTaskIndex];
+            const depIds = (task.dependencies || '').split(',').map(s => s.trim()).filter(Boolean);
+            const idx = depIds.indexOf(depId);
+            if (idx > -1) {
+                depIds.splice(idx, 1);
+                task.dependencies = depIds.join(', ');
+                const depTask = tasks.find(t => t.id === depId);
+                addActivityEntry(task, 'system', `Dependency removed: "${depTask ? depTask.name : depId}"`);
+                renderDependencies(task);
+                saveProject();
+            }
+        }
+
+        // ---- CHECKLIST TAB ----
+        function renderChecklistTab(task) {
+            const container = document.getElementById('checklistItems');
+            container.innerHTML = '';
+            const cl = task.checklist || [];
+            const checked = cl.filter(c => c.checked).length;
+
+            document.getElementById('checklistProgress').textContent = cl.length > 0 ? `${checked} of ${cl.length} done` : 'No items yet';
+            document.getElementById('checklistBar').style.width = cl.length > 0 ? ((checked / cl.length) * 100) + '%' : '0%';
+
+            cl.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'checklist-item' + (item.checked ? ' checked' : '');
+                div.innerHTML = `
+                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleChecklistItem(${i})">
+                    <label class="flex-1 text-sm text-slate-200 cursor-pointer" onclick="toggleChecklistItem(${i})">${escapeHtml(item.label)}</label>
+                    <button onclick="deleteChecklistItem(${i})" class="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100" style="opacity:0.3" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.3">
+                        <span class="material-icons-round text-sm">close</span>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addChecklistItem() {
+            const input = document.getElementById('checklistInput');
+            const val = input.value.trim();
+            if (!val) return;
+            const task = tasks[currentTaskIndex];
+            task.checklist.push({ id: Date.now().toString(36), label: val, checked: false });
+            addActivityEntry(task, 'system', `Checklist item added: "${val}"`);
+            input.value = '';
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        function toggleChecklistItem(index) {
+            const task = tasks[currentTaskIndex];
+            task.checklist[index].checked = !task.checklist[index].checked;
+            const item = task.checklist[index];
+            addActivityEntry(task, 'system', `${item.checked ? 'Completed' : 'Unchecked'}: "${item.label}"`);
+
+            // Auto-sync progress from checklist
+            const total = task.checklist.length;
+            const done = task.checklist.filter(c => c.checked).length;
+            if (total > 0) {
+                task.progress = Math.round((done / total) * 100);
+            }
+
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        function deleteChecklistItem(index) {
+            const task = tasks[currentTaskIndex];
+            const removed = task.checklist.splice(index, 1);
+            addActivityEntry(task, 'system', `Checklist item removed: "${removed[0].label}"`);
+
+            // Re-sync progress
+            const total = task.checklist.length;
+            const done = task.checklist.filter(c => c.checked).length;
+            task.progress = total > 0 ? Math.round((done / total) * 100) : 0;
+
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        // ---- ACTIVITY TAB ----
+        function addActivityEntry(task, type, message) {
+            ensureTaskRichData(task);
+            task.activity.push({
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                type: type,
+                message: message,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        function renderActivityTab(task) {
+            const container = document.getElementById('activityTimeline');
+            container.innerHTML = '';
+            const items = [...(task.activity || [])].reverse();
+
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No activity yet.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'activity-item';
+                const dotClass = item.type === 'comment' ? 'comment' : 'system';
+                const time = new Date(item.timestamp);
+                const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                const icon = item.type === 'comment' ? 'chat_bubble' : 'info';
+                div.innerHTML = `
+                    <div class="activity-dot ${dotClass}"></div>
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1">
+                            <span class="text-xs text-slate-300">${escapeHtml(item.message)}</span>
+                        </div>
+                        <span class="text-[10px] text-slate-600 whitespace-nowrap">${timeStr}</span>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addComment() {
+            const input = document.getElementById('commentInput');
+            const val = input.value.trim();
+            if (!val) return;
+            const task = tasks[currentTaskIndex];
+            addActivityEntry(task, 'comment', val);
+            input.value = '';
+            renderActivityTab(task);
+            saveProject();
+        }
+
+        // ---- FILES TAB ----
+        function renderFilesTab(task) {
+            const grid = document.getElementById('fileGrid');
+            grid.innerHTML = '';
+
+            (task.files || []).forEach((file, i) => {
+                const card = document.createElement('div');
+                card.className = 'file-card';
+                const isImage = file.type && file.type.startsWith('image/');
+                const sizeStr = file.size < 1024 ? file.size + ' B'
+                    : file.size < 1048576 ? (file.size / 1024).toFixed(1) + ' KB'
+                    : (file.size / 1048576).toFixed(1) + ' MB';
+                const dateStr = new Date(file.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                let preview = '';
+                if (isImage && file.data) {
+                    preview = `<img src="${file.data}" class="file-thumb" onclick="previewFile(${i})" title="Click to preview">`;
+                } else {
+                    const icon = file.type && file.type.includes('pdf') ? 'picture_as_pdf' : 'description';
+                    preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded"><span class="material-icons-round text-2xl text-slate-500">${icon}</span></div>`;
+                }
+
+                card.innerHTML = `
+                    ${preview}
+                    <div class="text-xs text-slate-200 font-medium truncate" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                    <div class="flex items-center justify-between mt-1">
+                        <span class="text-[10px] text-slate-500">${sizeStr} · ${dateStr}</span>
+                        <div class="flex gap-1">
+                            ${isImage ? `<button onclick="previewFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Preview"><span class="material-icons-round text-sm">visibility</span></button>` : ''}
+                            <button onclick="downloadFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Download"><span class="material-icons-round text-sm">download</span></button>
+                            <button onclick="deleteFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function handleFileUpload(fileList) {
+            const task = tasks[currentTaskIndex];
+            const maxSize = 5 * 1024 * 1024; // 5MB
+
+            Array.from(fileList).forEach(file => {
+                if (file.size > maxSize) {
+                    alert(`File "${file.name}" exceeds 5MB limit.`);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    task.files.push({
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                        name: file.name,
+                        size: file.size,
+                        type: file.type,
+                        data: e.target.result,
+                        timestamp: new Date().toISOString()
+                    });
+                    addActivityEntry(task, 'system', `File attached: "${file.name}"`);
+                    renderFilesTab(task);
+                    renderTaskDetailHeader();
+                    saveProject();
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // Reset input
+            document.getElementById('fileInput').value = '';
+        }
+
+        function previewFile(index) {
+            const task = tasks[currentTaskIndex];
+            const file = task.files[index];
+            if (!file || !file.data) return;
+            const win = window.open('', '_blank');
+            if (file.type && file.type.startsWith('image/')) {
+                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${file.data}"></body></html>`);
+            } else {
+                win.document.write(`<iframe src="${file.data}" style="width:100%;height:100%;border:none"></iframe>`);
+            }
+        }
+
+        function downloadFile(index) {
+            const task = tasks[currentTaskIndex];
+            const file = task.files[index];
+            if (!file || !file.data) return;
+            const a = document.createElement('a');
+            a.href = file.data;
+            a.download = file.name;
+            a.click();
+        }
+
+        function deleteFile(index) {
+            const task = tasks[currentTaskIndex];
+            const removed = task.files.splice(index, 1);
+            addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
+            renderFilesTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        // Drag and drop support
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropZone = document.getElementById('fileDropZone');
+            if (dropZone) {
+                ['dragenter', 'dragover'].forEach(evt => {
+                    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+                });
+                ['dragleave', 'drop'].forEach(evt => {
+                    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+                });
+                dropZone.addEventListener('drop', e => {
+                    if (currentTaskIndex !== null && e.dataTransfer.files.length > 0) {
+                        handleFileUpload(e.dataTransfer.files);
+                    }
+                });
+            }
+        });
+
+        // ---- MEETINGS TAB ----
+        function renderMeetingsTab(task) {
+            const container = document.getElementById('meetingsList');
+            container.innerHTML = '';
+
+            const meetings = task.meetings || [];
+            if (meetings.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No meetings logged yet.</p>';
+                return;
+            }
+
+            [...meetings].reverse().forEach((mtg, ri) => {
+                const i = meetings.length - 1 - ri;
+                const card = document.createElement('div');
+                card.className = 'meeting-card';
+                const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="material-icons-round text-sm text-blue-400">event</span>
+                                <span class="text-xs text-slate-400">${dateStr}</span>
+                            </div>
+                            <h4 class="text-sm font-semibold text-white mb-2">${escapeHtml(mtg.title)}</h4>
+                            ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
+                            ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">${escapeHtml(mtg.notes)}</p>` : ''}
+                        </div>
+                        <div class="flex gap-1 flex-shrink-0">
+                            <button onclick="editMeeting(${i})" class="p-1 text-slate-500 hover:text-blue-400 transition-colors" title="Edit"><span class="material-icons-round text-sm">edit</span></button>
+                            <button onclick="deleteMeeting(${i})" class="p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function showAddMeeting() {
+            editingMeetingIndex = null;
+            document.getElementById('mtgTitle').value = '';
+            document.getElementById('mtgDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('mtgAttendees').value = '';
+            document.getElementById('mtgNotes').value = '';
+            document.getElementById('meetingForm').classList.remove('hidden');
+        }
+
+        function editMeeting(index) {
+            const task = tasks[currentTaskIndex];
+            const mtg = task.meetings[index];
+            editingMeetingIndex = index;
+            document.getElementById('mtgTitle').value = mtg.title;
+            document.getElementById('mtgDate').value = mtg.date;
+            document.getElementById('mtgAttendees').value = mtg.attendees || '';
+            document.getElementById('mtgNotes').value = mtg.notes || '';
+            document.getElementById('meetingForm').classList.remove('hidden');
+        }
+
+        function cancelMeeting() {
+            editingMeetingIndex = null;
+            document.getElementById('meetingForm').classList.add('hidden');
+        }
+
+        function saveMeeting() {
+            const title = document.getElementById('mtgTitle').value.trim();
+            const date = document.getElementById('mtgDate').value;
+            const attendees = document.getElementById('mtgAttendees').value.trim();
+            const notes = document.getElementById('mtgNotes').value.trim();
+            if (!title || !date) { alert('Title and date are required.'); return; }
+
+            const task = tasks[currentTaskIndex];
+            const mtgData = {
+                id: editingMeetingIndex !== null ? task.meetings[editingMeetingIndex].id : Date.now().toString(36),
+                title, date, attendees, notes
+            };
+
+            if (editingMeetingIndex !== null) {
+                task.meetings[editingMeetingIndex] = mtgData;
+                addActivityEntry(task, 'system', `Meeting updated: "${title}"`);
+            } else {
+                task.meetings.push(mtgData);
+                addActivityEntry(task, 'system', `Meeting logged: "${title}"`);
+            }
+
+            editingMeetingIndex = null;
+            document.getElementById('meetingForm').classList.add('hidden');
+            renderMeetingsTab(task);
+            saveProject();
+        }
+
+        function deleteMeeting(index) {
+            const task = tasks[currentTaskIndex];
+            if (!confirm('Delete this meeting?')) return;
+            const removed = task.meetings.splice(index, 1);
+            addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
+            renderMeetingsTab(task);
+            saveProject();
+        }
+
+        // =============================================
+        // AI Task Summary
+        // =============================================
+
+        function getTaskDataHash(task) {
+            // Create a fingerprint of the data that matters for the summary
+            const data = {
+                checklist: (task.checklist || []).map(c => ({ label: c.label, checked: c.checked })),
+                meetings: (task.meetings || []).map(m => ({ title: m.title, date: m.date, notes: m.notes, attendees: m.attendees })),
+                comments: (task.activity || []).filter(a => a.type === 'comment').map(a => a.message),
+                progress: parseInt(task.progress) || 0,
+                name: task.name,
+                start: task.start,
+                end: task.end
+            };
+            // Simple string hash
+            const str = JSON.stringify(data);
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const chr = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + chr;
+                hash |= 0;
+            }
+            return hash.toString(36);
+        }
+
+        function hasTaskContent(task) {
+            const hasChecklist = (task.checklist || []).length > 0;
+            const hasMeetings = (task.meetings || []).length > 0;
+            const hasComments = (task.activity || []).some(a => a.type === 'comment');
+            return hasChecklist || hasMeetings || hasComments;
+        }
+
+        function toggleSummaryPanel() {
+            const panel = document.getElementById('summaryPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        async function toggleRowSummary(index) {
+            const row = document.getElementById(`summaryRow-${index}`);
+            const content = document.getElementById(`summaryRowContent-${index}`);
+            const statusEl = document.getElementById(`summaryRowStatus-${index}`);
+
+            // Toggle visibility
+            if (!row.classList.contains('hidden')) {
+                row.classList.add('hidden');
+                return;
+            }
+
+            // Close any other open summary rows
+            document.querySelectorAll('[id^="summaryRow-"]').forEach(r => r.classList.add('hidden'));
+            row.classList.remove('hidden');
+
+            const task = tasks[index];
+            ensureTaskRichData(task);
+
+            if (!hasTaskContent(task)) {
+                content.innerHTML = '<span class="text-slate-500">Nothing to summarize yet.</span>';
+                statusEl.textContent = '';
+                return;
+            }
+
+            const currentHash = getTaskDataHash(task);
+
+            // Cached — no changes
+            if (task._lastSummary && task._lastSummaryHash === currentHash) {
+                content.innerHTML = formatSummary(task._lastSummary);
+                statusEl.textContent = 'Cached — no changes';
+                return;
+            }
+
+            // Loading
+            content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating...</span></div>';
+            statusEl.textContent = '';
+
+            // Build context (same as showTaskSummary)
+            const status = getTaskStatus(task);
+            const pct = parseInt(task.progress) || 0;
+            const completedChecklist = (task.checklist || []).filter(c => c.checked);
+            const comments = (task.activity || []).filter(a => a.type === 'comment');
+
+            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
+            if (task.checklist.length > 0) {
+                context += `\nChecklist (${completedChecklist.length}/${task.checklist.length} done):\n`;
+                task.checklist.forEach(c => { context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`; });
+            }
+            if (task.meetings.length > 0) {
+                context += `\nMeetings:\n`;
+                task.meetings.forEach(m => {
+                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
+                    if (m.notes) context += `  Notes: ${m.notes}\n`;
+                });
+            }
+            if (comments.length > 0) {
+                context += `\nComments/Notes:\n`;
+                comments.forEach(c => { context += `- [${new Date(c.timestamp).toLocaleDateString()}] ${c.message}\n`; });
+            }
+            if (task.description) context += `\nDescription: ${task.description}\n`;
+
+            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state in 2-4 short bullet points. Focus on what's PENDING, key DECISIONS from meetings, and any RISKS. Be very brief.\n\n${context}`;
+
+            try {
+                const apiKey = document.getElementById('apiKey').value;
+                if (!apiKey) throw new Error('No API key');
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
+                        generationConfig: { maxOutputTokens: 300 }
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                const aiText = data.candidates[0].content.parts[0].text;
+
+                task._lastSummary = aiText;
+                task._lastSummaryHash = currentHash;
+                saveProject();
+
+                content.innerHTML = formatSummary(aiText);
+                statusEl.textContent = 'Generated just now';
+            } catch (err) {
+                content.innerHTML = `<span class="text-red-400 text-xs">${escapeHtml(err.message)}</span>`;
+            }
+        }
+
+        async function showTaskSummary() {
+            const task = tasks[currentTaskIndex];
+            const panel = document.getElementById('summaryPanel');
+            ensureTaskRichData(task);
+
+            // If panel is visible, toggle it off
+            if (!panel.classList.contains('hidden')) {
+                panel.classList.add('hidden');
+                return;
+            }
+
+            // Show panel
+            panel.classList.remove('hidden');
+
+            // Check if there's anything to summarize
+            if (!hasTaskContent(task)) {
+                document.getElementById('summaryContent').innerHTML = `
+                    <div class="flex items-center gap-2 py-2 text-slate-500">
+                        <span class="material-icons-round" style="font-size:16px">inbox</span>
+                        <span class="text-xs">Nothing to summarize yet. Add checklist items, meetings, or comments first.</span>
+                    </div>`;
+                document.getElementById('summaryStatus').textContent = '';
+                return;
+            }
+
+            const currentHash = getTaskDataHash(task);
+
+            // If we have a cached summary and data hasn't changed, show it
+            if (task._lastSummary && task._lastSummaryHash === currentHash) {
+                document.getElementById('summaryContent').innerHTML = formatSummary(task._lastSummary);
+                document.getElementById('summaryStatus').textContent = 'Cached — no changes';
+                return;
+            }
+
+            // Show loading
+            document.getElementById('summaryContent').innerHTML = `
+                <div class="flex items-center gap-3 py-3">
+                    <div class="loader"></div>
+                    <span class="text-xs text-slate-400">Generating summary...</span>
+                </div>`;
+            document.getElementById('summaryStatus').textContent = '';
+
+            // Build context for AI
+            const status = getTaskStatus(task);
+            const pct = parseInt(task.progress) || 0;
+            const pendingChecklist = (task.checklist || []).filter(c => !c.checked);
+            const completedChecklist = (task.checklist || []).filter(c => c.checked);
+            const comments = (task.activity || []).filter(a => a.type === 'comment');
+
+            let context = `Task: "${task.name}"\nStatus: ${status.label} (${pct}% complete)\nDates: ${task.start} to ${task.end}\n`;
+
+            if (task.checklist.length > 0) {
+                context += `\nChecklist (${completedChecklist.length}/${task.checklist.length} done):\n`;
+                task.checklist.forEach(c => {
+                    context += `  ${c.checked ? '[x]' : '[ ]'} ${c.label}\n`;
+                });
+            }
+
+            if (task.meetings.length > 0) {
+                context += `\nMeetings:\n`;
+                task.meetings.forEach(m => {
+                    context += `- ${m.date} | ${m.title}${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
+                    if (m.notes) context += `  Notes: ${m.notes}\n`;
+                });
+            }
+
+            if (comments.length > 0) {
+                context += `\nComments/Notes:\n`;
+                comments.forEach(c => {
+                    const d = new Date(c.timestamp).toLocaleDateString();
+                    context += `- [${d}] ${c.message}\n`;
+                });
+            }
+
+            if (task.description) {
+                context += `\nDescription: ${task.description}\n`;
+            }
+
+            const summaryPrompt = `You are a concise project management assistant. Summarize this task's current state. Focus on:
+1. What's PENDING and needs action (unchecked items, upcoming deadlines)
+2. Key DECISIONS or takeaways from meetings
+3. Any RISKS or blockers mentioned in comments
+4. Brief overall status assessment
+
+Be concise — use short bullet points. Skip sections that have nothing noteworthy. Do NOT repeat raw data. Provide actionable insight.
+
+${context}`;
+
+            try {
+                const apiKey = document.getElementById('apiKey').value;
+                if (!apiKey) throw new Error('No API key configured');
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
+                        generationConfig: { maxOutputTokens: 500 }
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+
+                const aiText = data.candidates[0].content.parts[0].text;
+
+                // Cache the summary
+                task._lastSummary = aiText;
+                task._lastSummaryHash = currentHash;
+                saveProject();
+
+                document.getElementById('summaryContent').innerHTML = formatSummary(aiText);
+                document.getElementById('summaryStatus').textContent = 'Generated just now';
+
+            } catch (err) {
+                console.error('Summary error:', err);
+                document.getElementById('summaryContent').innerHTML = `
+                    <div class="text-center py-8">
+                        <span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span>
+                        <p class="text-red-400 text-sm">${escapeHtml(err.message)}</p>
+                    </div>`;
+            }
+        }
+
+        function formatSummary(text) {
+            // Convert markdown-like text to HTML
+            let html = escapeHtml(text);
+            // Bold **text**
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>');
+            // Bullet points
+            html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4 mb-1">$1</li>');
+            // Numbered items
+            html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 mb-1 list-decimal">$1</li>');
+            // Headers with ##
+            html = html.replace(/^#{1,3} (.+)$/gm, '<div class="text-xs font-bold text-purple-300 uppercase tracking-wider mt-4 mb-1">$1</div>');
+            // Newlines
+            html = html.replace(/\n/g, '<br>');
+            return `<div class="space-y-1">${html}</div>`;
+        }
+
+        // Summary panel is closed via toggleSummaryPanel()
+
+        // =============================================
+        // Chat & API Logic
+        // =============================================
+
+        function addToChat(role, text) {
+            const container = document.getElementById('chatHistory');
+            const div = document.createElement('div');
+            div.className = "flex gap-3 mb-4 animate-fade-in";
+
+            const isUser = role === 'user';
+            const icon = isUser ? 'person' : 'smart_toy';
+            const align = isUser ? 'flex-row-reverse' : 'flex-row';
+            const rounded = isUser ? 'rounded-tr-none' : 'rounded-tl-none';
+            const bgColor = isUser ? 'bg-slate-700' : 'bg-slate-800';
+            const iconBg = isUser ? 'bg-slate-700' : 'bg-blue-600';
+
+            div.innerHTML = `
+                <div class="flex ${align} gap-3 w-full">
+                    <div class="w-8 h-8 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0">
+                        <span class="material-icons-round text-sm">${icon}</span>
+                    </div>
+                    <div class="${bgColor} p-3 rounded-lg ${rounded} text-sm text-slate-200 max-w-[85%]">
+                        ${text}
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Pending AI changes (for Apply/Cancel)
+        let pendingMerge = null;
+        let pendingPrompt = null;
+        let pendingAiText = null;
+
+        // Layer 1: Smart Merge — only update scheduling fields, preserve rich data
+        function mergeTasks(existing, aiTasks) {
+            const changes = [];
+            const merged = [];
+            const matchedAiIds = new Set();
+
+            // Map existing tasks by ID for fast lookup
+            const existingMap = {};
+            existing.forEach(t => { existingMap[t.id] = t; });
+
+            // Process AI tasks — match by ID, merge scheduling fields
+            aiTasks.forEach(aiTask => {
+                const ex = existingMap[aiTask.id];
+                if (ex) {
+                    matchedAiIds.add(aiTask.id);
+                    if (ex.locked) {
+                        // Locked — keep as-is
+                        merged.push({ ...ex });
+                        changes.push({ type: 'locked', id: ex.id, name: ex.name });
+                        return;
+                    }
+                    // Merge: AI updates scheduling fields, preserve rich data
+                    const diffs = [];
+                    if (aiTask.name !== ex.name) diffs.push(`name → "${aiTask.name}"`);
+                    if (aiTask.start !== ex.start) diffs.push(`start → ${aiTask.start}`);
+                    if (aiTask.end !== ex.end) diffs.push(`end → ${aiTask.end}`);
+                    if (String(aiTask.progress) !== String(ex.progress)) diffs.push(`progress → ${aiTask.progress}%`);
+                    if ((aiTask.dependencies || '') !== (ex.dependencies || '')) diffs.push(`deps → "${aiTask.dependencies || 'none'}"`);
+
+                    const mergedTask = { ...ex };
+                    mergedTask.name = aiTask.name;
+                    mergedTask.start = aiTask.start;
+                    mergedTask.end = aiTask.end;
+                    mergedTask.progress = aiTask.progress;
+                    mergedTask.dependencies = aiTask.dependencies || '';
+                    merged.push(mergedTask);
+
+                    if (diffs.length > 0) {
+                        changes.push({ type: 'modified', id: ex.id, name: aiTask.name, diffs });
+                    } else {
+                        changes.push({ type: 'unchanged', id: ex.id, name: ex.name });
+                    }
+                } else {
+                    // New task from AI
+                    matchedAiIds.add(aiTask.id);
+                    merged.push({
+                        ...aiTask,
+                        priority: 'medium',
+                        description: '',
+                        checklist: [],
+                        activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created by AI', timestamp: new Date().toISOString() }],
+                        files: [],
+                        meetings: []
+                    });
+                    changes.push({ type: 'added', id: aiTask.id, name: aiTask.name });
+                }
+            });
+
+            // Keep existing tasks not in AI response (orphaned — user-enriched)
+            existing.forEach(ex => {
+                if (!matchedAiIds.has(ex.id) && !merged.find(m => m.id === ex.id)) {
+                    merged.push({ ...ex });
+                    changes.push({ type: 'kept', id: ex.id, name: ex.name });
+                }
+            });
+
+            return { merged, changes };
+        }
+
+        // Layer 3: Build change summary HTML for the chat
+        function buildChangeSummaryHTML(changes) {
+            const icons = {
+                modified: '✏️',
+                added: '➕',
+                kept: '📌',
+                locked: '🔒',
+                unchanged: '—'
+            };
+            const modified = changes.filter(c => c.type === 'modified');
+            const added = changes.filter(c => c.type === 'added');
+            const kept = changes.filter(c => c.type === 'kept');
+            const locked = changes.filter(c => c.type === 'locked');
+            const unchanged = changes.filter(c => c.type === 'unchanged');
+
+            let html = '<div style="font-size:13px;line-height:1.6">';
+            html += '<div style="font-weight:600;margin-bottom:8px">Proposed changes:</div>';
+
+            if (modified.length > 0) {
+                modified.forEach(c => {
+                    html += `<div>${icons.modified} <strong>${escapeHtml(c.name)}</strong> — ${c.diffs.join(', ')}</div>`;
+                });
+            }
+            if (added.length > 0) {
+                added.forEach(c => {
+                    html += `<div>${icons.added} <strong>${escapeHtml(c.name)}</strong> (new task)</div>`;
+                });
+            }
+            if (kept.length > 0) {
+                kept.forEach(c => {
+                    html += `<div>${icons.kept} <strong>${escapeHtml(c.name)}</strong> (kept — not in AI response)</div>`;
+                });
+            }
+            if (locked.length > 0) {
+                locked.forEach(c => {
+                    html += `<div>${icons.locked} <strong>${escapeHtml(c.name)}</strong> (locked — unchanged)</div>`;
+                });
+            }
+            if (unchanged.length > 0) {
+                html += `<div style="color:#64748b;margin-top:4px">${unchanged.length} task${unchanged.length > 1 ? 's' : ''} unchanged</div>`;
+            }
+
+            html += `<div style="margin-top:12px;display:flex;gap:8px">`;
+            html += `<button onclick="applyPendingMerge()" style="padding:6px 16px;background:#22c55e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Apply Changes</button>`;
+            html += `<button onclick="cancelPendingMerge()" style="padding:6px 16px;background:#334155;color:#94a3b8;border:none;border-radius:6px;font-size:12px;cursor:pointer">Cancel</button>`;
+            html += `</div></div>`;
+
+            return html;
+        }
+
+        function applyPendingMerge() {
+            if (!pendingMerge) return;
+            tasks = pendingMerge;
+
+            // Log in history
+            if (pendingPrompt && pendingAiText) {
+                history.push({ role: "user", text: pendingPrompt });
+                history.push({ role: "model", text: pendingAiText });
+            }
+
+            pendingMerge = null;
+            pendingPrompt = null;
+            pendingAiText = null;
+
+            renderGantt();
+            addToChat('model', 'Changes applied successfully.');
+            saveProject();
+        }
+
+        function cancelPendingMerge() {
+            pendingMerge = null;
+            pendingPrompt = null;
+            pendingAiText = null;
+            addToChat('model', 'Changes discarded. Your tasks remain unchanged.');
+        }
+
+        async function handleSend() {
+            const input = document.getElementById('userPrompt');
+            const apiKey = document.getElementById('apiKey').value;
+            const prompt = input.value.trim();
+            const statusEl = document.getElementById('statusIndicator');
+
+            if (!prompt) return;
+            if (!apiKey) {
+                alert("Please enter a Gemini API Key first.");
+                return;
+            }
+
+            addToChat('user', escapeHtml(prompt));
+            input.value = '';
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            statusEl.innerText = "Connecting to Gemini...";
+
+            const conversation = history.map(h => ({
+                role: h.role,
+                parts: [{ text: h.text }]
+            }));
+
+            conversation.push({ role: "user", parts: [{ text: prompt }] });
+
+            // Layer 2: Only send unlocked tasks as context to AI
+            if (tasks.length > 0) {
+                const unlockedTasks = tasks.filter(t => !t.locked).map(t => ({
+                    id: t.id, name: t.name, start: t.start, end: t.end,
+                    progress: t.progress, dependencies: t.dependencies || ''
+                }));
+                const lockedCount = tasks.length - unlockedTasks.length;
+                let contextMsg = `Current JSON State: ${JSON.stringify({tasks: unlockedTasks})}. Update this based on the user's latest request.`;
+                if (lockedCount > 0) {
+                    contextMsg += ` Note: ${lockedCount} task(s) are locked and excluded — do not add or reference them.`;
+                }
+                conversation.push({ role: "user", parts: [{ text: contextMsg }] });
+            }
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: conversation,
+                        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error.message);
+
+                const aiText = data.candidates[0].content.parts[0].text;
+                const parsed = JSON.parse(aiText);
+
+                if (parsed.tasks) {
+                    // Layer 1: Smart merge instead of replace
+                    const { merged, changes } = mergeTasks(tasks, parsed.tasks);
+
+                    // Check if there are any actual changes
+                    const hasChanges = changes.some(c => c.type === 'modified' || c.type === 'added');
+
+                    if (tasks.length === 0) {
+                        // First time — no existing tasks, apply directly
+                        tasks = merged;
+                        renderGantt();
+                        addToChat('model', "I've created your project plan. Review the Gantt chart and task table.");
+                        history.push({ role: "user", text: prompt });
+                        history.push({ role: "model", text: aiText });
+                        await saveProject();
+                    } else if (!hasChanges) {
+                        addToChat('model', "I analyzed your request but found no changes needed to the existing plan.");
+                    } else {
+                        // Layer 3: Show change summary, wait for approval
+                        pendingMerge = merged;
+                        pendingPrompt = prompt;
+                        pendingAiText = aiText;
+                        addToChat('model', buildChangeSummaryHTML(changes));
+                    }
+                } else {
+                    addToChat('model', "I couldn't generate a valid plan. Please try again.");
+                }
+
+                statusEl.innerText = "Ready";
+                statusEl.className = "text-xs text-green-500";
+
+            } catch (err) {
+                console.error(err);
+                addToChat('model', `Error: ${err.message}`);
+                statusEl.innerText = "Error";
+                statusEl.className = "text-xs text-red-500";
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+        }
+
+        // =============================================
+        // CSV Export
+        // =============================================
+
+        async function exportCSV() {
+            if (tasks.length === 0) {
+                alert('No tasks to export.');
+                return;
+            }
+
+            const projectName = await getProjectName();
+
+            const headers = ['ID', 'Task Name', 'Start', 'End', 'Progress', 'Dependencies'];
+            const rows = tasks.map(t => [
+                t.id,
+                '"' + (t.name || '').replace(/"/g, '""') + '"',
+                t.start,
+                t.end,
+                t.progress + '%',
+                t.dependencies || ''
+            ]);
+
+            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const date = new Date().toISOString().slice(0, 10);
+            const filename = `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_${date}.csv`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // =============================================
+        // PDF Export
+        // =============================================
+
+        async function exportPDF() {
+            if (tasks.length === 0) {
+                alert('No tasks to export.');
+                return;
+            }
+
+            const projectName = await getProjectName();
+            const date = new Date().toISOString().slice(0, 10);
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+            pdf.setFontSize(20);
+            pdf.setTextColor(30, 41, 59);
+            pdf.text(projectName, 15, 20);
+
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 116, 139);
+            pdf.text(`Generated: ${date}`, 15, 28);
+
+            const ganttEl = document.getElementById('gantt-target');
+            const origBg = ganttEl.style.backgroundColor;
+            ganttEl.style.backgroundColor = '#ffffff';
+
+            const svgTexts = ganttEl.querySelectorAll('text');
+            const origColors = [];
+            svgTexts.forEach((el, i) => {
+                origColors[i] = el.style.fill;
+                el.style.fill = '#1e293b';
+            });
+            const svgBars = ganttEl.querySelectorAll('.bar');
+            svgBars.forEach(el => {
+                const rect = el.querySelector('.bar-progress');
+                if (rect) rect.style.fill = 'rgba(0,0,0,0.15)';
+            });
+
+            try {
+                const canvas = await html2canvas(ganttEl, {
+                    backgroundColor: '#ffffff',
+                    scale: 2,
+                    logging: false
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                const pageWidth = 267;
+                const imgWidth = pageWidth;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+                pdf.addImage(imgData, 'PNG', 15, 35, imgWidth, Math.min(imgHeight, 150));
+            } catch (e) {
+                console.error('Gantt capture failed:', e);
+            }
+
+            ganttEl.style.backgroundColor = origBg;
+            svgTexts.forEach((el, i) => { el.style.fill = origColors[i]; });
+
+            pdf.addPage();
+            pdf.setFontSize(14);
+            pdf.setTextColor(30, 41, 59);
+            pdf.text('Task Details', 15, 20);
+
+            const colWidths = [15, 90, 35, 35, 25, 35];
+            const colHeaders = ['ID', 'Task Name', 'Start', 'End', 'Progress', 'Dependencies'];
+            let y = 30;
+
+            pdf.setFontSize(9);
+            pdf.setFillColor(241, 245, 249);
+            pdf.rect(15, y - 5, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+            pdf.setTextColor(71, 85, 105);
+            let x = 15;
+            colHeaders.forEach((h, i) => {
+                pdf.text(h, x + 2, y);
+                x += colWidths[i];
+            });
+            y += 8;
+
+            pdf.setTextColor(30, 41, 59);
+            pdf.setFontSize(8);
+            tasks.forEach((task, idx) => {
+                if (y > 185) {
+                    pdf.addPage();
+                    y = 20;
+                }
+                x = 15;
+                const rowData = [task.id, task.name, task.start, task.end, task.progress + '%', task.dependencies || '-'];
+                rowData.forEach((val, i) => {
+                    const cellText = String(val).substring(0, 50);
+                    pdf.text(cellText, x + 2, y);
+                    x += colWidths[i];
+                });
+                y += 6;
+            });
+
+            pdf.save(`${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_${date}.pdf`);
+        }
+
+        async function getProjectName() {
+            if (currentProjectName) return currentProjectName;
+            const registry = await loadRegistry();
+            const project = registry.find(p => p.id === currentProjectId);
+            return project ? project.name : 'Project';
+        }
+
+        // =============================================
+        // Color Picker
+        // =============================================
+
+        let colorPickerTargetId = null;
+
+        async function promptColorPicker(projectId) {
+            colorPickerTargetId = projectId;
+            const registry = await loadRegistry();
+            const project = registry.find(p => p.id === projectId);
+            const currentColor = project ? project.color : PROJECT_COLORS[0];
+
+            const palette = document.getElementById('colorPalette');
+            palette.innerHTML = '';
+            PROJECT_COLORS.forEach(color => {
+                const btn = document.createElement('button');
+                btn.className = 'color-option' + (color === currentColor ? ' selected' : '');
+                btn.style.background = color;
+                btn.onclick = () => {
+                    selectProjectColor(color);
+                    palette.querySelectorAll('.color-option').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                };
+                palette.appendChild(btn);
+            });
+
+            document.getElementById('colorPickerModal').classList.remove('hidden');
+        }
+
+        async function selectProjectColor(color) {
+            if (!colorPickerTargetId) return;
+            if (currentUser) {
+                await supabase.from('projects').update({
+                    color: color,
+                    updated_at: new Date().toISOString()
+                }).eq('id', colorPickerTargetId);
+            } else {
+                const raw = localStorage.getItem('planner_registry');
+                const registry = raw ? JSON.parse(raw) : [];
+                const project = registry.find(p => p.id === colorPickerTargetId);
+                if (project) {
+                    project.color = color;
+                    project.updatedAt = new Date().toISOString();
+                    saveRegistryLocal(registry);
+                }
+            }
+        }
+
+        async function closeColorPicker() {
+            document.getElementById('colorPickerModal').classList.add('hidden');
+            colorPickerTargetId = null;
+            await renderDashboard();
+        }
+
+        // =============================================
+        // Initialization
+        // =============================================
+
+        async function initApp() {
+            // Show today's date
+            const todayEl = document.getElementById('todayDate');
+            if (todayEl) {
+                const now = new Date();
+                todayEl.textContent = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            }
+
+            restoreApiKey();
+
+            try {
+                // Check for existing Supabase session
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.error('Session check failed:', error);
+                    showAuthView();
+                    return;
+                }
+
+                if (session && session.user) {
+                    currentUser = session.user;
+                    onUserLoggedIn();
+                    return;
+                }
+            } catch (err) {
+                console.error('Supabase init error:', err);
+            }
+
+            // No session — show auth view
+            showAuthView();
+        }
+
+        // Listen for auth state changes (handles token refresh, etc.)
+        if (supabase) {
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_OUT') {
+                    currentUser = null;
+                } else if (session && session.user) {
+                    currentUser = session.user;
+                }
+            });
+        }
+
+        // Wire up auth submit button
+        document.getElementById('authSubmitBtn').addEventListener('click', function() {
+            handleAuthSubmit();
+        });
+
+        // Enter key to send in chat
+        document.getElementById('userPrompt').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // Boot
+        initApp();
+    </script>
+</body>
+</html>
