@@ -2665,7 +2665,7 @@
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
                 if (status.css === 'status-overdue') {
-                    const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
+                    const daysOverdue = Math.ceil((today - end) / 86400000);
                     if (status.label === 'Due Today') {
                         result.dueToday++;
                         result.items.push({ name: task.name, label: 'due today', priority: 0, sort: daysOverdue });
@@ -2731,7 +2731,7 @@
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
                 if (status.css === 'status-overdue') {
-                    const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
+                    const daysOverdue = Math.ceil((today - end) / 86400000);
                     const label = status.label === 'Due Today' ? 'due today' : (daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`);
                     focusTasks.push({ task, priority: 0, sort: daysOverdue, label, color: '#ef4444', dotCss: 'bg-red-500' });
                     focusTaskIds.add(task.id);
