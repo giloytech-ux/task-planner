@@ -614,7 +614,11 @@
             <div id="ganttSection" class="flex-1 flex flex-col overflow-hidden">
                 <!-- Tabs/Toolbar -->
                 <div class="h-12 border-b border-slate-800 flex items-center px-2 md:px-4 bg-slate-900/80 gap-2 md:gap-4">
-                    <button class="text-xs font-semibold uppercase tracking-wider text-blue-400 border-b-2 border-blue-400 h-full px-2">Gantt Chart</button>
+                    <button class="hidden md:flex text-xs font-semibold uppercase tracking-wider text-blue-400 border-b-2 border-blue-400 h-full px-2 items-center">Gantt Chart</button>
+                    <div class="flex items-center gap-1 text-xs text-slate-400">
+                        <span class="material-icons-round text-sm">today</span>
+                        <span id="todayDate"></span>
+                    </div>
                     <div class="flex-1"></div>
                     <div class="hidden md:flex items-center gap-3 text-[10px] text-slate-500">
                         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> On Track</span>
@@ -622,20 +626,16 @@
                         <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Overdue</span>
                     </div>
                     <div class="hidden md:block w-px h-5 bg-slate-700"></div>
-                    <div class="flex items-center gap-1 text-xs text-slate-400">
-                        <span class="material-icons-round text-sm">today</span>
-                        <span id="todayDate"></span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="zoomGantt(-1)" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Zoom out"><span class="material-icons-round" style="font-size:20px">zoom_out</span></button>
+                        <span id="ganttViewMode" class="text-[10px] text-slate-400 w-16 text-center hidden sm:inline">Week</span>
+                        <button onclick="zoomGantt(1)" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Zoom in"><span class="material-icons-round" style="font-size:20px">zoom_in</span></button>
                     </div>
                     <div class="w-px h-5 bg-slate-700"></div>
-                    <div class="flex items-center gap-1">
-                        <button onclick="zoomGantt(-1)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white" title="Zoom out"><span class="material-icons-round text-sm">zoom_out</span></button>
-                        <span id="ganttViewMode" class="text-[10px] text-slate-400 w-16 text-center hidden sm:inline">Week</span>
-                        <button onclick="zoomGantt(1)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white" title="Zoom in"><span class="material-icons-round text-sm">zoom_in</span></button>
-                    </div>
-                    <button onclick="renderGantt()" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-white"><span class="material-icons-round text-sm">refresh</span></button>
-                    <button onclick="showProjectSummary()" class="flex items-center gap-1 text-slate-400 hover:text-purple-400 transition-colors min-w-[44px] min-h-[44px] justify-center" title="AI Project Summary">
-                        <span class="material-icons-round text-sm">auto_awesome</span>
-                        <span class="text-xs hidden md:inline">AI Project Summary</span>
+                    <button onclick="renderGantt()" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Refresh"><span class="material-icons-round" style="font-size:20px">refresh</span></button>
+                    <button onclick="showProjectSummary()" class="w-10 h-10 md:w-8 md:h-8 flex items-center gap-1 text-slate-400 hover:text-purple-400 transition-colors justify-center rounded-lg" title="AI Project Summary">
+                        <span class="material-icons-round" style="font-size:20px">auto_awesome</span>
+                        <span class="text-xs hidden md:inline">AI Summary</span>
                     </button>
                 </div>
 
