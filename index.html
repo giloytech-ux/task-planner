@@ -1410,30 +1410,39 @@
             if (_saveInFlight) { _saveQueued = true; return; }
             _saveInFlight = true;
 
+            // Snapshot mutable state BEFORE any awaits — navigation can
+            // clear globals while network calls are in-flight
+            const _projId = currentProjectId;
+            const _tasks = [...tasks];
+            const _hist = [...history];
+            const _deletes = [..._pendingDeletes];
+
             try {
             if (currentUser) {
                 // Update project timestamp
                 await supabase
                     .from('projects')
                     .update({ updated_at: new Date().toISOString() })
-                    .eq('id', currentProjectId);
+                    .eq('id', _projId);
 
                 // Step 1: Explicit deletes — remove only tasks the user actually deleted
-                if (_pendingDeletes.length > 0) {
-                    const { error: delError } = await supabase.from('tasks').delete().in('id', _pendingDeletes);
+                if (_deletes.length > 0) {
+                    const { error: delError } = await supabase.from('tasks').delete().in('id', _deletes);
                     if (delError) {
                         alert('Failed to delete tasks from server. Will retry on next save.');
                         // Keep _pendingDeletes for retry on next save
                     } else {
-                        _pendingDeletes = [];
+                        // Remove only the IDs we successfully deleted from the live array
+                        const deleted = new Set(_deletes);
+                        _pendingDeletes = _pendingDeletes.filter(id => !deleted.has(id));
                     }
                 }
 
                 // Step 2: Upsert tasks
-                if (tasks.length > 0) {
-                    const taskRows = tasks.map((t, i) => {
+                if (_tasks.length > 0) {
+                    const taskRows = _tasks.map((t, i) => {
                         const row = {
-                            project_id: currentProjectId,
+                            project_id: _projId,
                             task_number: t.id,
                             name: t.name,
                             start_date: t.start,
@@ -1461,35 +1470,35 @@
                     if (error) {
                         alert('Failed to save tasks to server. Your changes are preserved locally.');
                     } else if (upsertedRows) {
-                        // Sync _rowId back to in-memory tasks for newly inserted rows
+                        // Sync _rowId back — objects are shared so this updates live tasks too
                         for (const row of upsertedRows) {
-                            const task = tasks.find(t => String(t.id) === String(row.task_number));
+                            const task = _tasks.find(t => String(t.id) === String(row.task_number));
                             if (task && !task._rowId) task._rowId = row.id;
                         }
                     }
-                } else if (_pendingDeletes.length === 0) {
+                } else if (_deletes.length === 0) {
                     // No tasks left and no pending deletes stuck — safe to delete all rows
-                    await supabase.from('tasks').delete().eq('project_id', currentProjectId);
+                    await supabase.from('tasks').delete().eq('project_id', _projId);
                 }
 
                 // Replace chat history (trimmed to last 20 exchanges)
-                await supabase.from('chat_history').delete().eq('project_id', currentProjectId);
-                const trimmed = history.slice(-20);
+                await supabase.from('chat_history').delete().eq('project_id', _projId);
+                const trimmed = _hist.slice(-20);
                 if (trimmed.length > 0) {
                     const chatRows = trimmed.map(h => ({
-                        project_id: currentProjectId,
+                        project_id: _projId,
                         role: h.role,
                         message: h.text
                     }));
                     await supabase.from('chat_history').insert(chatRows);
                 }
             } else {
-                const trimmedHistory = history.slice(-20);
-                const tasksForSave = tasks.map(({ _rowId, ...t }) => ({
+                const trimmedHistory = _hist.slice(-20);
+                const tasksForSave = _tasks.map(({ _rowId, ...t }) => ({
                     ...t,
                     files: stripFileData(t.files)
                 }));
-                localStorage.setItem('planner_proj_' + currentProjectId, JSON.stringify({
+                localStorage.setItem('planner_proj_' + _projId, JSON.stringify({
                     tasks: tasksForSave,
                     history: trimmedHistory
                 }));
