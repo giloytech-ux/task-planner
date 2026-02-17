@@ -2286,23 +2286,14 @@
                 };
                 const status = getTaskStatus(task);
                 const pct = parseInt(task.progress) || 0;
-                // Look ahead to tomorrow to match getTaskStatus proactive warnings
-                const today = new Date();
-                today.setDate(today.getDate() + 1);
-                today.setHours(0, 0, 0, 0);
-                const startDate = new Date(task.start + 'T00:00:00');
-                const endDate = new Date(task.end + 'T00:00:00');
-                const totalDays = Math.max((endDate - startDate) / 86400000, 1);
-                const daysPassed = Math.max((today - startDate) / 86400000, 0);
-                const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
+                const gapPct = status.gap || (status.css === 'status-overdue' ? 100 - pct : 0);
 
                 const barGroup = wrapper.querySelector('.bar');
                 const bgRect = barGroup?.querySelector('rect:not(.bar-progress):not(.bar-remaining)');
-                const showGap = pct < expectedPct && status.css !== 'status-on-track' && status.css !== 'status-completed';
 
-                // Background rect: status color when behind, white when on track
+                // Background rect: status color when gap exists, dark gray otherwise
                 if (bgRect) {
-                    const bgColor = showGap ? status.color : '#ffffff';
+                    const bgColor = gapPct > 0 ? status.color : '#374151';
                     bgRect.setAttribute('fill', bgColor);
                     bgRect.style.fill = bgColor;
                 }
@@ -2314,16 +2305,17 @@
                     progressRect.style.fill = '#22c55e';
                 }
 
-                // Remaining rect: white area from expectedPct to 100% (only when behind)
+                // Remaining rect: white area from (pct + gapPct)% to 100%
                 let remainRect = barGroup?.querySelector('.bar-remaining');
-                if (showGap && bgRect && expectedPct < 100) {
+                const remainStart = pct + gapPct;
+                if (gapPct > 0 && bgRect && remainStart < 100) {
                     const x = parseFloat(bgRect.getAttribute('x'));
                     const y = parseFloat(bgRect.getAttribute('y'));
                     const totalWidth = parseFloat(bgRect.getAttribute('width'));
                     const height = parseFloat(bgRect.getAttribute('height'));
                     const ry = bgRect.getAttribute('ry') || 0;
-                    const remX = x + (expectedPct / 100) * totalWidth;
-                    const remWidth = ((100 - expectedPct) / 100) * totalWidth;
+                    const remX = x + (remainStart / 100) * totalWidth;
+                    const remWidth = ((100 - remainStart) / 100) * totalWidth;
 
                     if (!remainRect) {
                         remainRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -2335,8 +2327,8 @@
                     remainRect.setAttribute('width', Math.max(remWidth, 0));
                     remainRect.setAttribute('height', height);
                     remainRect.setAttribute('ry', ry);
-                    remainRect.setAttribute('fill', '#ffffff');
-                    remainRect.style.fill = '#ffffff';
+                    remainRect.setAttribute('fill', '#374151');
+                    remainRect.style.fill = '#374151';
                 } else if (remainRect) {
                     remainRect.remove();
                 }
@@ -2345,8 +2337,8 @@
                 barGroup?.querySelectorAll('.bar-gap').forEach(el => el.remove());
                 const label = wrapper.querySelector('.bar-label');
                 if (label) {
-                    label.setAttribute('fill', '#334155');
-                    label.style.fill = '#334155';
+                    label.setAttribute('fill', '#ffffff');
+                    label.style.fill = '#ffffff';
                     label.textContent = `${task.name}  (${pct}%) - ${status.label}`;
                 }
             });
