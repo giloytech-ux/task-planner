@@ -2379,25 +2379,10 @@
         }
 
         function scrollGanttToToday() {
-            const container = document.getElementById('gantt-target');
-            if (!container || !ganttChart || !ganttChart.gantt_start) return;
-
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const start = ganttChart.gantt_start;
-            const mode = GANTT_VIEW_MODES[currentGanttZoom];
-
-            let todayX;
-            if (mode === 'Month') {
-                const daysDiff = (today - start) / 86400000;
-                todayX = (daysDiff * ganttChart.options.column_width) / 30;
-            } else {
-                const hoursDiff = (today - start) / 3600000;
-                todayX = (hoursDiff / ganttChart.options.step) * ganttChart.options.column_width;
+            const todayLine = document.querySelector('.today-line-custom');
+            if (todayLine) {
+                todayLine.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' });
             }
-
-            const containerWidth = container.clientWidth;
-            container.scrollLeft = Math.max(0, todayX - containerWidth / 3);
         }
 
         function zoomGantt(direction) {
@@ -2408,7 +2393,7 @@
             document.getElementById('ganttViewMode').textContent = mode;
             if (ganttChart) {
                 ganttChart.change_view_mode(mode);
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); scrollGanttToToday(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday()); }, 200);
             }
         }
 
@@ -2448,7 +2433,7 @@
                     custom_popup_html: null
                 });
 
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); scrollGanttToToday(); }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday()); }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
