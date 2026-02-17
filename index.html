@@ -2296,58 +2296,53 @@
                 const daysPassed = Math.max((today - startDate) / 86400000, 0);
                 const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
 
-                // Zone 1 (remaining): background rect → white
-                wrapper.querySelectorAll('.bar rect').forEach(rect => {
-                    rect.setAttribute('fill', '#ffffff');
-                    rect.style.fill = '#ffffff';
-                });
+                const barGroup = wrapper.querySelector('.bar');
+                const bgRect = barGroup?.querySelector('rect:not(.bar-progress):not(.bar-remaining)');
+                const showGap = pct < expectedPct && status.css !== 'status-on-track' && status.css !== 'status-completed';
 
-                // Zone 2 (done): progress rect → always green
+                // Background rect: status color when behind, white when on track
+                if (bgRect) {
+                    const bgColor = showGap ? status.color : '#ffffff';
+                    bgRect.setAttribute('fill', bgColor);
+                    bgRect.style.fill = bgColor;
+                }
+
+                // Progress rect → always green
                 const progressRect = wrapper.querySelector('.bar-progress');
                 if (progressRect) {
                     progressRect.setAttribute('fill', '#22c55e');
                     progressRect.style.fill = '#22c55e';
                 }
 
-                // Zone 3 (behind): gap rect between actual and expected
-                // Only show when behind AND status is not On Track/Completed (avoids green-on-green blending)
-                const barGroup = wrapper.querySelector('.bar');
-                let gapRect = barGroup ? barGroup.querySelector('.bar-gap') : null;
-                const showGap = pct < expectedPct && status.css !== 'status-on-track' && status.css !== 'status-completed';
+                // Remaining rect: white area from expectedPct to 100% (only when behind)
+                let remainRect = barGroup?.querySelector('.bar-remaining');
+                if (showGap && bgRect && expectedPct < 100) {
+                    const x = parseFloat(bgRect.getAttribute('x'));
+                    const y = parseFloat(bgRect.getAttribute('y'));
+                    const totalWidth = parseFloat(bgRect.getAttribute('width'));
+                    const height = parseFloat(bgRect.getAttribute('height'));
+                    const ry = bgRect.getAttribute('ry') || 0;
+                    const remX = x + (expectedPct / 100) * totalWidth;
+                    const remWidth = ((100 - expectedPct) / 100) * totalWidth;
 
-                if (showGap && barGroup) {
-                    const bgRect = barGroup.querySelector('rect:not(.bar-progress):not(.bar-gap)');
-                    if (bgRect) {
-                        const x = parseFloat(bgRect.getAttribute('x'));
-                        const y = parseFloat(bgRect.getAttribute('y'));
-                        const totalWidth = parseFloat(bgRect.getAttribute('width'));
-                        const height = parseFloat(bgRect.getAttribute('height'));
-                        const ry = bgRect.getAttribute('ry') || 0;
-
-                        const gapX = x + (pct / 100) * totalWidth;
-                        const gapWidth = ((expectedPct - pct) / 100) * totalWidth;
-
-                        if (!gapRect) {
-                            gapRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                            gapRect.classList.add('bar-gap');
-                            // Insert after background but before/alongside progress
-                            if (progressRect) {
-                                barGroup.insertBefore(gapRect, progressRect);
-                            } else {
-                                barGroup.appendChild(gapRect);
-                            }
-                        }
-                        gapRect.setAttribute('x', gapX);
-                        gapRect.setAttribute('y', y);
-                        gapRect.setAttribute('width', Math.max(gapWidth, 0));
-                        gapRect.setAttribute('height', height);
-                        gapRect.setAttribute('ry', ry);
-                        gapRect.setAttribute('fill', status.color);
-                        gapRect.style.fill = status.color;
+                    if (!remainRect) {
+                        remainRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        remainRect.classList.add('bar-remaining');
+                        barGroup.appendChild(remainRect);
                     }
-                } else if (gapRect) {
-                    gapRect.remove(); // Clean up if no longer needed
+                    remainRect.setAttribute('x', remX);
+                    remainRect.setAttribute('y', y);
+                    remainRect.setAttribute('width', Math.max(remWidth, 0));
+                    remainRect.setAttribute('height', height);
+                    remainRect.setAttribute('ry', ry);
+                    remainRect.setAttribute('fill', '#ffffff');
+                    remainRect.style.fill = '#ffffff';
+                } else if (remainRect) {
+                    remainRect.remove();
                 }
+
+                // Clean up old gap rects from previous approach
+                barGroup?.querySelectorAll('.bar-gap').forEach(el => el.remove());
                 const label = wrapper.querySelector('.bar-label');
                 if (label) {
                     label.setAttribute('fill', '#334155');
