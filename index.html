@@ -6170,24 +6170,18 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                 if (!maxDate || e > maxDate) maxDate = e;
             });
 
-            // Build weekly columns (Monday-aligned)
-            const weekStart = new Date(minDate);
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // align to Monday
-            if (weekStart > minDate) weekStart.setDate(weekStart.getDate() - 7);
-            const weekEnd = new Date(maxDate);
-            weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()) % 7);
-
-            const weeks = [];
-            const d = new Date(weekStart);
-            while (d <= weekEnd) {
-                weeks.push(new Date(d));
-                d.setDate(d.getDate() + 7);
+            // Build daily columns
+            const days = [];
+            const d = new Date(minDate);
+            while (d <= maxDate) {
+                days.push(new Date(d));
+                d.setDate(d.getDate() + 1);
             }
 
-            const weekHeaders = weeks.map(w => w.toISOString().slice(5, 10)); // MM-DD format
+            const dayHeaders = days.map(dy => dy.toISOString().slice(5, 10)); // MM-DD format
 
             const dataHeaders = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Duration', 'Progress', 'Status', 'Days Left', 'Priority'];
-            const headers = [...dataHeaders, '', ...weekHeaders]; // empty col as separator
+            const headers = [...dataHeaders, '', ...dayHeaders]; // empty col as separator
 
             const rows = tasks.map(t => {
                 const start = new Date(t.start + 'T00:00:00');
@@ -6197,19 +6191,13 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                 const status = getTaskStatus(t);
                 const pct = (parseInt(t.progress) || 0) / 100;
 
-                // Build Gantt bar cells
-                const ganttCells = weeks.map(wk => {
-                    const wkEnd = new Date(wk);
-                    wkEnd.setDate(wkEnd.getDate() + 6);
-                    // Check overlap between task [start, end] and week [wk, wkEnd]
-                    if (end < wk || start > wkEnd) return '';
-                    // Task spans this week — determine if completed or remaining portion
-                    const overlapStart = start > wk ? start : wk;
-                    const overlapEnd = end < wkEnd ? end : wkEnd;
-                    const midPoint = new Date(start.getTime() + (end - start) * pct);
-                    if (overlapEnd <= midPoint) return '\u2588'; // █ completed
-                    if (overlapStart >= midPoint) return '\u2591'; // ░ remaining
-                    return '\u2593'; // ▓ partial (week straddles progress boundary)
+                // Build Gantt bar cells (daily)
+                const midPoint = new Date(start.getTime() + (end - start) * pct);
+                const ganttCells = days.map(dy => {
+                    if (dy < start || dy > end) return '';
+                    if (dy < midPoint) return '\u2588'; // █ completed
+                    if (dy > midPoint) return '\u2591'; // ░ remaining
+                    return '\u2593'; // ▓ progress boundary
                 });
 
                 return [
@@ -6229,7 +6217,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             });
 
             // Add legend row
-            const legendRow = ['', '"Legend: \u2588 = Done, \u2593 = Partial, \u2591 = Remaining"', ...Array(dataHeaders.length - 2 + 1 + weeks.length).fill('')];
+            const legendRow = ['', '"Legend: \u2588 = Done, \u2593 = Partial, \u2591 = Remaining"', ...Array(dataHeaders.length - 2 + 1 + days.length).fill('')];
 
             const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(',')), '', legendRow.join(',')].join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
