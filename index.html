@@ -1058,7 +1058,10 @@
 
                     <!-- Logs Tab -->
                     <div id="projTabLogs" class="hidden flex-1 flex flex-col min-h-0">
-                        <div class="flex justify-end mb-2 shrink-0">
+                        <div class="flex justify-between mb-2 shrink-0">
+                            <button onclick="showLogSummary()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-purple-400 rounded transition-colors flex items-center gap-1" title="AI summary of last 7 days">
+                                <span class="material-icons-round" style="font-size:16px">auto_awesome</span> Weekly Summary
+                            </button>
                             <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors flex items-center gap-1" title="Clear oldest half of logs">
                                 <span class="material-icons-round" style="font-size:16px">delete_sweep</span> Clear Oldest
                             </button>
@@ -1661,6 +1664,9 @@
 
         window.addEventListener('popstate', function(e) {
             if (!_navReady) return;
+            if (!document.getElementById('logSummaryModal').classList.contains('hidden')) {
+                closeLogSummary(); return;
+            }
             if (!document.getElementById('projectSummaryModal').classList.contains('hidden')) {
                 closeProjectSummary(); return;
             }
@@ -4202,6 +4208,130 @@
             showToast(`Cleared ${half} oldest entries. ${projectLogs.length} remaining.`, 'info');
         }
 
+        // ---- WEEKLY LOG SUMMARY (AI) ----
+
+        let _logSummaryCache = {};  // { projectId: { text, hash } }
+
+        function getLogSummaryHash(recentLogs, taskSnapshot) {
+            const str = JSON.stringify({ logs: recentLogs.length, tasks: taskSnapshot });
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return hash.toString(36);
+        }
+
+        async function showLogSummary(forceRegenerate) {
+            pushNavState('modal');
+            const modal = document.getElementById('logSummaryModal');
+            const content = document.getElementById('logSummaryContent');
+            const statusEl = document.getElementById('logSummaryStatus');
+            modal.classList.remove('hidden');
+
+            const now = new Date();
+            const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
+
+            const recentLogs = projectLogs.filter(l => new Date(l.timestamp) >= sevenDaysAgo);
+
+            if (recentLogs.length === 0) {
+                content.innerHTML = '<span class="text-slate-500">No log activity in the last 7 days.</span>';
+                statusEl.textContent = '';
+                return;
+            }
+
+            // Build task snapshot for context
+            const taskSnapshot = tasks.map(t => ({
+                name: t.name, progress: parseInt(t.progress) || 0,
+                status: getTaskStatus(t).label, assigned: (t.assigned || '').trim() || 'Unassigned'
+            }));
+
+            const projId = currentProjectId;
+            const currentHash = getLogSummaryHash(recentLogs, taskSnapshot);
+
+            if (!forceRegenerate) {
+                const cached = _logSummaryCache[projId];
+                if (cached && cached.hash === currentHash) {
+                    content.innerHTML = formatSummary(cached.text);
+                    statusEl.textContent = 'Cached — no changes';
+                    return;
+                }
+            }
+
+            if (checkSummaryRateLimit()) return;
+
+            content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Analyzing last 7 days of activity...</span></div>';
+            statusEl.textContent = '';
+
+            // Build context
+            const projName = currentProjectName || 'Project';
+            const dateRange = `${sevenDaysAgo.toISOString().slice(0, 10)} to ${now.toISOString().slice(0, 10)}`;
+
+            // Group logs by action type for summary
+            const actionCounts = {};
+            recentLogs.forEach(l => { actionCounts[l.action] = (actionCounts[l.action] || 0) + 1; });
+
+            let context = `--- WEEKLY LOG REPORT ---\n`;
+            context += `Project: ${projName}\n`;
+            context += `Period: ${dateRange} (last 7 days)\n`;
+            context += `Total activities logged: ${recentLogs.length}\n`;
+            context += `Activity breakdown: ${Object.entries(actionCounts).map(([k, v]) => `${k}: ${v}`).join(', ')}\n\n`;
+
+            context += `--- ACTIVITY LOG (chronological) ---\n`;
+            recentLogs.forEach(l => {
+                const d = new Date(l.timestamp);
+                const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                const taskLabel = l.taskName ? ` — ${l.taskName}` : '';
+                const detail = l.detail ? `: ${l.detail}` : '';
+                context += `- [${dateStr} ${timeStr}] ${l.action}${taskLabel}${detail}\n`;
+            });
+
+            context += `\n--- CURRENT TASK STATUS ---\n`;
+            const completed = taskSnapshot.filter(t => t.progress >= 100).length;
+            context += `Total: ${taskSnapshot.length} | Completed: ${completed} | In Progress: ${taskSnapshot.length - completed}\n`;
+            taskSnapshot.forEach((t, i) => {
+                context += `[${i + 1}] "${t.name}" — ${t.assigned} — ${t.status} (${t.progress}%)\n`;
+            });
+            context += `\n--- END ---`;
+
+            const prompt = `You are an expert project management assistant preparing a weekly progress report for senior management.
+
+${context}
+
+Based on the activity log and current task status above, generate a concise weekly progress report with these sections:
+
+1. **Executive Summary** — 2-3 sentence overview of what happened this week: key accomplishments, momentum, and overall trajectory.
+2. **Work Completed** — Specific tasks completed, milestones reached, or significant progress made (bullet points). Reference actual task names and progress changes from the logs.
+3. **In Progress** — What's actively being worked on, with current status and any notable updates from this week (bullet points).
+4. **Issues & Blockers** — Any concerns, overdue items, or areas that slowed down. If none, say "No blockers this week." (bullet points).
+5. **Next Steps** — What should be prioritized in the coming week based on current momentum and outstanding work (bullet points).
+
+Write for a management audience: concise, factual, focused on outcomes not process. Use task names and concrete progress numbers where available. Avoid jargon.`;
+
+            try {
+                const data = await callGemini({
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: { maxOutputTokens: 4096 }
+                });
+                const parts = data.candidates[0].content.parts;
+                const aiText = parts.filter(p => !p.thought).map(p => p.text).join('');
+
+                _logSummaryCache[projId] = { text: aiText, hash: currentHash };
+                incrementSummaryCount();
+
+                content.innerHTML = formatSummary(aiText);
+                statusEl.textContent = 'Generated just now';
+            } catch (err) {
+                console.error('Log summary error:', err);
+                content.innerHTML = `<div class="text-center py-8"><span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span><p class="text-red-400 text-sm">${escapeHtml(err.message)}</p></div>`;
+            }
+        }
+
+        function closeLogSummary() {
+            document.getElementById('logSummaryModal').classList.add('hidden');
+        }
+
         // ---- PROJECT INFO HUB — TAB SWITCHING & SAVE HELPER ----
 
         function switchProjectTab(tabName) {
@@ -6562,6 +6692,22 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
           </div>
         </div>
         <div id="projectSummaryContent" class="flex-1 overflow-y-auto px-5 py-4 text-xs text-slate-300 leading-relaxed"></div>
+      </div>
+    </div>
+    <div id="logSummaryModal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-2 md:p-6">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90vh] md:max-h-[80vh] flex flex-col shadow-2xl">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="material-icons-round text-purple-400">auto_awesome</span>
+            <span class="text-sm font-semibold text-white">Weekly Progress Summary</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="logSummaryStatus" class="text-[10px] text-slate-500"></span>
+            <button onclick="showLogSummary(true)" class="text-slate-400 hover:text-white" title="Regenerate"><span class="material-icons-round text-sm">refresh</span></button>
+            <button onclick="closeLogSummary()" class="text-slate-400 hover:text-white"><span class="material-icons-round text-sm">close</span></button>
+          </div>
+        </div>
+        <div id="logSummaryContent" class="flex-1 overflow-y-auto px-5 py-4 text-xs text-slate-300 leading-relaxed"></div>
       </div>
     </div>
 <div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
