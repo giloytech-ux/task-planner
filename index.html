@@ -2288,8 +2288,8 @@
                 const pct = parseInt(task.progress) || 0;
                 const gapPct = status.gap || (status.css === 'status-overdue' ? 100 - pct : 0);
 
-                const barGroup = wrapper.querySelector('.bar');
-                const bgRect = barGroup?.querySelector('rect:not(.bar-progress):not(.bar-remaining)');
+                const barGroup = wrapper.querySelector('.bar-group');
+                const bgRect = wrapper.querySelector('rect.bar');
 
                 // Background rect: status color when gap exists, dark gray otherwise
                 if (bgRect) {
