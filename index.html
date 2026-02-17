@@ -3516,6 +3516,8 @@
 
         function deleteFile(index) {
             const task = tasks[currentTaskIndex];
+            const file = task.files[index];
+            if (!file || !confirm(`Delete "${file.name}"?`)) return;
             autoLockTask(task);
             const removed = task.files.splice(index, 1);
             deleteFileData(removed[0]);
