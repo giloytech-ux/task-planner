@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import { createClient } from "jsr:@supabase/supabase-js@2"
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
@@ -17,6 +18,29 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // --- JWT verification ---
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: "Authorization required" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+
+  const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+  if (authError || !user) {
+    return new Response(
+      JSON.stringify({ error: "Invalid or expired token" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 

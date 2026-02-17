@@ -1299,8 +1299,6 @@
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
-        const DAILY_MESSAGE_LIMIT = 50;
-        const DAILY_SUMMARY_LIMIT = 30;
         let lastSummaryTime = 0;
         const SUMMARY_COOLDOWN_MS = 5000;
         const MAX_PROMPT_LENGTH = 2000;
@@ -2127,15 +2125,24 @@
 
         const GEMINI_PROXY_URL = SUPABASE_URL + '/functions/v1/gemini-proxy';
         async function callGemini(payload, model) {
+            // Auth gate: only authenticated users can use AI features
+            if (!currentUser) {
+                throw new Error('Sign in to use AI features.');
+            }
+
             // Token budget check for authenticated users
             const budget = getTokenBudget();
             if (budget && budget.remaining <= 0) {
                 throw new Error('Monthly token limit reached. Upgrade your plan or wait for the next billing cycle.');
             }
 
+            const { data: { session } } = await supabase.auth.getSession();
             const response = await fetch(GEMINI_PROXY_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
                 body: JSON.stringify({ payload, model: model || 'gemini-2.0-flash-lite' })
             });
             const data = await response.json();
@@ -5467,21 +5474,11 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 alert(`Please wait ${wait}s before generating another summary.`);
                 return true;
             }
-            // Authenticated users: token budget enforced in callGemini
-            if (currentUser) {
-                const budget = getTokenBudget();
-                if (budget && budget.remaining <= 0) {
-                    alert('Monthly token limit reached. Upgrade your plan or wait for the next billing cycle.');
-                    return true;
-                }
-                return false;
-            }
-            // Guests: localStorage daily count
-            const today = new Date().toISOString().slice(0, 10);
-            const countKey = `planner_summaryCount_${today}`;
-            const count = parseInt(localStorage.getItem(countKey) || '0', 10);
-            if (count >= DAILY_SUMMARY_LIMIT) {
-                alert(`Daily summary limit reached (${DAILY_SUMMARY_LIMIT}). Try again tomorrow.`);
+            // Token budget enforced in callGemini for authenticated users
+            // Guest calls are blocked by callGemini auth gate
+            const budget = getTokenBudget();
+            if (budget && budget.remaining <= 0) {
+                alert('Monthly token limit reached. Upgrade your plan or wait for the next billing cycle.');
                 return true;
             }
             return false;
@@ -5489,13 +5486,6 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         function incrementSummaryCount() {
             lastSummaryTime = Date.now();
-            // Only write localStorage counts for guests
-            if (!currentUser) {
-                const today = new Date().toISOString().slice(0, 10);
-                const countKey = `planner_summaryCount_${today}`;
-                const count = parseInt(localStorage.getItem(countKey) || '0', 10);
-                localStorage.setItem(countKey, String(count + 1));
-            }
         }
 
         async function toggleRowSummary(index, forceOpen = false) {
@@ -6143,26 +6133,8 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                 return;
             }
 
-            // Authenticated users: token budget enforced in callGemini
-            // Guests: localStorage daily count
-            if (!currentUser) {
-                const today = new Date().toISOString().slice(0, 10);
-                const countKey = `planner_msgCount_${currentProjectId}_${today}`;
-                const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
-                if (dailyCount >= DAILY_MESSAGE_LIMIT) {
-                    addToChat('model', `Daily limit reached (${DAILY_MESSAGE_LIMIT} messages). Try again tomorrow.`);
-                    return;
-                }
-            }
-
             // --- Passed all checks, commit to sending ---
             lastSendTime = now;
-            if (!currentUser) {
-                const today = new Date().toISOString().slice(0, 10);
-                const countKey = `planner_msgCount_${currentProjectId}_${today}`;
-                const dailyCount = parseInt(localStorage.getItem(countKey) || '0', 10);
-                localStorage.setItem(countKey, String(dailyCount + 1));
-            }
 
             addToChat('user', escapeHtml(prompt));
             input.value = '';
