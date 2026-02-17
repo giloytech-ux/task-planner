@@ -3853,7 +3853,19 @@
             // Auto-log changes
             if (field === 'progress' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
-                if (parseInt(value) === 100) addProjectLog('completed', task.id, task.name, null, '');
+                const action = parseInt(value) === 100 ? 'completed' : 'updated';
+                const cutoff = Date.now() - 120000;
+                const recentLog = projectLogs.slice().reverse().find(l =>
+                    (l.action === 'updated' || l.action === 'completed') && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
+                );
+                if (recentLog) {
+                    const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
+                    recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldValue || 0}% → ${value}%`;
+                    recentLog.action = action;
+                    recentLog.timestamp = new Date().toISOString();
+                } else {
+                    addProjectLog(action, task.id, task.name, null, `Progress: ${oldValue || 0}% → ${value}%`);
+                }
             } else if (field === 'start' || field === 'end') {
                 addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
                 addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
@@ -3999,8 +4011,17 @@
                                 addActivityEntry(task, 'system', `Progress changed from ${oldPct}% to ${currentProgress}%`);
                             }
 
-                            if (currentProgress === 100) {
-                                addProjectLog('completed', task.id, task.name, null, '');
+                            const action = currentProgress === 100 ? 'completed' : 'updated';
+                            const recentLog = projectLogs.slice().reverse().find(l =>
+                                (l.action === 'updated' || l.action === 'completed') && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
+                            );
+                            if (recentLog) {
+                                const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
+                                recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldPct}% → ${currentProgress}%`;
+                                recentLog.action = action;
+                                recentLog.timestamp = new Date().toISOString();
+                            } else {
+                                addProjectLog(action, task.id, task.name, null, `Progress: ${oldPct}% → ${currentProgress}%`);
                             }
                             renderMobileCards();
                             renderGantt();
