@@ -1981,6 +1981,7 @@
                     const focus = computeProjectFocus(project._tasks);
                     const pills = [];
                     if (focus.overdue > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`);
+                    if (focus.dueToday > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.dueToday} due today</span>`);
                     if (focus.attention > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`);
                     if (focus.overdueSoon > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20"><span class="w-1 h-1 rounded-full bg-orange-500"></span>${focus.overdueSoon} overdue soon</span>`);
                     if (focus.nearDeadline > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`);
@@ -2647,7 +2648,7 @@
         }
 
         function computeProjectFocus(projectTasks) {
-            const result = { overdue: 0, attention: 0, overdueSoon: 0, nearDeadline: 0, total: 0, items: [] };
+            const result = { overdue: 0, dueToday: 0, attention: 0, overdueSoon: 0, nearDeadline: 0, total: 0, items: [] };
             if (!projectTasks || projectTasks.length === 0) return result;
 
             const today = new Date();
@@ -2664,10 +2665,15 @@
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
                 if (status.css === 'status-overdue') {
-                    result.overdue++;
                     const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
-                    const label = status.label === 'Due Today' ? 'due today' : (daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`);
-                    result.items.push({ name: task.name, label, priority: 0, sort: daysOverdue });
+                    if (status.label === 'Due Today') {
+                        result.dueToday++;
+                        result.items.push({ name: task.name, label: 'due today', priority: 0, sort: daysOverdue });
+                    } else {
+                        result.overdue++;
+                        const label = daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`;
+                        result.items.push({ name: task.name, label, priority: 0, sort: daysOverdue });
+                    }
                 } else if (status.label === 'Attention') {
                     result.attention++;
                     result.items.push({ name: task.name, label: `${daysUntilEnd}d left · needs +${status.gap}%`, priority: 1, sort: status.gap });
@@ -2680,7 +2686,7 @@
                 }
             });
 
-            result.total = result.overdue + result.attention + result.overdueSoon + result.nearDeadline;
+            result.total = result.overdue + result.dueToday + result.attention + result.overdueSoon + result.nearDeadline;
             result.items.sort((a, b) => {
                 if (a.priority !== b.priority) return a.priority - b.priority;
                 if (a.priority === 2) return a.sort - b.sort;
