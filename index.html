@@ -364,6 +364,21 @@
             opacity: 1;
             filter: brightness(1.3);
         }
+        #meetingForm.meeting-fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            border-radius: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            background: #0f172a;
+            overflow-y: auto;
+        }
+        #meetingForm.meeting-fullscreen #mtgNotes {
+            flex: 1;
+            min-height: 200px;
+        }
         #tdProgress {
             -webkit-appearance: none;
             appearance: none;
@@ -849,9 +864,14 @@
                                 <div class="td-field-label">Attendees</div>
                                 <input type="text" id="mtgAttendees" class="td-input" placeholder="e.g., John, Sarah, Mike">
                             </div>
-                            <div>
-                                <div class="td-field-label">Notes</div>
-                                <textarea id="mtgNotes" class="td-textarea" rows="6" placeholder="Meeting notes, decisions, discussion points..."></textarea>
+                            <div class="flex flex-col flex-1">
+                                <div class="flex items-center justify-between">
+                                    <div class="td-field-label">Notes</div>
+                                    <button onclick="toggleMeetingFullscreen()" id="mtgExpandBtn" class="text-slate-500 hover:text-slate-200 transition-colors p-1" title="Expand">
+                                        <span class="material-icons-round text-sm">fullscreen</span>
+                                    </button>
+                                </div>
+                                <textarea id="mtgNotes" class="td-textarea flex-1" rows="6" placeholder="Meeting notes, decisions, discussion points..."></textarea>
                             </div>
                             <div class="flex justify-end gap-2">
                                 <button onclick="cancelMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button>
@@ -3650,11 +3670,22 @@
             document.getElementById('meetingForm').classList.remove('hidden');
         }
 
+        function toggleMeetingFullscreen() {
+            const form = document.getElementById('meetingForm');
+            const btn = document.getElementById('mtgExpandBtn');
+            const isFullscreen = form.classList.toggle('meeting-fullscreen');
+            btn.innerHTML = `<span class="material-icons-round text-sm">${isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>`;
+            btn.title = isFullscreen ? 'Exit fullscreen' : 'Expand';
+        }
+
         function cancelMeeting() {
             const task = tasks[currentTaskIndex];
             const savedMeetingId = editingMeetingIndex != null && task?.meetings?.[editingMeetingIndex] ? task.meetings[editingMeetingIndex].id : null;
             editingMeetingIndex = null;
-            document.getElementById('meetingForm').classList.add('hidden');
+            const form = document.getElementById('meetingForm');
+            form.classList.remove('meeting-fullscreen');
+            form.classList.add('hidden');
+            document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
             scrollToMeeting(savedMeetingId);
         }
 
@@ -3682,7 +3713,10 @@
             }
 
             editingMeetingIndex = null;
-            document.getElementById('meetingForm').classList.add('hidden');
+            const saveForm = document.getElementById('meetingForm');
+            saveForm.classList.remove('meeting-fullscreen');
+            saveForm.classList.add('hidden');
+            document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
             renderMeetingsTab(task);
             scrollToMeeting(savedMeetingId);
             updateRowIndicators(currentTaskIndex);
