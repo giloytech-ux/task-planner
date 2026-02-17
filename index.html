@@ -466,6 +466,9 @@
                 <button onclick="exportCSV()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]" title="Export CSV">
                     <span class="material-icons-round text-sm">download</span> CSV
                 </button>
+                <button onclick="exportGanttCSV()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]" title="Export Gantt Chart CSV">
+                    <span class="material-icons-round text-sm">bar_chart</span> Gantt
+                </button>
                 <button onclick="exportPDF()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]" title="Export PDF">
                     <span class="material-icons-round text-sm">picture_as_pdf</span> PDF
                 </button>
@@ -6120,14 +6123,14 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
 
             const projectName = await getProjectName();
 
-            const headers = ['ID', 'Task Name', 'Start', 'End', 'Progress', 'Dependencies'];
+            const headers = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Progress'];
             const rows = tasks.map(t => [
                 t.id,
                 '"' + (t.name || '').replace(/"/g, '""') + '"',
+                '"' + ((t.assigned || '').trim() || 'Unassigned').replace(/"/g, '""') + '"',
                 t.start,
                 t.end,
-                t.progress + '%',
-                t.dependencies || ''
+                t.progress + '%'
             ]);
 
             const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -6136,6 +6139,55 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
 
             const date = new Date().toISOString().slice(0, 10);
             const filename = `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_${date}.csv`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // =============================================
+        // Gantt CSV Export
+        // =============================================
+
+        async function exportGanttCSV() {
+            if (tasks.length === 0) {
+                alert('No tasks to export.');
+                return;
+            }
+
+            const projectName = await getProjectName();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const headers = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Duration (days)', 'Progress', 'Status', 'Days Remaining', 'Priority'];
+            const rows = tasks.map(t => {
+                const start = new Date(t.start + 'T00:00:00');
+                const end = new Date(t.end + 'T00:00:00');
+                const duration = Math.max(1, Math.ceil((end - start) / 86400000));
+                const daysRemaining = Math.ceil((end - today) / 86400000);
+                const status = getTaskStatus(t);
+                return [
+                    t.id,
+                    '"' + (t.name || '').replace(/"/g, '""') + '"',
+                    '"' + ((t.assigned || '').trim() || 'Unassigned').replace(/"/g, '""') + '"',
+                    t.start,
+                    t.end,
+                    duration,
+                    t.progress + '%',
+                    '"' + status.label + '"',
+                    daysRemaining,
+                    t.priority || 'medium'
+                ];
+            });
+
+            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const date = new Date().toISOString().slice(0, 10);
+            const filename = `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_Gantt_${date}.csv`;
 
             const a = document.createElement('a');
             a.href = url;
@@ -6209,8 +6261,8 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             pdf.setTextColor(30, 41, 59);
             pdf.text('Task Details', 15, 20);
 
-            const colWidths = [15, 90, 35, 35, 25, 35];
-            const colHeaders = ['ID', 'Task Name', 'Start', 'End', 'Progress', 'Dependencies'];
+            const colWidths = [15, 75, 45, 35, 35, 25];
+            const colHeaders = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Progress'];
             let y = 30;
 
             pdf.setFontSize(9);
@@ -6232,7 +6284,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                     y = 20;
                 }
                 x = 15;
-                const rowData = [task.id, task.name, task.start, task.end, task.progress + '%', task.dependencies || '-'];
+                const rowData = [task.id, task.name, (task.assigned || '').trim() || 'Unassigned', task.start, task.end, task.progress + '%'];
                 rowData.forEach((val, i) => {
                     const cellText = String(val).substring(0, 50);
                     pdf.text(cellText, x + 2, y);
