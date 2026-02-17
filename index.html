@@ -548,6 +548,7 @@
                         <div class="flex items-center gap-2">
                             <span class="material-icons-round text-sm text-slate-500">sort</span>
                             <select id="projectSort" onchange="handleProjectSort()" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 min-h-[44px] cursor-pointer">
+                                <option value="urgency">Urgency</option>
                                 <option value="updated">Last Updated</option>
                                 <option value="deadline">Deadline</option>
                                 <option value="name">Name (A-Z)</option>
@@ -1236,7 +1237,7 @@
         let currentProjectName = ''; // cached for export functions in guest mode
 
         // Dashboard state
-        let dashboardSort = localStorage.getItem('planner_sort') || 'deadline';
+        let dashboardSort = localStorage.getItem('planner_sort') || 'urgency';
         let showArchived = false;
         function getArchivedIds() {
             try { return new Set(JSON.parse(localStorage.getItem('planner_archived') || '[]')); }
@@ -2116,6 +2117,17 @@
                 filtered = filtered.filter(p => p.name.toLowerCase().includes(searchTerm));
             }
 
+            // Ensure _tasks loaded for focus/urgency (guest mode)
+            if (!currentUser) {
+                filtered.forEach(p => {
+                    if (!p._tasks) {
+                        const raw = localStorage.getItem('planner_proj_' + p.id);
+                        const parsed = raw ? JSON.parse(raw) : { tasks: [] };
+                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+                    }
+                });
+            }
+
             // Sort
             filtered = sortProjects(filtered, dashboardSort);
 
@@ -2145,13 +2157,6 @@
                     ? Math.round((project.completedCount / project.taskCount) * 100)
                     : 0;
                 const updatedStr = timeAgo(project.updatedAt);
-
-                // Load tasks for focus computation (guest mode)
-                if (!currentUser && !project._tasks) {
-                    const raw = localStorage.getItem('planner_proj_' + project.id);
-                    const parsed = raw ? JSON.parse(raw) : { tasks: [] };
-                    project._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
-                }
 
                 // Focus summary
                 let focusHtml = '';
@@ -2264,9 +2269,24 @@
         }
 
         // --- Dashboard: Sort ---
+        function getProjectUrgencyScore(project) {
+            const t = project._tasks;
+            if (!t || t.length === 0) return 0;
+            const f = computeProjectFocus(t);
+            return f.overdue * 1000 + f.dueToday * 500 + f.attention * 100 + f.overdueSoon * 50 + f.nearDeadline * 10;
+        }
+
         function sortProjects(projects, sortKey) {
             const sorted = [...projects];
             switch (sortKey) {
+                case 'urgency':
+                    sorted.sort((a, b) => {
+                        const ua = getProjectUrgencyScore(a);
+                        const ub = getProjectUrgencyScore(b);
+                        if (ua !== ub) return ub - ua;
+                        return new Date(b.updatedAt) - new Date(a.updatedAt);
+                    });
+                    break;
                 case 'deadline':
                     sorted.sort((a, b) => {
                         if (!a.deadline && !b.deadline) return 0;
