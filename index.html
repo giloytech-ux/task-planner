@@ -1376,7 +1376,9 @@
             if (!error) return false;
             const code = error.code || '';
             const status = error.status || error.statusCode || 0;
-            return status === 401 || status === 403 || code === '42501' || code === 'PGRST301';
+            const msg = (error.message || '').toLowerCase();
+            return status === 401 || status === 403 || code === '42501' || code === 'PGRST301'
+                || msg.includes('jwt expired') || msg.includes('token') || msg.includes('refresh_token');
         }
 
         function handleSessionExpired() {
@@ -1632,7 +1634,11 @@
                     .from('projects')
                     .select('*')
                     .order('created_at');
-                if (error) { console.error('loadRegistry error:', error); return []; }
+                if (error) {
+                    console.error('loadRegistry error:', error);
+                    if (isAuthError(error)) { handleSessionExpired(); return []; }
+                    return [];
+                }
 
                 // Get task counts + deadline in one query
                 const { data: allTasks } = await supabase
@@ -1675,24 +1681,30 @@
 
         async function loadProject(id) {
             if (currentUser) {
-                const { data: taskData } = await supabase
+                const { data: taskData, error: taskError } = await supabase
                     .from('tasks')
                     .select('*')
                     .eq('project_id', id)
                     .order('sort_order');
+                if (taskError) {
+                    console.error('loadProject tasks error:', taskError);
+                    if (isAuthError(taskError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
+                }
 
-                const { data: chatData } = await supabase
+                const { data: chatData, error: chatError } = await supabase
                     .from('chat_history')
                     .select('*')
                     .eq('project_id', id)
                     .order('created_at');
+                if (chatError && isAuthError(chatError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
 
                 // Fetch project metadata (description, meetings, checklist, activity, files, logs)
-                const { data: projData } = await supabase
+                const { data: projData, error: projError } = await supabase
                     .from('projects')
                     .select('metadata')
                     .eq('id', id)
                     .single();
+                if (projError && isAuthError(projError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
                 const meta = projData?.metadata || {};
 
                 const rawTasks = (taskData || []).map(t => ({
@@ -1845,8 +1857,14 @@
                         }
                     }
                 } else if (_deletes.length === 0) {
-                    // No tasks left and no pending deletes stuck — safe to delete all rows
-                    await supabase.from('tasks').delete().eq('project_id', _projId);
+                    // Only delete all rows if we confirmed tasks loaded successfully
+                    // (prevents wiping data when load failed due to expired session)
+                    const { count } = await supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('project_id', _projId);
+                    if (count !== null && count > 0) {
+                        console.warn('saveProject: skipping bulk delete — tasks exist in DB but local array is empty (possible load failure)');
+                    } else {
+                        await supabase.from('tasks').delete().eq('project_id', _projId);
+                    }
                 }
 
                 // Replace chat history (trimmed to last 20 exchanges)
@@ -5995,8 +6013,12 @@ Be concise and actionable. Focus on insights, not just restating data.`;
         // Listen for auth state changes (handles token refresh, etc.)
         if (supabase) {
             supabase.auth.onAuthStateChange((event, session) => {
-                if (event === 'SIGNED_OUT') {
-                    currentUser = null;
+                if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+                    if (currentUser) {
+                        currentUser = null;
+                        userProfile = null;
+                        showAuthView();
+                    }
                 } else if (session && session.user) {
                     currentUser = session.user;
                 }
