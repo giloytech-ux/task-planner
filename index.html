@@ -379,6 +379,21 @@
             flex: 1;
             min-height: 200px;
         }
+        #projMeetingForm.meeting-fullscreen {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            border-radius: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            background: #0f172a;
+            overflow-y: auto;
+        }
+        #projMeetingForm.meeting-fullscreen #projMtgNotes {
+            flex: 1;
+            min-height: 200px;
+        }
         #tdProgress {
             -webkit-appearance: none;
             appearance: none;
@@ -637,9 +652,9 @@
                         <span class="material-icons-round" style="font-size:20px">auto_awesome</span>
                         <span class="text-xs hidden md:inline">AI Summary</span>
                     </button>
-                    <button onclick="openProjectLogs()" class="w-10 h-10 md:w-8 md:h-8 flex items-center gap-1 text-slate-400 hover:text-cyan-400 transition-colors justify-center rounded-lg" title="Project Logs">
-                        <span class="material-icons-round" style="font-size:20px">history</span>
-                        <span class="text-xs hidden md:inline">Logs</span>
+                    <button onclick="openProjectLogs()" class="w-10 h-10 md:w-8 md:h-8 flex items-center gap-1 text-slate-400 hover:text-cyan-400 transition-colors justify-center rounded-lg" title="Project Info">
+                        <span class="material-icons-round" style="font-size:20px">info</span>
+                        <span class="text-xs hidden md:inline">Info</span>
                     </button>
                 </div>
 
@@ -905,21 +920,113 @@
                 </div>
             </div>
 
-            <!-- Project Logs View -->
+            <!-- Project Info Hub -->
             <div id="projectLogsView" class="flex-1 flex flex-col overflow-hidden hidden" style="position:absolute;inset:0;z-index:40;background:#0f172a">
                 <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
                     <button onclick="closeProjectLogs()" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-lg">
                         <span class="material-icons-round">arrow_back</span>
                     </button>
                     <div class="flex-1 min-w-0">
-                        <h2 id="projectLogsTitle" class="text-sm font-semibold text-white truncate">Project Logs</h2>
-                        <span id="projectLogsCount" class="text-[11px] text-slate-500">0 entries</span>
+                        <h2 id="projectLogsTitle" class="text-sm font-semibold text-white truncate">Project Info</h2>
                     </div>
-                    <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors" title="Clear all logs">
-                        <span class="material-icons-round" style="font-size:16px">delete_sweep</span>
-                    </button>
                 </div>
-                <div id="projectLogsTimeline" class="flex-1 overflow-y-auto px-4 py-4 space-y-4"></div>
+                <div class="td-tabs flex items-center px-3 md:px-5 bg-slate-900/50 overflow-x-auto shrink-0">
+                    <button class="td-tab proj-tab active whitespace-nowrap" onclick="switchProjectTab('details')">Details</button>
+                    <button class="td-tab proj-tab whitespace-nowrap" onclick="switchProjectTab('meetings')">Meetings <span id="projMeetingsCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab proj-tab whitespace-nowrap" onclick="switchProjectTab('checklist')">Checklist <span id="projChecklistCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab proj-tab whitespace-nowrap" onclick="switchProjectTab('activitylog')">Activity Log <span id="projActivityCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab proj-tab whitespace-nowrap" onclick="switchProjectTab('files')">Files <span id="projFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                    <button class="td-tab proj-tab whitespace-nowrap" onclick="switchProjectTab('logs')">Logs <span id="projLogsCount" class="text-[10px] ml-1 opacity-60"></span></button>
+                </div>
+                <div class="flex-1 overflow-hidden flex flex-col px-4 md:px-5 py-4">
+
+                    <!-- Details Tab -->
+                    <div id="projTabDetails" class="flex-1 overflow-y-auto">
+                        <div class="td-field-label">Project Description / Notes</div>
+                        <textarea id="projDescriptionInput" class="td-textarea w-full" rows="10" placeholder="Add project-level notes, goals, context..." onchange="saveProjectDescription()" onblur="saveProjectDescription()"></textarea>
+                    </div>
+
+                    <!-- Meetings Tab -->
+                    <div id="projTabMeetings" class="hidden flex-1 overflow-y-auto min-h-0">
+                        <button onclick="showAddProjectMeeting()" class="mb-4 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1 min-h-[44px]">
+                            <span class="material-icons-round text-sm">add</span> Add Meeting
+                        </button>
+                        <div id="projMeetingForm" class="hidden glass-panel rounded-xl p-4 mb-4 space-y-3">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <div class="td-field-label">Title</div>
+                                    <input type="text" id="projMtgTitle" class="td-input" placeholder="Meeting title">
+                                </div>
+                                <div>
+                                    <div class="td-field-label">Date</div>
+                                    <input type="date" id="projMtgDate" class="td-input">
+                                </div>
+                            </div>
+                            <div>
+                                <div class="td-field-label">Attendees</div>
+                                <input type="text" id="projMtgAttendees" class="td-input" placeholder="e.g., John, Sarah, Mike">
+                            </div>
+                            <div class="flex flex-col flex-1">
+                                <div class="flex items-center justify-between">
+                                    <div class="td-field-label">Notes</div>
+                                    <button onclick="toggleProjectMeetingFullscreen()" id="projMtgExpandBtn" class="text-slate-500 hover:text-slate-200 transition-colors p-1" title="Expand">
+                                        <span class="material-icons-round text-sm">fullscreen</span>
+                                    </button>
+                                </div>
+                                <textarea id="projMtgNotes" class="td-textarea flex-1" rows="6" placeholder="Meeting notes, decisions, discussion points..."></textarea>
+                            </div>
+                            <div class="flex justify-end gap-2">
+                                <button onclick="cancelProjectMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button>
+                                <button onclick="saveProjectMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Save Meeting</button>
+                            </div>
+                        </div>
+                        <div id="projMeetingsList" class="space-y-3"></div>
+                    </div>
+
+                    <!-- Checklist Tab -->
+                    <div id="projTabChecklist" class="hidden flex-1 flex flex-col min-h-0">
+                        <div id="projChecklistItems" class="flex-1 overflow-y-auto mb-3"></div>
+                        <div class="flex-shrink-0">
+                            <div class="flex gap-2">
+                                <input type="text" id="projChecklistInput" class="td-input flex-1" placeholder="Add a checklist item..." onkeydown="if(event.key==='Enter')addProjectChecklistItem()">
+                                <button onclick="addProjectChecklistItem()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Add</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Activity Log Tab -->
+                    <div id="projTabActivity" class="hidden flex-1 flex flex-col min-h-0">
+                        <div id="projActivityTimeline" class="flex-1 overflow-y-auto mb-3"></div>
+                        <div class="flex-shrink-0">
+                            <textarea id="projCommentInput" class="td-textarea w-full" rows="3" placeholder="Write a project activity log entry..."></textarea>
+                            <div class="flex justify-end mt-2">
+                                <button onclick="addProjectComment()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Post</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Files Tab -->
+                    <div id="projTabFiles" class="hidden flex-1 overflow-y-auto">
+                        <div id="projFileDropZone" class="file-drop-zone mb-4" onclick="document.getElementById('projFileInput').click()">
+                            <span class="material-icons-round text-3xl text-slate-500 mb-2">cloud_upload</span>
+                            <p class="text-sm text-slate-400">Drop files here or click to upload</p>
+                            <p class="text-[10px] text-slate-600 mt-1">Max 5 MB per file. Images, PDFs, documents.</p>
+                            <input type="file" id="projFileInput" class="hidden" multiple onchange="handleProjectFileUpload(this.files)">
+                        </div>
+                        <div id="projFileGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+                    </div>
+
+                    <!-- Logs Tab -->
+                    <div id="projTabLogs" class="hidden flex-1 flex flex-col min-h-0">
+                        <div class="flex justify-end mb-2 shrink-0">
+                            <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors flex items-center gap-1" title="Clear all logs">
+                                <span class="material-icons-round" style="font-size:16px">delete_sweep</span> Clear
+                            </button>
+                        </div>
+                        <div id="projectLogsTimeline" class="flex-1 overflow-y-auto space-y-4"></div>
+                    </div>
+
+                </div>
             </div>
 
             <!-- Loading Overlay -->
@@ -1100,6 +1207,12 @@
         let tasks = [];
         let history = [];
         let projectLogs = [];
+        let projectDescription = '';
+        let projectMeetings = [];
+        let projectChecklist = [];
+        let projectActivity = [];
+        let projectFiles = [];
+        let editingProjectMeetingIndex = null;
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
@@ -1489,6 +1602,9 @@
             if (mobileSidebarOpen) {
                 closeMobileSidebar(); return;
             }
+            if (!document.getElementById('projMeetingForm').classList.contains('hidden')) {
+                cancelProjectMeeting(); return;
+            }
             if (!document.getElementById('projectLogsView').classList.contains('hidden')) {
                 closeProjectLogs(); return;
             }
@@ -1723,7 +1839,12 @@
                 localStorage.setItem('planner_proj_' + _projId, JSON.stringify({
                     tasks: tasksForSave,
                     history: trimmedHistory,
-                    logs: _logs
+                    logs: _logs,
+                    projectDescription,
+                    projectMeetings,
+                    projectChecklist,
+                    projectActivity,
+                    projectFiles: (projectFiles || []).map(f => ({ ...f, data: undefined }))
                 }));
                 updateRegistryMetadataLocal();
             }
@@ -1763,7 +1884,7 @@
                     updatedAt: new Date().toISOString()
                 });
                 saveRegistryLocal(registry);
-                localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [], logs: [] }));
+                localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [], logs: [], projectDescription: '', projectMeetings: [], projectChecklist: [], projectActivity: [], projectFiles: [] }));
                 return id;
             }
         }
@@ -2075,8 +2196,8 @@
                         <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
                             <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
                         </button>
-                        <button onclick="event.stopPropagation(); openProjectLogs('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-cyan-400 rounded transition-colors" title="Project Logs">
-                            <span class="material-icons-round" style="font-size:18px">history</span>
+                        <button onclick="event.stopPropagation(); openProjectLogs('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-cyan-400 rounded transition-colors" title="Project Info">
+                            <span class="material-icons-round" style="font-size:18px">info</span>
                         </button>
                         <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
                             <span class="material-icons-round" style="font-size:18px">edit</span>
@@ -2252,6 +2373,11 @@
             tasks = [];
             history = [];
             projectLogs = [];
+            projectDescription = '';
+            projectMeetings = [];
+            projectChecklist = [];
+            projectActivity = [];
+            projectFiles = [];
             _pendingDeletes = [];
 
             closeMobileSidebar();
@@ -2280,6 +2406,15 @@
             tasks = data.tasks || [];
             history = data.history || [];
             projectLogs = data.logs || [];
+            projectDescription = data.projectDescription || '';
+            projectMeetings = data.projectMeetings || [];
+            projectChecklist = data.projectChecklist || [];
+            projectActivity = data.projectActivity || [];
+            projectFiles = data.projectFiles || [];
+            // Hydrate project file data from storage
+            for (const file of projectFiles) {
+                if (!file.data) file.data = await loadFileData(file);
+            }
             _pendingDeletes = [];
 
             // Update UI
@@ -3295,8 +3430,8 @@
             const tabs = ['details', 'meetings', 'checklist', 'activitylog', 'files'];
             const tabIds = { details: 'tabDetails', meetings: 'tabMeetings', checklist: 'tabChecklist', activitylog: 'tabActivityLog', files: 'tabFiles' };
 
-            // Toggle tab buttons
-            document.querySelectorAll('.td-tab').forEach((btn, i) => {
+            // Toggle tab buttons (only task-level tabs, not project tabs)
+            document.querySelectorAll('.td-tab:not(.proj-tab)').forEach((btn, i) => {
                 btn.classList.toggle('active', tabs[i] === tabName);
             });
             // Toggle tab content
@@ -3562,7 +3697,8 @@
             container.innerHTML = '';
 
             const count = projectLogs.length;
-            document.getElementById('projectLogsCount').textContent = count + ' entr' + (count === 1 ? 'y' : 'ies');
+            const logsCountEl = document.getElementById('projLogsCount');
+            if (logsCountEl) logsCountEl.textContent = count ? '(' + count + ')' : '';
 
             if (count === 0) {
                 container.innerHTML = '<p class="text-sm text-slate-500 text-center py-12">No activity recorded yet.</p>';
@@ -3619,16 +3755,25 @@
                 const data = await loadProject(projectId);
                 projectLogs = data.logs || [];
                 tasks = data.tasks || [];
-                document.getElementById('projectLogsTitle').textContent = (projectName || 'Project') + ' Logs';
+                projectDescription = data.projectDescription || '';
+                projectMeetings = data.projectMeetings || [];
+                projectChecklist = data.projectChecklist || [];
+                projectActivity = data.projectActivity || [];
+                projectFiles = data.projectFiles || [];
+                // Hydrate project file data from storage
+                for (const file of projectFiles) {
+                    if (!file.data) file.data = await loadFileData(file);
+                }
+                document.getElementById('projectLogsTitle').textContent = (projectName || 'Project') + ' Info';
                 // Store the project ID so we can reference it
                 document.getElementById('projectLogsView').dataset.projectId = projectId;
             } else {
                 // Opening from Gantt (inside a project)
                 _logsSource = 'gantt';
-                document.getElementById('projectLogsTitle').textContent = (currentProjectName || 'Project') + ' Logs';
+                document.getElementById('projectLogsTitle').textContent = (currentProjectName || 'Project') + ' Info';
             }
             document.getElementById('projectLogsView').classList.remove('hidden');
-            renderProjectLogs();
+            switchProjectTab('details');
             pushNavState('projectLogs');
         }
 
@@ -3637,6 +3782,11 @@
             if (_logsSource === 'dashboard') {
                 projectLogs = [];
                 tasks = [];
+                projectDescription = '';
+                projectMeetings = [];
+                projectChecklist = [];
+                projectActivity = [];
+                projectFiles = [];
             }
             _logsSource = null;
         }
@@ -3644,21 +3794,465 @@
         function clearProjectLogs() {
             if (!confirm('Clear all project logs?')) return;
             projectLogs = [];
-            if (_logsSource === 'dashboard') {
-                // Save cleared logs back to the project
+            saveProjectFromHub();
+            renderProjectLogs();
+        }
+
+        // ---- PROJECT INFO HUB — TAB SWITCHING & SAVE HELPER ----
+
+        function switchProjectTab(tabName) {
+            const tabs = ['details', 'meetings', 'checklist', 'activitylog', 'files', 'logs'];
+            const tabIds = { details: 'projTabDetails', meetings: 'projTabMeetings', checklist: 'projTabChecklist', activitylog: 'projTabActivity', files: 'projTabFiles', logs: 'projTabLogs' };
+            document.querySelectorAll('.proj-tab').forEach((btn, i) => {
+                btn.classList.toggle('active', tabs[i] === tabName);
+            });
+            tabs.forEach(t => {
+                document.getElementById(tabIds[t]).classList.toggle('hidden', t !== tabName);
+            });
+            if (tabName === 'details') renderProjectDetailsTab();
+            else if (tabName === 'meetings') renderProjectMeetingsTab();
+            else if (tabName === 'checklist') renderProjectChecklistTab();
+            else if (tabName === 'activitylog') renderProjectActivityTab();
+            else if (tabName === 'files') renderProjectFilesTab();
+            else if (tabName === 'logs') renderProjectLogs();
+        }
+
+        function saveProjectFromHub() {
+            if (_logsSource === 'gantt' || (!_logsSource && currentProjectId)) {
+                saveProject();
+            } else if (_logsSource === 'dashboard') {
                 const pid = document.getElementById('projectLogsView').dataset.projectId;
                 if (pid) {
                     const raw = localStorage.getItem('planner_proj_' + pid);
                     if (raw) {
                         const parsed = JSON.parse(raw);
-                        parsed.logs = [];
+                        parsed.logs = projectLogs;
+                        parsed.projectDescription = projectDescription;
+                        parsed.projectMeetings = projectMeetings;
+                        parsed.projectChecklist = projectChecklist;
+                        parsed.projectActivity = projectActivity;
+                        parsed.projectFiles = (projectFiles || []).map(f => ({ ...f, data: undefined }));
                         localStorage.setItem('planner_proj_' + pid, JSON.stringify(parsed));
                     }
                 }
-            } else {
-                saveProject();
             }
-            renderProjectLogs();
+        }
+
+        // ---- PROJECT DETAILS TAB ----
+
+        function renderProjectDetailsTab() {
+            document.getElementById('projDescriptionInput').value = projectDescription || '';
+        }
+
+        function saveProjectDescription() {
+            projectDescription = document.getElementById('projDescriptionInput').value;
+            saveProjectFromHub();
+        }
+
+        // ---- PROJECT MEETINGS TAB ----
+
+        function renderProjectMeetingsTab() {
+            const container = document.getElementById('projMeetingsList');
+            container.innerHTML = '';
+            const meetings = projectMeetings || [];
+            const countEl = document.getElementById('projMeetingsCount');
+            if (countEl) countEl.textContent = meetings.length ? '(' + meetings.length + ')' : '';
+
+            if (meetings.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No meetings logged yet.</p>';
+                return;
+            }
+
+            meetings.forEach((mtg, i) => {
+                const card = document.createElement('div');
+                card.setAttribute('data-proj-meeting-id', mtg.id);
+                card.className = 'meeting-card cursor-pointer hover:border-slate-600';
+                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editProjectMeeting(i); };
+                const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="material-icons-round text-sm text-blue-400">event</span>
+                                <span class="text-xs text-slate-400">${dateStr}</span>
+                            </div>
+                            <h4 class="text-sm font-semibold text-white mb-2">${escapeHtml(mtg.title)}</h4>
+                            ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
+                            ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical">${escapeHtml(mtg.notes)}</p>` : ''}
+                        </div>
+                        <div class="flex gap-1 flex-shrink-0">
+                            <button onclick="event.stopPropagation(); deleteProjectMeeting(${i})" class="meeting-delete-btn p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+        }
+
+        function showAddProjectMeeting() {
+            pushNavState('modal');
+            editingProjectMeetingIndex = null;
+            document.getElementById('projMtgTitle').value = '';
+            document.getElementById('projMtgDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('projMtgAttendees').value = '';
+            document.getElementById('projMtgNotes').value = '';
+            document.getElementById('projMeetingForm').classList.remove('hidden');
+        }
+
+        function editProjectMeeting(index) {
+            const mtg = projectMeetings[index];
+            editingProjectMeetingIndex = index;
+            document.getElementById('projMtgTitle').value = mtg.title;
+            document.getElementById('projMtgDate').value = mtg.date;
+            document.getElementById('projMtgAttendees').value = mtg.attendees || '';
+            document.getElementById('projMtgNotes').value = mtg.notes || '';
+            document.getElementById('projMeetingForm').classList.remove('hidden');
+        }
+
+        function toggleProjectMeetingFullscreen() {
+            const form = document.getElementById('projMeetingForm');
+            const btn = document.getElementById('projMtgExpandBtn');
+            const isFullscreen = form.classList.toggle('meeting-fullscreen');
+            btn.innerHTML = `<span class="material-icons-round text-sm">${isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>`;
+            btn.title = isFullscreen ? 'Exit fullscreen' : 'Expand';
+        }
+
+        function cancelProjectMeeting() {
+            editingProjectMeetingIndex = null;
+            const form = document.getElementById('projMeetingForm');
+            form.classList.remove('meeting-fullscreen');
+            form.classList.add('hidden');
+            document.getElementById('projMtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+        }
+
+        function saveProjectMeeting() {
+            const title = document.getElementById('projMtgTitle').value.trim();
+            const date = document.getElementById('projMtgDate').value;
+            const attendees = document.getElementById('projMtgAttendees').value.trim();
+            const notes = document.getElementById('projMtgNotes').value.trim();
+            if (!title || !date) { alert('Title and date are required.'); return; }
+
+            const mtgData = {
+                id: editingProjectMeetingIndex !== null ? projectMeetings[editingProjectMeetingIndex].id : Date.now().toString(36),
+                title, date, attendees, notes
+            };
+
+            if (editingProjectMeetingIndex !== null) {
+                projectMeetings[editingProjectMeetingIndex] = mtgData;
+            } else {
+                projectMeetings.push(mtgData);
+            }
+
+            editingProjectMeetingIndex = null;
+            const form = document.getElementById('projMeetingForm');
+            form.classList.remove('meeting-fullscreen');
+            form.classList.add('hidden');
+            document.getElementById('projMtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+            saveProjectFromHub();
+            renderProjectMeetingsTab();
+        }
+
+        function deleteProjectMeeting(index) {
+            if (!confirm('Delete this meeting?')) return;
+            projectMeetings.splice(index, 1);
+            saveProjectFromHub();
+            renderProjectMeetingsTab();
+        }
+
+        // ---- PROJECT CHECKLIST TAB ----
+
+        function renderProjectChecklistTab() {
+            const container = document.getElementById('projChecklistItems');
+            container.innerHTML = '';
+            const items = projectChecklist || [];
+            const countEl = document.getElementById('projChecklistCount');
+            if (countEl) countEl.textContent = items.length ? '(' + items.length + ')' : '';
+
+            items.forEach(item => {
+                if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                if (!item.timestamp) item.timestamp = new Date().toISOString();
+            });
+
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No checklist items yet.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'checklist-item' + (item.checked ? ' checked' : '');
+                div.innerHTML = `
+                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleProjectChecklistItem('${item.id}')">
+                    <label id="projCl-display-${item.id}" class="flex-1 text-sm text-slate-300 cursor-pointer" onclick="editProjectChecklistItem('${item.id}')">${escapeHtml(item.text)}</label>
+                    <div id="projCl-edit-${item.id}" class="hidden flex-1 flex gap-2">
+                        <input type="text" class="td-input flex-1 text-sm" value="${escapeHtml(item.text)}" onkeydown="if(event.key==='Enter')saveProjectChecklistEdit('${item.id}');if(event.key==='Escape')cancelProjectChecklistEdit('${item.id}')">
+                        <button onclick="saveProjectChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
+                        <button onclick="cancelProjectChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
+                    </div>
+                    <button onclick="deleteProjectChecklistItem('${item.id}')" class="text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                        <span class="material-icons-round" style="font-size:14px">delete</span>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+        }
+
+        function addProjectChecklistItem() {
+            const input = document.getElementById('projChecklistInput');
+            const val = input.value.trim();
+            if (!val) return;
+            projectChecklist.push({
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                text: val,
+                checked: false,
+                timestamp: new Date().toISOString()
+            });
+            input.value = '';
+            saveProjectFromHub();
+            renderProjectChecklistTab();
+        }
+
+        function toggleProjectChecklistItem(id) {
+            const item = (projectChecklist || []).find(c => c.id === id);
+            if (!item) return;
+            item.checked = !item.checked;
+            saveProjectFromHub();
+            renderProjectChecklistTab();
+        }
+
+        function editProjectChecklistItem(id) {
+            document.getElementById('projCl-display-' + id).classList.add('hidden');
+            document.getElementById('projCl-edit-' + id).classList.remove('hidden');
+            const input = document.getElementById('projCl-edit-' + id).querySelector('input');
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+
+        function saveProjectChecklistEdit(id) {
+            const item = (projectChecklist || []).find(c => c.id === id);
+            if (!item) return;
+            const newVal = document.getElementById('projCl-edit-' + id).querySelector('input').value.trim();
+            if (!newVal) return;
+            item.text = newVal;
+            saveProjectFromHub();
+            renderProjectChecklistTab();
+        }
+
+        function cancelProjectChecklistEdit(id) {
+            document.getElementById('projCl-display-' + id).classList.remove('hidden');
+            document.getElementById('projCl-edit-' + id).classList.add('hidden');
+        }
+
+        function deleteProjectChecklistItem(id) {
+            const idx = (projectChecklist || []).findIndex(c => c.id === id);
+            if (idx === -1) return;
+            if (!confirm('Delete this checklist item?')) return;
+            projectChecklist.splice(idx, 1);
+            saveProjectFromHub();
+            renderProjectChecklistTab();
+        }
+
+        // ---- PROJECT ACTIVITY LOG TAB ----
+
+        function renderProjectActivityTab() {
+            const container = document.getElementById('projActivityTimeline');
+            container.innerHTML = '';
+            const items = (projectActivity || []).filter(a => a.type === 'comment');
+            const countEl = document.getElementById('projActivityCount');
+            if (countEl) countEl.textContent = items.length ? '(' + items.length + ')' : '';
+
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No entries yet.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'activity-item cursor-pointer';
+                div.onclick = (e) => { if (!e.target.closest('.activity-delete-btn') && !e.target.closest('.activity-edit-area')) editProjectActivityEntry(item.id); };
+                const time = new Date(item.timestamp);
+                const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                div.innerHTML = `
+                    <div class="activity-dot comment"></div>
+                    <div>
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="text-[10px] text-slate-500">${timeStr}</span>
+                            <div class="flex items-center gap-1">
+                                <button onclick="event.stopPropagation(); deleteProjectActivityEntry('${item.id}')" class="activity-delete-btn text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                                    <span class="material-icons-round" style="font-size:14px">delete</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="projActivity-display-${item.id}" class="text-sm text-slate-300" style="white-space:pre-wrap">${escapeHtml(item.message)}</div>
+                        <div id="projActivity-edit-${item.id}" class="activity-edit-area hidden">
+                            <textarea class="td-textarea w-full text-sm" rows="3">${escapeHtml(item.message)}</textarea>
+                            <div class="flex justify-end gap-2 mt-1">
+                                <button onclick="event.stopPropagation(); cancelProjectActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
+                                <button onclick="event.stopPropagation(); saveProjectActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+        }
+
+        function addProjectComment() {
+            const input = document.getElementById('projCommentInput');
+            const val = input.value.trim();
+            if (!val) return;
+            projectActivity.push({
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                type: 'comment',
+                message: val,
+                timestamp: new Date().toISOString()
+            });
+            input.value = '';
+            saveProjectFromHub();
+            renderProjectActivityTab();
+        }
+
+        function editProjectActivityEntry(id) {
+            document.getElementById('projActivity-display-' + id).classList.add('hidden');
+            document.getElementById('projActivity-edit-' + id).classList.remove('hidden');
+            const textarea = document.getElementById('projActivity-edit-' + id).querySelector('textarea');
+            textarea.focus();
+            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }
+
+        function cancelProjectActivityEdit(id) {
+            document.getElementById('projActivity-display-' + id).classList.remove('hidden');
+            document.getElementById('projActivity-edit-' + id).classList.add('hidden');
+        }
+
+        function saveProjectActivityEdit(id) {
+            const entry = projectActivity.find(a => a.id === id);
+            if (!entry) return;
+            const newVal = document.getElementById('projActivity-edit-' + id).querySelector('textarea').value.trim();
+            if (!newVal) return;
+            entry.message = newVal;
+            saveProjectFromHub();
+            renderProjectActivityTab();
+        }
+
+        function deleteProjectActivityEntry(id) {
+            const idx = projectActivity.findIndex(a => a.id === id);
+            if (idx === -1) return;
+            if (!confirm('Delete this activity entry?')) return;
+            projectActivity.splice(idx, 1);
+            saveProjectFromHub();
+            renderProjectActivityTab();
+        }
+
+        // ---- PROJECT FILES TAB ----
+
+        function renderProjectFilesTab() {
+            const grid = document.getElementById('projFileGrid');
+            grid.innerHTML = '';
+            const files = projectFiles || [];
+            const countEl = document.getElementById('projFilesCount');
+            if (countEl) countEl.textContent = files.length ? '(' + files.length + ')' : '';
+
+            files.forEach((file, i) => {
+                const card = document.createElement('div');
+                card.className = 'file-card';
+                const isImage = file.type && file.type.startsWith('image/');
+                const sizeStr = file.size < 1024 ? file.size + ' B'
+                    : file.size < 1048576 ? (file.size / 1024).toFixed(1) + ' KB'
+                    : (file.size / 1048576).toFixed(1) + ' MB';
+                const dateStr = new Date(file.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                let preview = '';
+                if (isImage && file.data) {
+                    preview = `<img src="${file.data}" class="file-thumb" onclick="previewProjectFile(${i})" title="Click to preview">`;
+                } else if (isImage && !file.data) {
+                    preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded cursor-pointer" onclick="previewProjectFile(${i})"><span class="material-icons-round text-2xl text-slate-500">image</span></div>`;
+                } else {
+                    const icon = file.type && file.type.includes('pdf') ? 'picture_as_pdf' : 'description';
+                    preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded"><span class="material-icons-round text-2xl text-slate-500">${icon}</span></div>`;
+                }
+
+                card.innerHTML = `
+                    ${preview}
+                    <div class="text-xs text-slate-200 font-medium truncate" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+                    <div class="flex items-center justify-between mt-1">
+                        <span class="text-[10px] text-slate-500">${sizeStr} · ${dateStr}</span>
+                        <div class="flex gap-1">
+                            ${isImage ? `<button onclick="previewProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Preview"><span class="material-icons-round text-sm">visibility</span></button>` : ''}
+                            <button onclick="downloadProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Download"><span class="material-icons-round text-sm">download</span></button>
+                            <button onclick="deleteProjectFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function handleProjectFileUpload(fileList) {
+            const maxSize = 5 * 1024 * 1024;
+            Array.from(fileList).forEach(file => {
+                if (file.size > maxSize) {
+                    alert(`File "${file.name}" exceeds 5MB limit.`);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                    const fileData = e.target.result;
+                    const storageType = await saveFileData(fileId, fileData);
+                    projectFiles.push({
+                        id: fileId,
+                        name: file.name,
+                        size: file.size,
+                        type: file.type,
+                        data: fileData,
+                        storage: storageType,
+                        timestamp: new Date().toISOString()
+                    });
+                    saveProjectFromHub();
+                    renderProjectFilesTab();
+                };
+                reader.readAsDataURL(file);
+            });
+            document.getElementById('projFileInput').value = '';
+        }
+
+        async function previewProjectFile(index) {
+            const file = projectFiles[index];
+            if (!file) return;
+            let data = file.data || await loadFileData(file);
+            if (!data) { alert('File data not available'); return; }
+            file.data = data;
+            const win = window.open('', '_blank');
+            if (file.type && file.type.startsWith('image/')) {
+                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${data}"></body></html>`);
+            } else {
+                win.document.write(`<iframe src="${data}" style="width:100%;height:100%;border:none"></iframe>`);
+            }
+        }
+
+        async function downloadProjectFile(index) {
+            const file = projectFiles[index];
+            if (!file) return;
+            let data = file.data || await loadFileData(file);
+            if (!data) { alert('File data not available'); return; }
+            file.data = data;
+            const a = document.createElement('a');
+            a.href = data;
+            a.download = file.name;
+            a.click();
+        }
+
+        function deleteProjectFile(index) {
+            const file = projectFiles[index];
+            if (!file || !confirm(`Delete "${file.name}"?`)) return;
+            const removed = projectFiles.splice(index, 1);
+            deleteFileData(removed[0]);
+            saveProjectFromHub();
+            renderProjectFilesTab();
         }
 
         function navigateToTaskFromLog(taskId, tab) {
@@ -4023,6 +4617,22 @@
                 dropZone.addEventListener('drop', e => {
                     if (currentTaskIndex !== null && e.dataTransfer.files.length > 0) {
                         handleFileUpload(e.dataTransfer.files);
+                    }
+                });
+            }
+
+            // Project-level file drop zone
+            const projDropZone = document.getElementById('projFileDropZone');
+            if (projDropZone) {
+                ['dragenter', 'dragover'].forEach(evt => {
+                    projDropZone.addEventListener(evt, e => { e.preventDefault(); projDropZone.classList.add('dragover'); });
+                });
+                ['dragleave', 'drop'].forEach(evt => {
+                    projDropZone.addEventListener(evt, e => { e.preventDefault(); projDropZone.classList.remove('dragover'); });
+                });
+                projDropZone.addEventListener('drop', e => {
+                    if (e.dataTransfer.files.length > 0) {
+                        handleProjectFileUpload(e.dataTransfer.files);
                     }
                 });
             }
