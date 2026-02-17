@@ -631,7 +631,7 @@
                             </tbody>
                         </table>
                         <div class="p-2 border-t border-slate-800">
-                            <button onclick="addTask()" class="w-full flex items-center justify-center gap-1 py-2 text-xs text-slate-400 hover:text-blue-400 hover:bg-slate-800/50 rounded transition-colors min-h-[44px]">
+                            <button onclick="showAddTaskModal()" class="w-full flex items-center justify-center gap-1 py-2 text-xs text-slate-400 hover:text-blue-400 hover:bg-slate-800/50 rounded transition-colors min-h-[44px]">
                                 <span class="material-icons-round text-sm">add</span> Add Task
                             </button>
                         </div>
@@ -821,6 +821,42 @@
             </div>
             <div class="flex justify-end">
                 <button onclick="closeColorPicker()" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Task Modal -->
+    <div id="addTaskModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this)cancelAddTask()">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-6 shadow-2xl max-w-md w-full">
+            <h3 class="text-sm font-semibold text-white mb-4">Add New Task</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="td-field-label">Task Name <span class="text-red-400">*</span></label>
+                    <input id="addTaskName" type="text" class="td-input" placeholder="Enter task name…">
+                </div>
+                <div>
+                    <label class="td-field-label">Priority</label>
+                    <select id="addTaskPriority" class="td-input">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="td-field-label">Start Date</label>
+                        <input id="addTaskStart" type="date" class="td-input">
+                    </div>
+                    <div>
+                        <label class="td-field-label">End Date</label>
+                        <input id="addTaskEnd" type="date" class="td-input">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+                <button onclick="cancelAddTask()" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Cancel</button>
+                <button onclick="confirmAddTask()" class="px-4 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors">Create</button>
             </div>
         </div>
     </div>
@@ -1278,6 +1314,9 @@
             if (!_navReady) return;
             if (!document.getElementById('projectSummaryModal').classList.contains('hidden')) {
                 closeProjectSummary(); return;
+            }
+            if (!document.getElementById('addTaskModal').classList.contains('hidden')) {
+                cancelAddTask(); return;
             }
             if (!document.getElementById('colorPickerModal').classList.contains('hidden')) {
                 closeColorPicker(); return;
@@ -2682,7 +2721,7 @@
             const addBtn = document.createElement('button');
             addBtn.className = 'w-full flex items-center justify-center gap-1 py-3 text-xs text-slate-400 hover:text-blue-400 bg-slate-800/30 border border-dashed border-slate-700 rounded-lg transition-colors min-h-[44px]';
             addBtn.innerHTML = '<span class="material-icons-round text-sm">add</span> Add Task';
-            addBtn.onclick = () => addTask();
+            addBtn.onclick = () => showAddTaskModal();
             container.appendChild(addBtn);
         }
 
@@ -2777,28 +2816,46 @@
             saveProject();
         }
 
-        function addTask() {
+        function showAddTaskModal() {
             const today = new Date();
             const startStr = today.toISOString().slice(0, 10);
             const end = new Date(today);
             end.setDate(end.getDate() + 7);
             const endStr = end.toISOString().slice(0, 10);
 
+            document.getElementById('addTaskName').value = '';
+            document.getElementById('addTaskPriority').value = 'medium';
+            document.getElementById('addTaskStart').value = startStr;
+            document.getElementById('addTaskEnd').value = endStr;
+            document.getElementById('addTaskModal').classList.remove('hidden');
+            document.getElementById('addTaskName').focus();
+            pushNavState('modal');
+        }
+
+        function cancelAddTask() {
+            document.getElementById('addTaskModal').classList.add('hidden');
+        }
+
+        function confirmAddTask() {
+            const name = document.getElementById('addTaskName').value.trim();
+            if (!name) { document.getElementById('addTaskName').focus(); return; }
+
             const maxId = tasks.reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
             tasks.push({
                 id: String(maxId + 1),
-                name: 'New Task',
-                start: startStr,
-                end: endStr,
+                name: name,
+                start: document.getElementById('addTaskStart').value,
+                end: document.getElementById('addTaskEnd').value,
                 progress: 0,
                 dependencies: '',
-                priority: 'medium',
+                priority: document.getElementById('addTaskPriority').value,
                 description: '',
                 checklist: [],
                 activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
                 files: [],
                 meetings: []
             });
+            cancelAddTask();
             renderGantt();
             saveProject();
         }
