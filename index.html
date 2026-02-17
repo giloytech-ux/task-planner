@@ -754,6 +754,7 @@
                 <div class="td-tabs flex items-center px-3 md:px-5 bg-slate-900/50 overflow-x-auto">
                     <button class="td-tab active whitespace-nowrap" onclick="switchDetailTab('details')">Details</button>
                     <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('meetings')">Meetings</button>
+                    <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('checklist')">Checklist <span id="tdChecklistCount" class="text-[10px] ml-1 opacity-60"></span></button>
                     <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('activitylog')">Activity Log</button>
                     <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('files')">Files <span id="tdFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
                 </div>
@@ -829,6 +830,17 @@
                             <textarea id="commentInput" class="td-textarea w-full" rows="3" placeholder="Write an activity log entry..."></textarea>
                             <div class="flex justify-end mt-2">
                                 <button onclick="addComment()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Post</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CHECKLIST TAB -->
+                    <div id="tabChecklist" class="hidden flex-1 flex flex-col min-h-0">
+                        <div id="checklistItems" class="flex-1 overflow-y-auto mb-3"></div>
+                        <div class="flex-shrink-0">
+                            <div class="flex gap-2">
+                                <input type="text" id="checklistInput" class="td-input flex-1" placeholder="Add a checklist item..." onkeydown="if(event.key==='Enter')addChecklistItem()">
+                                <button onclick="addChecklistItem()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Add</button>
                             </div>
                         </div>
                     </div>
@@ -3178,8 +3190,8 @@
         }
 
         function switchDetailTab(tabName) {
-            const tabs = ['details', 'meetings', 'activitylog', 'files'];
-            const tabIds = { details: 'tabDetails', meetings: 'tabMeetings', activitylog: 'tabActivityLog', files: 'tabFiles' };
+            const tabs = ['details', 'meetings', 'checklist', 'activitylog', 'files'];
+            const tabIds = { details: 'tabDetails', meetings: 'tabMeetings', checklist: 'tabChecklist', activitylog: 'tabActivityLog', files: 'tabFiles' };
 
             // Toggle tab buttons
             document.querySelectorAll('.td-tab').forEach((btn, i) => {
@@ -3195,6 +3207,7 @@
             else if (tabName === 'activitylog') renderActivityTab(task);
             else if (tabName === 'files') renderFilesTab(task);
             else if (tabName === 'meetings') renderMeetingsTab(task);
+            else if (tabName === 'checklist') renderChecklistTab(task);
         }
 
         function renderTaskDetailHeader() {
@@ -3224,6 +3237,9 @@
 
             // Tab counts
             document.getElementById('tdFilesCount').textContent = (task.files || []).length > 0 ? `(${task.files.length})` : '';
+            const cl = task.checklist || [];
+            const clDone = cl.filter(c => c.checked).length;
+            document.getElementById('tdChecklistCount').textContent = cl.length > 0 ? `(${clDone}/${cl.length})` : '';
         }
 
         // ---- DETAILS TAB ----
@@ -3491,6 +3507,111 @@
             task.activity.splice(idx, 1);
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
+            saveProject();
+        }
+
+        // ---- CHECKLIST TAB ----
+        function renderChecklistTab(task) {
+            const container = document.getElementById('checklistItems');
+            container.innerHTML = '';
+            const items = task.checklist || [];
+
+            // Backward compat: assign id/timestamp to old items missing them
+            items.forEach(item => {
+                if (!item.id) item.id = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+                if (!item.timestamp) item.timestamp = new Date().toISOString();
+            });
+
+            if (items.length === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">No checklist items yet.</p>';
+                return;
+            }
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'checklist-item' + (item.checked ? ' checked' : '');
+                div.innerHTML = `
+                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleChecklistItem('${item.id}')">
+                    <label id="cl-display-${item.id}" class="flex-1 text-sm text-slate-300 cursor-pointer" onclick="editChecklistItem('${item.id}')">${escapeHtml(item.text)}</label>
+                    <div id="cl-edit-${item.id}" class="hidden flex-1 flex gap-2">
+                        <input type="text" class="td-input flex-1 text-sm" value="${escapeHtml(item.text)}" onkeydown="if(event.key==='Enter')saveChecklistEdit('${item.id}');if(event.key==='Escape')cancelChecklistEdit('${item.id}')">
+                        <button onclick="saveChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
+                        <button onclick="cancelChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
+                    </div>
+                    <button onclick="deleteChecklistItem('${item.id}')" class="text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
+                        <span class="material-icons-round" style="font-size:14px">delete</span>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+            requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+        }
+
+        function addChecklistItem() {
+            const input = document.getElementById('checklistInput');
+            const val = input.value.trim();
+            if (!val) return;
+            const task = tasks[currentTaskIndex];
+            autoLockTask(task);
+            if (!task.checklist) task.checklist = [];
+            task.checklist.push({
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                text: val,
+                checked: false,
+                timestamp: new Date().toISOString()
+            });
+            input.value = '';
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        function toggleChecklistItem(id) {
+            const task = tasks[currentTaskIndex];
+            const item = (task.checklist || []).find(c => c.id === id);
+            if (!item) return;
+            autoLockTask(task);
+            item.checked = !item.checked;
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        function editChecklistItem(id) {
+            document.getElementById('cl-display-' + id).classList.add('hidden');
+            document.getElementById('cl-edit-' + id).classList.remove('hidden');
+            const input = document.getElementById('cl-edit-' + id).querySelector('input');
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+
+        function saveChecklistEdit(id) {
+            const task = tasks[currentTaskIndex];
+            const item = (task.checklist || []).find(c => c.id === id);
+            if (!item) return;
+            const newVal = document.getElementById('cl-edit-' + id).querySelector('input').value.trim();
+            if (!newVal) return;
+            autoLockTask(task);
+            item.text = newVal;
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
+            saveProject();
+        }
+
+        function cancelChecklistEdit(id) {
+            document.getElementById('cl-display-' + id).classList.remove('hidden');
+            document.getElementById('cl-edit-' + id).classList.add('hidden');
+        }
+
+        function deleteChecklistItem(id) {
+            const task = tasks[currentTaskIndex];
+            const idx = (task.checklist || []).findIndex(c => c.id === id);
+            if (idx === -1) return;
+            if (!confirm('Delete this checklist item?')) return;
+            autoLockTask(task);
+            task.checklist.splice(idx, 1);
+            renderChecklistTab(task);
+            renderTaskDetailHeader();
             saveProject();
         }
 
