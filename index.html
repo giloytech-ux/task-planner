@@ -3778,7 +3778,7 @@
                             </div>
                             <h4 class="text-sm font-semibold text-white mb-2">${escapeHtml(mtg.title)}</h4>
                             ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
-                            ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">${escapeHtml(mtg.notes)}</p>` : ''}
+                            ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical">${escapeHtml(mtg.notes)}</p>` : ''}
                         </div>
                         <div class="flex gap-1 flex-shrink-0">
                             <button onclick="event.stopPropagation(); deleteMeeting(${i})" class="meeting-delete-btn p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
