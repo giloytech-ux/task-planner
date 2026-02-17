@@ -753,9 +753,9 @@
                 <!-- Detail Tabs -->
                 <div class="td-tabs flex items-center px-3 md:px-5 bg-slate-900/50 overflow-x-auto">
                     <button class="td-tab active whitespace-nowrap" onclick="switchDetailTab('details')">Details</button>
-                    <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('meetings')">Meetings</button>
+                    <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('meetings')">Meetings <span id="tdMeetingsCount" class="text-[10px] ml-1 opacity-60"></span></button>
                     <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('checklist')">Checklist <span id="tdChecklistCount" class="text-[10px] ml-1 opacity-60"></span></button>
-                    <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('activitylog')">Activity Log</button>
+                    <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('activitylog')">Activity Log <span id="tdActivityCount" class="text-[10px] ml-1 opacity-60"></span></button>
                     <button class="td-tab whitespace-nowrap" onclick="switchDetailTab('files')">Files <span id="tdFilesCount" class="text-[10px] ml-1 opacity-60"></span></button>
                 </div>
 
@@ -3240,6 +3240,10 @@
             const cl = task.checklist || [];
             const clDone = cl.filter(c => c.checked).length;
             document.getElementById('tdChecklistCount').textContent = cl.length > 0 ? `(${clDone}/${cl.length})` : '';
+            const mtgCount = (task.meetings || []).length;
+            document.getElementById('tdMeetingsCount').textContent = mtgCount > 0 ? `(${mtgCount})` : '';
+            const actCount = (task.activity || []).filter(a => a.type === 'comment').length;
+            document.getElementById('tdActivityCount').textContent = actCount > 0 ? `(${actCount})` : '';
         }
 
         // ---- DETAILS TAB ----
