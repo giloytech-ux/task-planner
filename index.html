@@ -1438,42 +1438,63 @@
                     }
                 }
 
-                // Step 2: Upsert tasks
+                // Step 2: Save tasks — split new (insert) vs existing (upsert)
+                // to avoid mixed-batch NOT NULL violation on the id column
                 if (_tasks.length > 0) {
-                    const taskRows = _tasks.map((t, i) => {
-                        const row = {
-                            project_id: _projId,
-                            task_number: t.id,
-                            name: t.name,
-                            start_date: t.start,
-                            end_date: t.end,
-                            progress: parseInt(t.progress) || 0,
-                            dependencies: t.dependencies || '',
-                            sort_order: i,
-                            priority: t.priority || 'medium',
-                            description: t.description || '',
-                            locked: !!t.locked,
-                            checklist: t.checklist || [],
-                            activity: t.activity || [],
-                            files: stripFileData(t.files),
-                            meetings: t.meetings || [],
-                            last_summary: t._lastSummary || '',
-                            last_summary_hash: t._lastSummaryHash || ''
-                        };
-                        if (t._rowId) row.id = t._rowId;
-                        return row;
+                    const buildRow = (t, i) => ({
+                        project_id: _projId,
+                        task_number: t.id,
+                        name: t.name,
+                        start_date: t.start,
+                        end_date: t.end,
+                        progress: parseInt(t.progress) || 0,
+                        dependencies: t.dependencies || '',
+                        sort_order: i,
+                        priority: t.priority || 'medium',
+                        description: t.description || '',
+                        locked: !!t.locked,
+                        checklist: t.checklist || [],
+                        activity: t.activity || [],
+                        files: stripFileData(t.files),
+                        meetings: t.meetings || [],
+                        last_summary: t._lastSummary || '',
+                        last_summary_hash: t._lastSummaryHash || ''
                     });
-                    const { data: upsertedRows, error } = await supabase
-                        .from('tasks')
-                        .upsert(taskRows)
-                        .select('id, task_number');
-                    if (error) {
-                        alert('Failed to save tasks to server. Your changes are preserved locally.');
-                    } else if (upsertedRows) {
-                        // Sync _rowId back — objects are shared so this updates live tasks too
-                        for (const row of upsertedRows) {
-                            const task = _tasks.find(t => String(t.id) === String(row.task_number));
-                            if (task && !task._rowId) task._rowId = row.id;
+
+                    const existingRows = [];
+                    const newRows = [];
+                    _tasks.forEach((t, i) => {
+                        if (t._rowId) {
+                            existingRows.push({ id: t._rowId, ...buildRow(t, i) });
+                        } else {
+                            newRows.push({ _taskRef: t, ...buildRow(t, i) });
+                        }
+                    });
+
+                    // Upsert existing tasks (all have id — no mixed-batch issue)
+                    if (existingRows.length > 0) {
+                        const { error } = await supabase
+                            .from('tasks').upsert(existingRows);
+                        if (error) {
+                            console.error('Task upsert failed:', error);
+                            alert('Failed to save tasks to server. Your changes are preserved locally.');
+                        }
+                    }
+
+                    // Insert new tasks (no id column sent — DB generates UUIDs)
+                    if (newRows.length > 0) {
+                        const insertPayload = newRows.map(({ _taskRef, ...row }) => row);
+                        const { data: insertedRows, error } = await supabase
+                            .from('tasks').insert(insertPayload).select('id, task_number');
+                        if (error) {
+                            console.error('Task insert failed:', error);
+                            alert('Failed to save tasks to server. Your changes are preserved locally.');
+                        } else if (insertedRows) {
+                            // Sync _rowId back — objects are shared so this updates live tasks too
+                            for (const row of insertedRows) {
+                                const task = _tasks.find(t => String(t.id) === String(row.task_number));
+                                if (task && !task._rowId) task._rowId = row.id;
+                            }
                         }
                     }
                 } else if (_deletes.length === 0) {
