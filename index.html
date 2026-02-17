@@ -561,6 +561,26 @@
                             <span class="material-icons-round text-sm">inventory_2</span>
                             <span class="hidden sm:inline" id="archiveToggleLabel">Archived</span>
                         </button>
+                        <!-- Admin Backup (admin only) -->
+                        <div id="adminBackupWrapper" class="relative hidden">
+                            <button onclick="toggleAdminBackupMenu()" class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border transition-colors min-h-[44px] bg-slate-800 border-amber-600/50 text-amber-400 hover:text-amber-300 hover:border-amber-500" title="Admin Backup">
+                                <span class="material-icons-round text-sm">admin_panel_settings</span>
+                                <span class="hidden sm:inline">Backup</span>
+                            </button>
+                            <div id="adminBackupMenu" class="hidden absolute right-0 top-full mt-1 w-52 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
+                                <button onclick="adminBackupTasks(); closeAdminBackupMenu()" class="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                                    <span class="material-icons-round text-sm text-emerald-400">table_chart</span> Backup Tasks
+                                </button>
+                                <button onclick="adminBackupProjects(); closeAdminBackupMenu()" class="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                                    <span class="material-icons-round text-sm text-blue-400">folder_zip</span> Backup Projects
+                                </button>
+                                <button onclick="adminBackupAll(); closeAdminBackupMenu()" class="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                                    <span class="material-icons-round text-sm text-purple-400">cloud_download</span> Backup All Tables
+                                </button>
+                                <div class="border-t border-slate-700 my-1"></div>
+                                <p id="adminBackupStatus" class="px-3 py-1 text-[10px] text-slate-500 hidden"></p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <!-- Search: no results message -->
@@ -1122,6 +1142,8 @@
         // =============================================
         const SUPABASE_URL = 'https://epplyypkvimntwyqusme.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGx5eXBrdmltbnR3eXF1c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzc4MzYsImV4cCI6MjA4Njc1MzgzNn0.17jWZppDbE4q71vCNjkkhL77BZwi7aJ6J3XZFsUkhpE';
+        const ADMIN_EMAIL = 'edbayag2001@yahoo.com';
+        function isAdmin() { return currentUser && currentUser.email === ADMIN_EMAIL; }
         const _supabaseLib = window.supabase; // save CDN reference before overwriting
         var supabase = null;
         try {
@@ -2127,6 +2149,9 @@
 
             grid.innerHTML = '';
             noResults.classList.add('hidden');
+            // Show/hide admin backup button
+            const adminWrap = document.getElementById('adminBackupWrapper');
+            if (isAdmin()) { adminWrap.classList.remove('hidden'); } else { adminWrap.classList.add('hidden'); }
             // Reset no-results content
             noResults.querySelector('.material-icons-round').textContent = 'search_off';
             noResults.querySelector('p').textContent = 'No projects match your search.';
@@ -2432,6 +2457,122 @@
 
         function escapeAttr(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        // =============================================
+        // Admin Backup Functions
+        // =============================================
+
+        function sqlEscape(val) {
+            if (val === null || val === undefined) return 'NULL';
+            if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+            if (typeof val === 'number') return String(val);
+            if (typeof val === 'object') return "'" + JSON.stringify(val).replace(/'/g, "''") + "'::jsonb";
+            return "'" + String(val).replace(/'/g, "''") + "'";
+        }
+
+        function downloadSQL(filename, content) {
+            const blob = new Blob([content], { type: 'application/sql' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function toggleAdminBackupMenu() {
+            document.getElementById('adminBackupMenu').classList.toggle('hidden');
+        }
+        function closeAdminBackupMenu() {
+            document.getElementById('adminBackupMenu').classList.add('hidden');
+        }
+        document.addEventListener('click', e => {
+            const w = document.getElementById('adminBackupWrapper');
+            if (w && !w.contains(e.target)) closeAdminBackupMenu();
+        });
+
+        function setBackupStatus(msg, isError) {
+            const el = document.getElementById('adminBackupStatus');
+            el.textContent = msg;
+            el.className = 'px-3 py-1 text-[10px] ' + (isError ? 'text-red-400' : 'text-emerald-400');
+            el.classList.remove('hidden');
+        }
+
+        async function adminFetchTable(table) {
+            // Try RPC first (bypasses RLS for full table backup)
+            const rpcName = 'admin_export_' + table;
+            const { data: rpcData, error: rpcErr } = await supabase.rpc(rpcName);
+            if (!rpcErr && rpcData) return { data: rpcData, full: true };
+            // Fallback: query directly (RLS-scoped to admin's own data)
+            const { data, error } = await supabase.from(table).select('*');
+            if (error) throw error;
+            return { data: data || [], full: false };
+        }
+
+        function buildInsertSQL(table, rows) {
+            if (!rows.length) return `-- No rows in "${table}"\n`;
+            const cols = Object.keys(rows[0]);
+            const header = `INSERT INTO "${table}" (${cols.map(c => '"' + c + '"').join(', ')}) VALUES\n`;
+            const values = rows.map(row => {
+                return '  (' + cols.map(c => sqlEscape(row[c])).join(', ') + ')';
+            }).join(',\n');
+            return header + values + '\nON CONFLICT (id) DO NOTHING;\n\n';
+        }
+
+        async function adminBackupTasks() {
+            if (!isAdmin()) return;
+            try {
+                const { data, full } = await adminFetchTable('tasks');
+                const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+                let sql = `-- Tasks table backup\n-- Generated: ${new Date().toISOString()}\n`;
+                sql += full ? '-- Scope: FULL TABLE (all users)\n\n' : '-- Scope: Admin account data only (install RPC functions for full backup)\n\n';
+                sql += buildInsertSQL('tasks', data);
+                downloadSQL(`tasks_backup_${ts}.sql`, sql);
+                setBackupStatus(`Tasks: ${data.length} rows` + (full ? ' (full)' : ' (admin only)'));
+            } catch (e) {
+                setBackupStatus('Backup failed: ' + e.message, true);
+            }
+        }
+
+        async function adminBackupProjects() {
+            if (!isAdmin()) return;
+            try {
+                const { data, full } = await adminFetchTable('projects');
+                const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+                let sql = `-- Projects table backup\n-- Generated: ${new Date().toISOString()}\n`;
+                sql += full ? '-- Scope: FULL TABLE (all users)\n\n' : '-- Scope: Admin account data only\n\n';
+                sql += buildInsertSQL('projects', data);
+                downloadSQL(`projects_backup_${ts}.sql`, sql);
+                setBackupStatus(`Projects: ${data.length} rows` + (full ? ' (full)' : ' (admin only)'));
+            } catch (e) {
+                setBackupStatus('Backup failed: ' + e.message, true);
+            }
+        }
+
+        async function adminBackupAll() {
+            if (!isAdmin()) return;
+            try {
+                const [proj, tsk, prof] = await Promise.all([
+                    adminFetchTable('projects'),
+                    adminFetchTable('tasks'),
+                    adminFetchTable('user_profiles')
+                ]);
+                const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+                const isFull = proj.full && tsk.full && prof.full;
+                let sql = `-- Full database backup\n-- Generated: ${new Date().toISOString()}\n`;
+                sql += isFull ? '-- Scope: FULL DATABASE (all users)\n\n' : '-- Scope: Admin account data only (install RPC functions for full backup)\n\n';
+                sql += '-- ========================\n-- PROJECTS\n-- ========================\n';
+                sql += buildInsertSQL('projects', proj.data);
+                sql += '-- ========================\n-- TASKS\n-- ========================\n';
+                sql += buildInsertSQL('tasks', tsk.data);
+                sql += '-- ========================\n-- USER PROFILES\n-- ========================\n';
+                sql += buildInsertSQL('user_profiles', prof.data);
+                downloadSQL(`full_backup_${ts}.sql`, sql);
+                setBackupStatus(`${proj.data.length} projects, ${tsk.data.length} tasks, ${prof.data.length} profiles` + (isFull ? ' (all users)' : ' (admin only)'));
+            } catch (e) {
+                setBackupStatus('Backup failed: ' + e.message, true);
+            }
         }
 
         async function promptNewProject() {
