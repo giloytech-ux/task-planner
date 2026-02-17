@@ -3137,7 +3137,7 @@
                 } else if (status.label === 'Overdue Soon') {
                     result.overdueSoon++;
                     result.items.push({ name: task.name, label: `${daysUntilEnd}d left · needs +${status.gap}%`, priority: 1.5, sort: status.gap });
-                } else if (today >= start && daysUntilEnd <= 7 && daysUntilEnd >= 0) {
+                } else if (today >= start && daysUntilEnd <= 5 && daysUntilEnd >= 0) {
                     result.nearDeadline++;
                     result.items.push({ name: task.name, label: `${daysUntilEnd}d left`, priority: 2, sort: daysUntilEnd });
                 }
@@ -3198,7 +3198,7 @@
                 } else if (status.label === 'Overdue Soon') {
                     focusTasks.push({ task, priority: 1.5, sort: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#f97316', dotCss: 'bg-orange-400' });
                     focusTaskIds.add(task.id);
-                } else if (today >= start && daysUntilEnd <= 7 && daysUntilEnd >= 0) {
+                } else if (today >= start && daysUntilEnd <= 5 && daysUntilEnd >= 0) {
                     focusTasks.push({ task, priority: 2, sort: daysUntilEnd, label: `${daysUntilEnd}d left`, color: '#3b82f6', dotCss: 'bg-blue-500' });
                     focusTaskIds.add(task.id);
                 }
