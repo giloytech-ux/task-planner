@@ -5176,10 +5176,14 @@
                 description: task.description || '',
                 meetings: (task.meetings || []).map(m => ({ title: m.title, date: m.date, notes: m.notes, attendees: m.attendees })),
                 activity: (task.activity || []).filter(a => a.type === 'comment').map(a => ({ message: a.message })),
+                checklist: (task.checklist || []).map(c => ({ text: c.text, checked: c.checked })),
                 progress: parseInt(task.progress) || 0,
                 name: task.name,
                 start: task.start,
-                end: task.end
+                end: task.end,
+                projMeetings: projectMeetings.length,
+                projActivity: projectActivity.filter(a => a.type === 'comment').length,
+                projChecklist: projectChecklist.map(c => ({ text: c.text, checked: c.checked }))
             };
             const str = JSON.stringify(data);
             let hash = 0;
@@ -5225,7 +5229,37 @@
                 }).join('\n');
             }
 
-            return `--- CONTEXT START ---\n${description}\nMeetings:\n${meetingsText}\nActivities:\n${activitiesText}\n--- CONTEXT END ---`;
+            // Task checklist
+            let checklistText = '(none)';
+            if ((task.checklist || []).length > 0) {
+                checklistText = task.checklist.map(c => `- [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n');
+            }
+
+            // Project-level context
+            let projMeetingsText = '(none)';
+            if (projectMeetings.length > 0) {
+                projMeetingsText = projectMeetings.map(m => {
+                    let line = `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
+                    if (m.notes) line += `\n  Notes: ${m.notes}`;
+                    return line;
+                }).join('\n');
+            }
+
+            let projActivityText = '(none)';
+            const projLogEntries = projectActivity.filter(a => a.type === 'comment');
+            if (projLogEntries.length > 0) {
+                projActivityText = projLogEntries.map(a => {
+                    const d = new Date(a.timestamp).toLocaleDateString();
+                    return `- [${d}] ${a.message}`;
+                }).join('\n');
+            }
+
+            let projChecklistText = '(none)';
+            if (projectChecklist.length > 0) {
+                projChecklistText = projectChecklist.map(c => `- [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n');
+            }
+
+            return `--- CONTEXT START ---\n${description}\nTask Meetings:\n${meetingsText}\nTask Activities:\n${activitiesText}\nTask Checklist:\n${checklistText}\n\nProject-Level Meetings:\n${projMeetingsText}\nProject-Level Activities:\n${projActivityText}\nProject-Level Checklist:\n${projChecklistText}\n--- CONTEXT END ---`;
         }
 
         function toggleSummaryPanel() {
@@ -5507,16 +5541,24 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
         let _projectSummaryActiveId = null;   // tracks which project the modal is showing
         let _projectSummaryActiveName = null;
 
-        function getProjectDataHash(taskList) {
-            const data = (taskList || tasks).map(t => ({
-                name: t.name, start: t.start, end: t.end,
-                progress: parseInt(t.progress) || 0,
-                assigned: t.assigned || '',
-                dependencies: t.dependencies || '',
-                description: (t.description || '').slice(0, 200),
-                meetingCount: (t.meetings || []).length,
-                activityCount: (t.activity || []).filter(a => a.type === 'comment').length
-            }));
+        function getProjectDataHash(taskList, projData) {
+            const pd = projData || {};
+            const data = {
+                tasks: (taskList || tasks).map(t => ({
+                    name: t.name, start: t.start, end: t.end,
+                    progress: parseInt(t.progress) || 0,
+                    assigned: t.assigned || '',
+                    dependencies: t.dependencies || '',
+                    description: (t.description || '').slice(0, 200),
+                    meetingCount: (t.meetings || []).length,
+                    activityCount: (t.activity || []).filter(a => a.type === 'comment').length,
+                    checklistCount: (t.checklist || []).length,
+                    checklistDone: (t.checklist || []).filter(c => c.checked).length
+                })),
+                projMeetings: (pd.meetings || []).length,
+                projActivity: (pd.activity || []).filter(a => a.type === 'comment').length,
+                projChecklist: (pd.checklist || []).map(c => ({ text: c.text, checked: c.checked }))
+            };
             const str = JSON.stringify(data);
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -5527,9 +5569,10 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             return hash.toString(36);
         }
 
-        function buildProjectContext(taskList, projName) {
+        function buildProjectContext(taskList, projName, projData) {
             const tl = taskList || tasks;
             const pn = projName || currentProjectName || 'Untitled Project';
+            const pd = projData || {};
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
@@ -5544,6 +5587,38 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             context += `Date: ${today.toISOString().split('T')[0]}\n`;
             context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
 
+            // Project-level meetings
+            const pMeetings = pd.meetings || [];
+            if (pMeetings.length > 0) {
+                context += `--- PROJECT MEETINGS ---\n`;
+                pMeetings.forEach(m => {
+                    context += `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
+                    if (m.notes) context += `\n  Notes: ${m.notes.slice(0, 300)}`;
+                    context += `\n`;
+                });
+                context += `\n`;
+            }
+
+            // Project-level activity log
+            const pActivity = (pd.activity || []).filter(a => a.type === 'comment');
+            if (pActivity.length > 0) {
+                context += `--- PROJECT ACTIVITY LOG ---\n`;
+                pActivity.forEach(a => {
+                    const d = new Date(a.timestamp).toLocaleDateString();
+                    context += `- [${d}] ${a.message.slice(0, 200)}\n`;
+                });
+                context += `\n`;
+            }
+
+            // Project-level checklist
+            const pChecklist = pd.checklist || [];
+            if (pChecklist.length > 0) {
+                const done = pChecklist.filter(c => c.checked).length;
+                context += `--- PROJECT CHECKLIST (${done}/${pChecklist.length} done) ---\n`;
+                pChecklist.forEach(c => { context += `- [${c.checked ? 'x' : ' '}] ${c.text}\n`; });
+                context += `\n`;
+            }
+
             context += `--- TASKS ---\n`;
             tl.forEach((t, i) => {
                 const status = getTaskStatus(t);
@@ -5554,8 +5629,10 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 if ((t.description || '').trim()) context += `    Description: ${t.description.trim().slice(0, 300)}\n`;
                 const meetingCount = (t.meetings || []).length;
                 const activityCount = (t.activity || []).filter(a => a.type === 'comment').length;
+                const clItems = t.checklist || [];
                 if (meetingCount > 0) context += `    Meetings: ${meetingCount} recorded\n`;
                 if (activityCount > 0) context += `    Activity entries: ${activityCount}\n`;
+                if (clItems.length > 0) context += `    Checklist: ${clItems.filter(c => c.checked).length}/${clItems.length} done\n`;
 
                 // Include latest meeting notes if available
                 if (meetingCount > 0) {
@@ -5571,6 +5648,12 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                     const latest = entries[entries.length - 1];
                     const d = new Date(latest.timestamp).toLocaleDateString();
                     context += `    Latest activity (${d}): ${latest.message.slice(0, 200)}\n`;
+                }
+
+                // Include unchecked checklist items
+                const unchecked = clItems.filter(c => !c.checked);
+                if (unchecked.length > 0) {
+                    context += `    Pending checklist items: ${unchecked.map(c => c.text).join(', ')}\n`;
                 }
             });
 
@@ -5601,25 +5684,28 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             const projId = projectId || currentProjectId;
             let projName = projectName || currentProjectName || 'Project';
             let taskList;
+            let projData;  // project-level meetings, activity, checklist
 
             _projectSummaryActiveId = projId;
             _projectSummaryActiveName = projName;
             modal.classList.remove('hidden');
 
             if (projectId && projectId !== currentProjectId) {
-                // Called from dashboard — need to load the project's tasks
+                // Called from dashboard — need to load the project's data
                 content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Loading project data...</span></div>';
                 statusEl.textContent = '';
                 try {
                     const data = await loadProject(projectId);
                     taskList = data.tasks || [];
+                    projData = { meetings: data.projectMeetings || [], activity: data.projectActivity || [], checklist: data.projectChecklist || [] };
                 } catch (err) {
                     content.innerHTML = `<div class="text-center py-8"><span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span><p class="text-red-400 text-sm">Failed to load project data.</p></div>`;
                     return;
                 }
             } else {
-                // Called from within the open project
+                // Called from within the open project — use globals
                 taskList = tasks;
+                projData = { meetings: projectMeetings, activity: projectActivity, checklist: projectChecklist };
             }
 
             if (taskList.length === 0) {
@@ -5628,7 +5714,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 return;
             }
 
-            const currentHash = getProjectDataHash(taskList);
+            const currentHash = getProjectDataHash(taskList, projData);
             const cached = _projectSummaryCache[projId];
 
             if (cached && cached.hash === currentHash) {
@@ -5642,7 +5728,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             content.innerHTML = '<div class="flex items-center gap-2"><div class="loader"></div><span class="text-slate-400">Generating project summary...</span></div>';
             statusEl.textContent = '';
 
-            const context = buildProjectContext(taskList, projName);
+            const context = buildProjectContext(taskList, projName, projData);
             const prompt = `You are an expert project management assistant. Analyze the following project data and generate a concise, structured project summary for executive review.
 
 ${context}
@@ -5650,11 +5736,11 @@ ${context}
 Generate a summary with these sections:
 1. **Executive Overview** — Overall project health, timeline status, and completion trajectory in 2-3 sentences.
 2. **Key Highlights** — Important progress made, milestones reached, or notable achievements (bullet points).
-3. **Risks & Blockers** — Overdue tasks, tasks needing attention, bottlenecks, or dependency issues (bullet points). If none, say so.
-4. **Action Items** — What needs to happen next, prioritized by urgency (bullet points).
-5. **Decision Points** — Any pending decisions surfaced from the task data that need stakeholder input (bullet points). If none, say so.
+3. **Risks & Blockers** — Overdue tasks, tasks needing attention, bottlenecks, incomplete checklist items, or dependency issues (bullet points). If none, say so.
+4. **Action Items** — What needs to happen next, prioritized by urgency. Include pending checklist items and insights from meetings/activity logs (bullet points).
+5. **Decision Points** — Any pending decisions surfaced from meetings, activity logs, or task data that need stakeholder input (bullet points). If none, say so.
 
-Be concise and actionable. Focus on insights, not just restating data.`;
+Be concise and actionable. Focus on insights, not just restating data. Leverage project-level meetings, activity logs, and checklists for cross-cutting context.`;
 
             try {
                 const data = await callGemini({
