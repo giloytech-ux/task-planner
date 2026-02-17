@@ -3778,6 +3778,7 @@
             if (projectId && projectId !== currentProjectId) {
                 // Opening from dashboard — load project data
                 _logsSource = 'dashboard';
+                currentProjectId = projectId; // Set for file storage access
                 const data = await loadProject(projectId);
                 projectLogs = data.logs || [];
                 tasks = data.tasks || [];
@@ -3806,6 +3807,7 @@
         function closeProjectLogs() {
             document.getElementById('projectLogsView').classList.add('hidden');
             if (_logsSource === 'dashboard') {
+                currentProjectId = null;
                 projectLogs = [];
                 tasks = [];
                 projectDescription = '';
