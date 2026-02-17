@@ -3402,6 +3402,7 @@
             const task = tasks[currentTaskIndex];
             const idx = task.activity.findIndex(a => a.id === id);
             if (idx === -1) return;
+            if (!confirm('Delete this activity entry?')) return;
             autoLockTask(task);
             task.activity.splice(idx, 1);
             renderActivityTab(task);
