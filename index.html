@@ -1216,6 +1216,24 @@
             }
         }
 
+        function isAuthError(error) {
+            if (!error) return false;
+            const code = error.code || '';
+            const status = error.status || error.statusCode || 0;
+            return status === 401 || status === 403 || code === '42501' || code === 'PGRST301';
+        }
+
+        function handleSessionExpired() {
+            if (window._sessionExpiredShown) return true;
+            window._sessionExpiredShown = true;
+            alert('Your session has expired. Please sign in again.');
+            currentUser = null;
+            userProfile = null;
+            showAuthView();
+            setTimeout(() => { window._sessionExpiredShown = false; }, 3000);
+            return true;
+        }
+
         async function handleSignOut() {
             clearTimeout(window.detailSaveTimeout);
             if (currentProjectId) {
@@ -1570,8 +1588,8 @@
                 if (_deletes.length > 0) {
                     const { error: delError } = await supabase.from('tasks').delete().in('id', _deletes);
                     if (delError) {
+                        if (isAuthError(delError)) { handleSessionExpired(); return; }
                         alert('Failed to delete tasks from server. Will retry on next save.');
-                        // Keep _pendingDeletes for retry on next save
                     } else {
                         // Remove only the IDs we successfully deleted from the live array
                         const deleted = new Set(_deletes);
@@ -1617,6 +1635,7 @@
                         const { error } = await supabase
                             .from('tasks').upsert(existingRows);
                         if (error) {
+                            if (isAuthError(error)) { handleSessionExpired(); return; }
                             alert('Failed to save tasks to server. Your changes are preserved locally.');
                         }
                     }
@@ -1626,6 +1645,7 @@
                         const { data: insertedRows, error } = await supabase
                             .from('tasks').insert(newRows).select('id, task_number');
                         if (error) {
+                            if (isAuthError(error)) { handleSessionExpired(); return; }
                             alert('Failed to save tasks to server. Your changes are preserved locally.');
                         } else if (insertedRows) {
                             // Sync _rowId back — objects are shared so this updates live tasks too
