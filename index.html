@@ -1056,8 +1056,8 @@
                     <!-- Logs Tab -->
                     <div id="projTabLogs" class="hidden flex-1 flex flex-col min-h-0">
                         <div class="flex justify-end mb-2 shrink-0">
-                            <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors flex items-center gap-1" title="Clear all logs">
-                                <span class="material-icons-round" style="font-size:16px">delete_sweep</span> Clear
+                            <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors flex items-center gap-1" title="Clear oldest half of logs">
+                                <span class="material-icons-round" style="font-size:16px">delete_sweep</span> Clear Oldest
                             </button>
                         </div>
                         <div id="projectLogsTimeline" class="flex-1 overflow-y-auto space-y-4"></div>
@@ -2460,6 +2460,20 @@
 
         function escapeAttr(str) {
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        function showToast(message, type = 'info') {
+            const colors = { info: 'bg-blue-600', warning: 'bg-amber-600', error: 'bg-red-600', success: 'bg-emerald-600' };
+            const container = document.getElementById('toastContainer');
+            const el = document.createElement('div');
+            el.className = `${colors[type] || colors.info} text-white text-xs px-4 py-2.5 rounded-lg shadow-lg pointer-events-auto transition-all duration-300 opacity-0 translate-y-2`;
+            el.textContent = message;
+            container.appendChild(el);
+            requestAnimationFrame(() => { el.classList.remove('opacity-0', 'translate-y-2'); });
+            setTimeout(() => {
+                el.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => el.remove(), 300);
+            }, 4000);
         }
 
         // =============================================
@@ -4051,7 +4065,10 @@
                 detail: detail || '',
                 timestamp: new Date().toISOString()
             });
-            if (projectLogs.length > 500) projectLogs = projectLogs.slice(-500);
+            if (projectLogs.length > 500) {
+                projectLogs = projectLogs.slice(-500);
+                showToast('Log limit reached (500) — oldest entries were trimmed.', 'warning');
+            }
         }
 
         const LOG_ACTION_ICONS = {
@@ -4172,10 +4189,14 @@
         }
 
         function clearProjectLogs() {
-            if (!confirm('Clear all project logs?')) return;
-            projectLogs = [];
+            const count = projectLogs.length;
+            if (count === 0) return;
+            const half = Math.ceil(count / 2);
+            if (!confirm(`Clear the ${half} oldest log entries?`)) return;
+            projectLogs = projectLogs.slice(half);
             saveProjectFromHub();
             renderProjectLogs();
+            showToast(`Cleared ${half} oldest entries. ${projectLogs.length} remaining.`, 'info');
         }
 
         // ---- PROJECT INFO HUB — TAB SWITCHING & SAVE HELPER ----
@@ -6454,5 +6475,6 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
         <div id="projectSummaryContent" class="flex-1 overflow-y-auto px-5 py-4 text-xs text-slate-300 leading-relaxed"></div>
       </div>
     </div>
+<div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
 </body>
 </html>
