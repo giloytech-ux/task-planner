@@ -4768,7 +4768,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         async function handleProjectFileUpload(fileList) {
             const maxSize = 5 * 1024 * 1024;
             const validFiles = Array.from(fileList).filter(file => {
-                if (file.size > maxSize) { alert(`File "${file.name}" exceeds 5MB limit.`); return false; }
+                if (!file.type.startsWith('image/') && file.size > maxSize) { alert(`File "${file.name}" exceeds 5MB limit.`); return false; }
                 return true;
             });
             if (!validFiles.length) return;
@@ -4779,8 +4779,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
             try {
                 const results = await Promise.all(validFiles.map(file => compressImage(file)));
+                const skipped = [];
                 results.forEach((fileData, i) => {
                     const file = validFiles[i];
+                    if (fileData.length > maxSize) { skipped.push(file.name); return; }
                     const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4) + i;
                     projectFiles.push({
                         id: fileId, name: file.name, size: fileData.length,
@@ -4788,7 +4790,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     });
                     addProjectLog('attached', null, 'Project', null, file.name);
                 });
-                await Promise.all(projectFiles.slice(-validFiles.length).map(async f => {
+                if (skipped.length) alert(`${skipped.join(', ')} still exceeded 5MB after compression and were skipped.`);
+                const added = validFiles.length - skipped.length;
+                if (!added) return;
+                await Promise.all(projectFiles.slice(-added).map(async f => {
                     f.storage = await saveFileData(f.id, f.data);
                 }));
                 saveProjectFromHub();
@@ -5107,7 +5112,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const maxSize = 5 * 1024 * 1024; // 5MB
             const validFiles = Array.from(fileList).filter(file => {
-                if (file.size > maxSize) { alert(`File "${file.name}" exceeds 5MB limit.`); return false; }
+                if (!file.type.startsWith('image/') && file.size > maxSize) { alert(`File "${file.name}" exceeds 5MB limit.`); return false; }
                 return true;
             });
             if (!validFiles.length) return;
@@ -5119,8 +5124,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             try {
                 const results = await Promise.all(validFiles.map(file => compressImage(file)));
                 autoLockTask(task);
+                const skipped = [];
                 results.forEach((fileData, i) => {
                     const file = validFiles[i];
+                    if (fileData.length > maxSize) { skipped.push(file.name); return; }
                     const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4) + i;
                     task.files.push({
                         id: fileId, name: file.name, size: fileData.length,
@@ -5129,7 +5136,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     addActivityEntry(task, 'system', `File attached: "${file.name}"`);
                     addProjectLog('attached', task.id, task.name, 'files', file.name);
                 });
-                await Promise.all(task.files.slice(-validFiles.length).map(async f => {
+                if (skipped.length) alert(`${skipped.join(', ')} still exceeded 5MB after compression and were skipped.`);
+                const added = validFiles.length - skipped.length;
+                if (!added) return;
+                await Promise.all(task.files.slice(-added).map(async f => {
                     f.storage = await saveFileData(f.id, f.data);
                 }));
                 saveProject();
