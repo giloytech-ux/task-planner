@@ -1682,6 +1682,14 @@
                     .eq('project_id', id)
                     .order('created_at');
 
+                // Fetch project metadata (description, meetings, checklist, activity, files, logs)
+                const { data: projData } = await supabase
+                    .from('projects')
+                    .select('metadata')
+                    .eq('id', id)
+                    .single();
+                const meta = projData?.metadata || {};
+
                 const rawTasks = (taskData || []).map(t => ({
                     _rowId: t.id,
                     id: t.task_number,
@@ -1708,7 +1716,16 @@
                     text: c.message
                 }));
 
-                return { tasks: rawTasks, history: loadedHistory };
+                return {
+                    tasks: rawTasks,
+                    history: loadedHistory,
+                    logs: meta.logs || [],
+                    projectDescription: meta.description || '',
+                    projectMeetings: meta.meetings || [],
+                    projectChecklist: meta.checklist || [],
+                    projectActivity: meta.activity || [],
+                    projectFiles: meta.files || []
+                };
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
                 const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [], logs: [] };
@@ -1734,13 +1751,21 @@
             const _hist = [...history];
             const _logs = [...projectLogs].slice(-500);
             const _deletes = [..._pendingDeletes];
+            const _metadata = {
+                logs: _logs,
+                description: projectDescription,
+                meetings: [...projectMeetings],
+                checklist: [...projectChecklist],
+                activity: [...projectActivity],
+                files: (projectFiles || []).map(f => ({ ...f, data: undefined }))
+            };
 
             try {
             if (currentUser) {
-                // Update project timestamp
+                // Update project timestamp + metadata
                 await supabase
                     .from('projects')
-                    .update({ updated_at: new Date().toISOString() })
+                    .update({ updated_at: new Date().toISOString(), metadata: _metadata })
                     .eq('id', _projId);
 
                 // Step 1: Explicit deletes — remove only tasks the user actually deleted
@@ -1865,7 +1890,8 @@
                     .insert({
                         user_id: currentUser.id,
                         name: name,
-                        color: PROJECT_COLORS[colorIndex]
+                        color: PROJECT_COLORS[colorIndex],
+                        metadata: {}
                     })
                     .select()
                     .single();
@@ -3822,7 +3848,20 @@
                 saveProject();
             } else if (_logsSource === 'dashboard') {
                 const pid = document.getElementById('projectLogsView').dataset.projectId;
-                if (pid) {
+                if (!pid) return;
+                const meta = {
+                    logs: projectLogs,
+                    description: projectDescription,
+                    meetings: projectMeetings,
+                    checklist: projectChecklist,
+                    activity: projectActivity,
+                    files: (projectFiles || []).map(f => ({ ...f, data: undefined }))
+                };
+                if (currentUser) {
+                    supabase.from('projects')
+                        .update({ updated_at: new Date().toISOString(), metadata: meta })
+                        .eq('id', pid).then();
+                } else {
                     const raw = localStorage.getItem('planner_proj_' + pid);
                     if (raw) {
                         const parsed = JSON.parse(raw);
@@ -3831,7 +3870,7 @@
                         parsed.projectMeetings = projectMeetings;
                         parsed.projectChecklist = projectChecklist;
                         parsed.projectActivity = projectActivity;
-                        parsed.projectFiles = (projectFiles || []).map(f => ({ ...f, data: undefined }));
+                        parsed.projectFiles = meta.files;
                         localStorage.setItem('planner_proj_' + pid, JSON.stringify(parsed));
                     }
                 }
