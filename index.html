@@ -454,7 +454,7 @@
     <header class="h-16 border-b border-slate-700 flex items-center justify-between px-3 md:px-6 bg-slate-900 z-10">
         <div class="flex items-center gap-2 md:gap-3 min-w-0">
             <!-- Home Button -->
-            <button onclick="showDashboard()" class="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px] justify-center" title="Back to Dashboard">
+            <button id="homeBtn" onclick="showDashboard()" class="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px] justify-center" title="Back to Dashboard">
                 <span class="material-icons-round">home</span>
             </button>
             <!-- Mobile sidebar toggle (project view only) -->
@@ -1368,6 +1368,7 @@
             document.getElementById('exportButtons').classList.add('hidden');
             document.getElementById('userMenu').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
+            document.getElementById('homeBtn').classList.add('hidden');
             clearAuthMessages();
         }
 
@@ -1495,6 +1496,7 @@
             userProfile = null;
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
+            document.getElementById('homeBtn').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
             await showDashboard();
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
@@ -1506,6 +1508,7 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
+            document.getElementById('homeBtn').classList.remove('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
             await loadUserProfile();
             await showDashboard();
