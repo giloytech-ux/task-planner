@@ -6161,13 +6161,57 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            const headers = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Duration (days)', 'Progress', 'Status', 'Days Remaining', 'Priority'];
+            // Find project timeline range
+            let minDate = null, maxDate = null;
+            tasks.forEach(t => {
+                const s = new Date(t.start + 'T00:00:00');
+                const e = new Date(t.end + 'T00:00:00');
+                if (!minDate || s < minDate) minDate = s;
+                if (!maxDate || e > maxDate) maxDate = e;
+            });
+
+            // Build weekly columns (Monday-aligned)
+            const weekStart = new Date(minDate);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1); // align to Monday
+            if (weekStart > minDate) weekStart.setDate(weekStart.getDate() - 7);
+            const weekEnd = new Date(maxDate);
+            weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()) % 7);
+
+            const weeks = [];
+            const d = new Date(weekStart);
+            while (d <= weekEnd) {
+                weeks.push(new Date(d));
+                d.setDate(d.getDate() + 7);
+            }
+
+            const weekHeaders = weeks.map(w => w.toISOString().slice(5, 10)); // MM-DD format
+
+            const dataHeaders = ['ID', 'Task Name', 'Assigned To', 'Start', 'End', 'Duration', 'Progress', 'Status', 'Days Left', 'Priority'];
+            const headers = [...dataHeaders, '', ...weekHeaders]; // empty col as separator
+
             const rows = tasks.map(t => {
                 const start = new Date(t.start + 'T00:00:00');
                 const end = new Date(t.end + 'T00:00:00');
                 const duration = Math.max(1, Math.ceil((end - start) / 86400000));
                 const daysRemaining = Math.ceil((end - today) / 86400000);
                 const status = getTaskStatus(t);
+                const pct = (parseInt(t.progress) || 0) / 100;
+
+                // Build Gantt bar cells
+                const ganttCells = weeks.map(wk => {
+                    const wkEnd = new Date(wk);
+                    wkEnd.setDate(wkEnd.getDate() + 6);
+                    // Check overlap between task [start, end] and week [wk, wkEnd]
+                    if (end < wk || start > wkEnd) return '';
+                    // Task spans this week — determine if completed or remaining portion
+                    const overlapStart = start > wk ? start : wk;
+                    const overlapEnd = end < wkEnd ? end : wkEnd;
+                    const midPoint = new Date(start.getTime() + (end - start) * pct);
+                    if (overlapEnd <= midPoint) return '\u2588'; // █ completed
+                    if (overlapStart >= midPoint) return '\u2591'; // ░ remaining
+                    return '\u2593'; // ▓ partial (week straddles progress boundary)
+                });
+
                 return [
                     t.id,
                     '"' + (t.name || '').replace(/"/g, '""') + '"',
@@ -6178,11 +6222,16 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                     t.progress + '%',
                     '"' + status.label + '"',
                     daysRemaining,
-                    t.priority || 'medium'
+                    t.priority || 'medium',
+                    '', // separator
+                    ...ganttCells
                 ];
             });
 
-            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            // Add legend row
+            const legendRow = ['', '"Legend: \u2588 = Done, \u2593 = Partial, \u2591 = Remaining"', ...Array(dataHeaders.length - 2 + 1 + weeks.length).fill('')];
+
+            const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(',')), '', legendRow.join(',')].join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
 
