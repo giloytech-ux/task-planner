@@ -1467,7 +1467,7 @@
                         if (t._rowId) {
                             existingRows.push({ id: t._rowId, ...buildRow(t, i) });
                         } else {
-                            newRows.push({ _taskRef: t, ...buildRow(t, i) });
+                            newRows.push(buildRow(t, i));
                         }
                     });
 
@@ -1476,18 +1476,15 @@
                         const { error } = await supabase
                             .from('tasks').upsert(existingRows);
                         if (error) {
-                            console.error('Task upsert failed:', error);
                             alert('Failed to save tasks to server. Your changes are preserved locally.');
                         }
                     }
 
                     // Insert new tasks (no id column sent — DB generates UUIDs)
                     if (newRows.length > 0) {
-                        const insertPayload = newRows.map(({ _taskRef, ...row }) => row);
                         const { data: insertedRows, error } = await supabase
-                            .from('tasks').insert(insertPayload).select('id, task_number');
+                            .from('tasks').insert(newRows).select('id, task_number');
                         if (error) {
-                            console.error('Task insert failed:', error);
                             alert('Failed to save tasks to server. Your changes are preserved locally.');
                         } else if (insertedRows) {
                             // Sync _rowId back — objects are shared so this updates live tasks too
@@ -2787,10 +2784,10 @@
             end.setDate(end.getDate() + 7);
             const endStr = end.toISOString().slice(0, 10);
 
+            const maxId = tasks.reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
             tasks.push({
-                id: String(tasks.length + 1),
+                id: String(maxId + 1),
                 name: 'New Task',
-                assigned: '',
                 start: startStr,
                 end: endStr,
                 progress: 0,
