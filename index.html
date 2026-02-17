@@ -38,7 +38,11 @@
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        /* Gantt Customization */
+        /* Gantt Customization — dark theme overrides */
+        .gantt .grid-background { fill: #0f172a !important; }
+        .gantt .grid-header { fill: #0f172a !important; stroke: #1e293b !important; }
+        .gantt .grid-row { fill: #0f172a !important; }
+        .gantt .grid-row:nth-child(even) { fill: #0f172a !important; }
         .gantt .bar-label { fill: #334155; font-size: 12px; }
         .gantt .bar-progress { transition: fill 0.2s ease; }
         .gantt .bar rect { transition: fill 0.2s ease; }
@@ -47,6 +51,7 @@
         .gantt .tick { stroke: #1e293b !important; }
         .gantt .row-line { stroke: #1e293b !important; }
         .gantt-container { overflow: visible; }
+        #gantt-target { background: #0f172a; }
         @media (max-width: 767px) {
             .gantt .upper-text, .gantt-sticky-header .upper-text { font-size: 10px !important; }
             .gantt .lower-text, .gantt-sticky-header .lower-text { font-size: 9px !important; }
