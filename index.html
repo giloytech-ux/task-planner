@@ -1059,7 +1059,7 @@
             <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                 <div class="flex items-center gap-2">
                     <span class="material-icons-round text-amber-400" style="font-size:16px">flag</span>
-                    <span class="text-sm font-semibold text-white">Today's Focus</span>
+                    <span id="focusModalTitle" class="text-sm font-semibold text-white">Today's Focus</span>
                 </div>
                 <button onclick="closeFocusModal()" class="text-slate-400 hover:text-white">
                     <span class="material-icons-round text-sm">close</span>
@@ -2957,19 +2957,21 @@
             // Sort suggested by nearest deadline first
             suggestedTasks.sort((a, b) => a.sort - b.sort);
 
-            if (focusTasks.length === 0 && suggestedTasks.length === 0) {
-                // All on track, nothing active today
+            if (focusTasks.length === 0) {
+                // All on track
                 panel.classList.remove('hidden');
-                container.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>All on track</span>`;
+                const chip = document.createElement('span');
+                chip.className = 'inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' + (suggestedTasks.length > 0 ? ' cursor-pointer hover:brightness-125 transition' : '');
+                chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>All on track` + (suggestedTasks.length > 0 ? ` <span class="opacity-60">· ${suggestedTasks.length} suggested ›</span>` : '');
+                if (suggestedTasks.length > 0) {
+                    chip.onclick = () => openFocusModal(suggestedTasks, 'Suggested Tasks');
+                }
+                container.appendChild(chip);
                 return;
             }
 
             // Render focus chips (urgent items)
-            if (focusTasks.length === 0) {
-                container.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>All on track</span>`;
-            } else {
+            {
                 // Sort: by priority tier, then by sort value
                 focusTasks.sort((a, b) => {
                     if (a.priority !== b.priority) return a.priority - b.priority;
@@ -2997,27 +2999,17 @@
                 }
             }
 
-            // Render suggested chips (active on-track tasks for today)
-            if (suggestedTasks.length > 0 && focusTasks.length === 0 && suggestedRow && suggestedContainer) {
-                suggestedTasks.slice(0, 3).forEach(item => {
-                    const chip = document.createElement('span');
-                    chip.className = 'inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition bg-slate-500/10 text-slate-400 border-slate-500/20';
-                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
-                    chip.onclick = () => scrollToTask(item.task.id);
-                    suggestedContainer.appendChild(chip);
-                });
-                suggestedRow.classList.remove('hidden');
-            }
-
             panel.classList.remove('hidden');
         }
 
-        function openFocusModal(focusTasks) {
+        function openFocusModal(focusTasks, title) {
             const list = document.getElementById('focusModalList');
             list.innerHTML = '';
-            const statusMap = { 0: { bg: 'bg-red-500/10', text: 'text-red-400', dot: 'bg-red-500', border: 'border-red-500/20' }, 1: { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', border: 'border-amber-500/20' }, 1.5: { bg: 'bg-orange-500/10', text: 'text-orange-400', dot: 'bg-orange-400', border: 'border-orange-500/20' }, 2: { bg: 'bg-blue-500/10', text: 'text-blue-400', dot: 'bg-blue-500', border: 'border-blue-500/20' } };
+            document.getElementById('focusModalTitle').textContent = title || "Today's Focus";
+            const statusMap = { 0: { text: 'text-red-400', dot: 'bg-red-500' }, 1: { text: 'text-amber-400', dot: 'bg-amber-400' }, 1.5: { text: 'text-orange-400', dot: 'bg-orange-400' }, 2: { text: 'text-blue-400', dot: 'bg-blue-500' } };
+            const defaultStyle = { text: 'text-slate-400', dot: 'bg-slate-400' };
             focusTasks.forEach(item => {
-                const s = statusMap[item.priority];
+                const s = statusMap[item.priority] || defaultStyle;
                 const btn = document.createElement('button');
                 btn.className = `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
                 btn.innerHTML = `<span class="w-2 h-2 rounded-full ${s.dot} shrink-0"></span>
