@@ -637,6 +637,10 @@
                         <span class="material-icons-round" style="font-size:20px">auto_awesome</span>
                         <span class="text-xs hidden md:inline">AI Summary</span>
                     </button>
+                    <button onclick="openProjectLogs()" class="w-10 h-10 md:w-8 md:h-8 flex items-center gap-1 text-slate-400 hover:text-cyan-400 transition-colors justify-center rounded-lg" title="Project Logs">
+                        <span class="material-icons-round" style="font-size:20px">history</span>
+                        <span class="text-xs hidden md:inline">Logs</span>
+                    </button>
                 </div>
 
                 <!-- Gantt Container -->
@@ -901,6 +905,23 @@
                 </div>
             </div>
 
+            <!-- Project Logs View -->
+            <div id="projectLogsView" class="flex-1 flex flex-col overflow-hidden hidden" style="position:absolute;inset:0;z-index:40;background:#0f172a">
+                <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
+                    <button onclick="closeProjectLogs()" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-lg">
+                        <span class="material-icons-round">arrow_back</span>
+                    </button>
+                    <div class="flex-1 min-w-0">
+                        <h2 id="projectLogsTitle" class="text-sm font-semibold text-white truncate">Project Logs</h2>
+                        <span id="projectLogsCount" class="text-[11px] text-slate-500">0 entries</span>
+                    </div>
+                    <button onclick="clearProjectLogs()" class="px-3 py-1.5 text-xs text-slate-500 hover:text-red-400 rounded transition-colors" title="Clear all logs">
+                        <span class="material-icons-round" style="font-size:16px">delete_sweep</span>
+                    </button>
+                </div>
+                <div id="projectLogsTimeline" class="flex-1 overflow-y-auto px-4 py-4 space-y-4"></div>
+            </div>
+
             <!-- Loading Overlay -->
             <div id="loadingOverlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
                 <div class="flex flex-col items-center gap-3">
@@ -1078,6 +1099,7 @@
         // --- Configuration & State ---
         let tasks = [];
         let history = [];
+        let projectLogs = [];
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
@@ -1467,6 +1489,9 @@
             if (mobileSidebarOpen) {
                 closeMobileSidebar(); return;
             }
+            if (!document.getElementById('projectLogsView').classList.contains('hidden')) {
+                closeProjectLogs(); return;
+            }
             if (currentTaskIndex !== null) {
                 closeTaskDetail(); return;
             }
@@ -1570,7 +1595,7 @@
                 return { tasks: rawTasks, history: loadedHistory };
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
-                const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [] };
+                const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [], logs: [] };
                 await hydrateAndMigrateFiles(parsed.tasks);
                 return parsed;
             }
@@ -1591,6 +1616,7 @@
             const _projId = currentProjectId;
             const _tasks = [...tasks];
             const _hist = [...history];
+            const _logs = [...projectLogs].slice(-500);
             const _deletes = [..._pendingDeletes];
 
             try {
@@ -1696,7 +1722,8 @@
                 }));
                 localStorage.setItem('planner_proj_' + _projId, JSON.stringify({
                     tasks: tasksForSave,
-                    history: trimmedHistory
+                    history: trimmedHistory,
+                    logs: _logs
                 }));
                 updateRegistryMetadataLocal();
             }
@@ -1736,7 +1763,7 @@
                     updatedAt: new Date().toISOString()
                 });
                 saveRegistryLocal(registry);
-                localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [] }));
+                localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [], logs: [] }));
                 return id;
             }
         }
@@ -2048,6 +2075,9 @@
                         <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
                             <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
                         </button>
+                        <button onclick="event.stopPropagation(); openProjectLogs('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-cyan-400 rounded transition-colors" title="Project Logs">
+                            <span class="material-icons-round" style="font-size:18px">history</span>
+                        </button>
                         <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
                             <span class="material-icons-round" style="font-size:18px">edit</span>
                         </button>
@@ -2221,6 +2251,7 @@
             _taskSnapshot = null;
             tasks = [];
             history = [];
+            projectLogs = [];
             _pendingDeletes = [];
 
             closeMobileSidebar();
@@ -2230,6 +2261,7 @@
             document.getElementById('dashboardView').classList.remove('hidden');
             document.getElementById('projectView').classList.add('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
+            document.getElementById('projectLogsView').classList.add('hidden');
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('summaryPanel')?.classList.add('hidden');
             document.getElementById('breadcrumbSep').classList.add('hidden');
@@ -2247,6 +2279,7 @@
             const data = await loadProject(id);
             tasks = data.tasks || [];
             history = data.history || [];
+            projectLogs = data.logs || [];
             _pendingDeletes = [];
 
             // Update UI
@@ -3049,6 +3082,8 @@
             // Capture _rowId for pending DB deletion before removing from array
             if (task._rowId) _pendingDeletes.push(task._rowId);
             const deletedId = task.id;
+            const deletedName = task.name;
+            addProjectLog('deleted', null, deletedName, null, '');
             tasks.splice(index, 1);
             // Renumber IDs (required by Gantt + dependencies)
             const oldToNew = {};
@@ -3065,6 +3100,11 @@
                     .filter(d => d !== deletedId)
                     .map(d => oldToNew[d] || d);
                 t.dependencies = remapped.join(',');
+            });
+            // Remap taskId references in project logs
+            projectLogs.forEach(log => {
+                if (log.taskId === deletedId) log.taskId = null;
+                else if (log.taskId && oldToNew[log.taskId]) log.taskId = oldToNew[log.taskId];
             });
             renderGantt();
             saveProject();
@@ -3137,6 +3177,7 @@
                 files: [],
                 meetings: []
             });
+            addProjectLog('created', String(maxId + 1), name, null, '');
             cancelAddTask();
             renderGantt();
             saveProject();
@@ -3345,10 +3386,14 @@
             // Auto-log changes
             if (field === 'progress' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
+                const action = parseInt(value) === 100 ? 'completed' : 'updated';
+                addProjectLog(action, task.id, task.name, null, `${oldValue || 0}% → ${value}%`);
             } else if (field === 'start' || field === 'end') {
                 addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
+                addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
             } else if (field === 'priority' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Priority changed to ${value}`);
+                addProjectLog('priority', task.id, task.name, null, `${oldValue} → ${value}`);
             }
 
             renderTaskDetailHeader();
@@ -3480,6 +3525,159 @@
                 updateRowIndicators(currentTaskIndex);
                 saveProject();
             }
+        }
+
+        // ---- PROJECT LOGS ----
+        function addProjectLog(action, taskId, taskName, tab, detail) {
+            projectLogs.push({
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                action: action,
+                taskId: taskId,
+                taskName: taskName,
+                tab: tab || null,
+                detail: detail || '',
+                timestamp: new Date().toISOString()
+            });
+            if (projectLogs.length > 500) projectLogs = projectLogs.slice(-500);
+        }
+
+        const LOG_ACTION_ICONS = {
+            created:   { icon: 'add_circle',       color: 'text-green-400' },
+            deleted:   { icon: 'remove_circle',    color: 'text-red-400' },
+            completed: { icon: 'check_circle',     color: 'text-emerald-400' },
+            updated:   { icon: 'trending_up',      color: 'text-blue-400' },
+            checked:   { icon: 'check_box',        color: 'text-emerald-400' },
+            unchecked: { icon: 'check_box_outline_blank', color: 'text-slate-400' },
+            attached:  { icon: 'attach_file',      color: 'text-purple-400' },
+            removed:   { icon: 'delete_outline',   color: 'text-orange-400' },
+            meeting:   { icon: 'groups',           color: 'text-cyan-400' },
+            priority:  { icon: 'flag',             color: 'text-amber-400' },
+            dates:     { icon: 'date_range',       color: 'text-indigo-400' }
+        };
+
+        let _logsSource = null; // 'dashboard' or 'gantt'
+
+        function renderProjectLogs() {
+            const container = document.getElementById('projectLogsTimeline');
+            container.innerHTML = '';
+
+            const count = projectLogs.length;
+            document.getElementById('projectLogsCount').textContent = count + ' entr' + (count === 1 ? 'y' : 'ies');
+
+            if (count === 0) {
+                container.innerHTML = '<p class="text-sm text-slate-500 text-center py-12">No activity recorded yet.</p>';
+                return;
+            }
+
+            // Group by date, reverse chronological
+            const groups = {};
+            [...projectLogs].reverse().forEach(entry => {
+                const d = new Date(entry.timestamp);
+                const today = new Date();
+                const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+                let label;
+                if (d.toDateString() === today.toDateString()) label = 'Today';
+                else if (d.toDateString() === yesterday.toDateString()) label = 'Yesterday';
+                else label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                if (!groups[label]) groups[label] = [];
+                groups[label].push(entry);
+            });
+
+            Object.entries(groups).forEach(([label, entries]) => {
+                const groupEl = document.createElement('div');
+                groupEl.innerHTML = `<div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">${label}</div>`;
+                entries.forEach(entry => {
+                    const cfg = LOG_ACTION_ICONS[entry.action] || { icon: 'info', color: 'text-slate-400' };
+                    const time = new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                    const taskExists = entry.taskId && tasks.find(t => t.id === entry.taskId);
+                    const nameHtml = taskExists
+                        ? `<a href="#" onclick="event.preventDefault(); navigateToTaskFromLog('${entry.taskId}', ${entry.tab ? "'" + entry.tab + "'" : 'null'})" class="text-blue-400 hover:text-blue-300 hover:underline">${escapeHtml(entry.taskName)}</a>`
+                        : `<span class="text-slate-300">${escapeHtml(entry.taskName)}</span>`;
+                    const detail = entry.detail ? `<span class="text-slate-500 ml-1">${escapeHtml(entry.detail)}</span>` : '';
+                    const row = document.createElement('div');
+                    row.className = 'flex items-start gap-3 py-2';
+                    row.innerHTML = `
+                        <span class="material-icons-round ${cfg.color} mt-0.5" style="font-size:18px">${cfg.icon}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm text-slate-200">
+                                <span class="text-slate-500 capitalize">${entry.action}</span>
+                                ${nameHtml}${detail}
+                            </div>
+                            <div class="text-[11px] text-slate-600 mt-0.5">${time}</div>
+                        </div>
+                    `;
+                    groupEl.appendChild(row);
+                });
+                container.appendChild(groupEl);
+            });
+        }
+
+        async function openProjectLogs(projectId, projectName) {
+            if (projectId && projectId !== currentProjectId) {
+                // Opening from dashboard — load project data
+                _logsSource = 'dashboard';
+                const data = await loadProject(projectId);
+                projectLogs = data.logs || [];
+                tasks = data.tasks || [];
+                document.getElementById('projectLogsTitle').textContent = (projectName || 'Project') + ' Logs';
+                // Store the project ID so we can reference it
+                document.getElementById('projectLogsView').dataset.projectId = projectId;
+            } else {
+                // Opening from Gantt (inside a project)
+                _logsSource = 'gantt';
+                document.getElementById('projectLogsTitle').textContent = (currentProjectName || 'Project') + ' Logs';
+            }
+            document.getElementById('projectLogsView').classList.remove('hidden');
+            renderProjectLogs();
+            pushNavState('projectLogs');
+        }
+
+        function closeProjectLogs() {
+            document.getElementById('projectLogsView').classList.add('hidden');
+            if (_logsSource === 'dashboard') {
+                projectLogs = [];
+                tasks = [];
+            }
+            _logsSource = null;
+        }
+
+        function clearProjectLogs() {
+            if (!confirm('Clear all project logs?')) return;
+            projectLogs = [];
+            if (_logsSource === 'dashboard') {
+                // Save cleared logs back to the project
+                const pid = document.getElementById('projectLogsView').dataset.projectId;
+                if (pid) {
+                    const raw = localStorage.getItem('planner_proj_' + pid);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        parsed.logs = [];
+                        localStorage.setItem('planner_proj_' + pid, JSON.stringify(parsed));
+                    }
+                }
+            } else {
+                saveProject();
+            }
+            renderProjectLogs();
+        }
+
+        function navigateToTaskFromLog(taskId, tab) {
+            const index = tasks.findIndex(t => t.id === taskId);
+            if (index === -1) return;
+            document.getElementById('projectLogsView').classList.add('hidden');
+            if (_logsSource === 'dashboard') {
+                // Need to fully open the project first
+                const pid = document.getElementById('projectLogsView').dataset.projectId;
+                _logsSource = null;
+                openProject(pid).then(() => {
+                    openTaskDetail(index);
+                    if (tab) switchDetailTab(tab === 'meetings' ? 'meetings' : tab === 'checklist' ? 'checklist' : tab === 'files' ? 'files' : 'details');
+                });
+                return;
+            }
+            _logsSource = null;
+            openTaskDetail(index);
+            if (tab) switchDetailTab(tab === 'meetings' ? 'meetings' : tab === 'checklist' ? 'checklist' : tab === 'files' ? 'files' : 'details');
         }
 
         // ---- ACTIVITY TAB ----
@@ -3647,6 +3845,7 @@
             if (!item) return;
             autoLockTask(task);
             item.checked = !item.checked;
+            addProjectLog(item.checked ? 'checked' : 'unchecked', task.id, task.name, 'checklist', (item.checked ? '✓ ' : '☐ ') + item.text);
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -3755,6 +3954,7 @@
                         timestamp: new Date().toISOString()
                     });
                     addActivityEntry(task, 'system', `File attached: "${file.name}"`);
+                    addProjectLog('attached', task.id, task.name, 'files', file.name);
                     renderFilesTab(task);
                     renderTaskDetailHeader();
                     updateRowIndicators(currentTaskIndex);
@@ -3803,6 +4003,7 @@
             const removed = task.files.splice(index, 1);
             deleteFileData(removed[0]);
             addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
+            addProjectLog('removed', task.id, task.name, 'files', removed[0].name);
             renderFilesTab(task);
             renderTaskDetailHeader();
             updateRowIndicators(currentTaskIndex);
@@ -3923,9 +4124,11 @@
             if (editingMeetingIndex !== null) {
                 task.meetings[editingMeetingIndex] = mtgData;
                 addActivityEntry(task, 'system', `Meeting updated: "${title}"`);
+                addProjectLog('meeting', task.id, task.name, 'meetings', 'updated: ' + title);
             } else {
                 task.meetings.push(mtgData);
                 addActivityEntry(task, 'system', `Meeting logged: "${title}"`);
+                addProjectLog('meeting', task.id, task.name, 'meetings', title);
             }
 
             editingMeetingIndex = null;
@@ -3945,6 +4148,7 @@
             autoLockTask(task);
             const removed = task.meetings.splice(index, 1);
             addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
+            addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
             renderMeetingsTab(task);
             updateRowIndicators(currentTaskIndex);
             saveProject();
