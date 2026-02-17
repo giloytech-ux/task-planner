@@ -150,6 +150,7 @@
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
+        .status-completed { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .status-on-track { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .status-attention { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
         .status-overdue { background: rgba(239, 68, 68, 0.15); color: #f87171; }
@@ -2239,7 +2240,7 @@
             const pct = parseInt(task.progress) || 0;
 
             // Complete
-            if (pct >= 100) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
+            if (pct >= 100) return { label: 'Completed', color: '#22c55e', css: 'status-completed', icon: 'check_circle' };
 
             // Past end date and not complete
             if (today > end) return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
