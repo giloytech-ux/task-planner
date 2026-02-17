@@ -837,6 +837,22 @@
         </div>
     </div>
 
+    <!-- Focus Modal -->
+    <div id="focusModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this)closeFocusModal()">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-sm w-full max-h-[70vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+                <div class="flex items-center gap-2">
+                    <span class="material-icons-round text-amber-400" style="font-size:16px">flag</span>
+                    <span class="text-sm font-semibold text-white">Today's Focus</span>
+                </div>
+                <button onclick="closeFocusModal()" class="text-slate-400 hover:text-white">
+                    <span class="material-icons-round text-sm">close</span>
+                </button>
+            </div>
+            <div id="focusModalList" class="flex-1 overflow-y-auto p-2"></div>
+        </div>
+    </div>
+
     <!-- Add Task Modal -->
     <div id="addTaskModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this)cancelAddTask()">
         <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-6 shadow-2xl max-w-md w-full">
@@ -1332,6 +1348,9 @@
             }
             if (!document.getElementById('colorPickerModal').classList.contains('hidden')) {
                 closeColorPicker(); return;
+            }
+            if (!document.getElementById('focusModal').classList.contains('hidden')) {
+                closeFocusModal(); return;
             }
             if (!document.getElementById('mobileSummaryPanel').classList.contains('hidden')) {
                 closeMobileSummaryPanel(); return;
@@ -2640,13 +2659,23 @@
                 });
 
                 const bgMap = { 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
-                focusTasks.slice(0, 4).forEach(item => {
+
+                if (focusTasks.length === 1) {
+                    const item = focusTasks[0];
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
                     chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
                     chip.onclick = () => scrollToTask(item.task.id);
                     container.appendChild(chip);
-                });
+                } else {
+                    // 2+ focus tasks: show summary chip that opens modal
+                    const topPriority = focusTasks[0].priority;
+                    const chip = document.createElement('span');
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${focusTasks.length} tasks need attention <span class="opacity-60">›</span>`;
+                    chip.onclick = () => openFocusModal(focusTasks);
+                    container.appendChild(chip);
+                }
             }
 
             // Render suggested chips (active on-track tasks for today)
@@ -2662,6 +2691,31 @@
             }
 
             panel.classList.remove('hidden');
+        }
+
+        function openFocusModal(focusTasks) {
+            const list = document.getElementById('focusModalList');
+            list.innerHTML = '';
+            const statusMap = { 0: { bg: 'bg-red-500/10', text: 'text-red-400', dot: 'bg-red-500', border: 'border-red-500/20' }, 1: { bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-400', border: 'border-amber-500/20' }, 1.5: { bg: 'bg-orange-500/10', text: 'text-orange-400', dot: 'bg-orange-400', border: 'border-orange-500/20' }, 2: { bg: 'bg-blue-500/10', text: 'text-blue-400', dot: 'bg-blue-500', border: 'border-blue-500/20' } };
+            focusTasks.forEach(item => {
+                const s = statusMap[item.priority];
+                const btn = document.createElement('button');
+                btn.className = `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
+                btn.innerHTML = `<span class="w-2 h-2 rounded-full ${s.dot} shrink-0"></span>
+                    <span class="flex-1 text-left min-w-0">
+                        <span class="text-sm text-white truncate block">${item.task.name}</span>
+                        <span class="text-xs ${s.text} opacity-80">${item.label}</span>
+                    </span>
+                    <span class="material-icons-round text-slate-500 group-hover:text-slate-300 text-sm shrink-0">chevron_right</span>`;
+                btn.onclick = () => { closeFocusModal(); scrollToTask(item.task.id); };
+                list.appendChild(btn);
+            });
+            document.getElementById('focusModal').classList.remove('hidden');
+            pushNavState('focusModal');
+        }
+
+        function closeFocusModal() {
+            document.getElementById('focusModal').classList.add('hidden');
         }
 
         function renderTable() {
