@@ -3853,8 +3853,7 @@
             // Auto-log changes
             if (field === 'progress' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
-                const action = parseInt(value) === 100 ? 'completed' : 'updated';
-                addProjectLog(action, task.id, task.name, null, `${oldValue || 0}% → ${value}%`);
+                if (parseInt(value) === 100) addProjectLog('completed', task.id, task.name, null, '');
             } else if (field === 'start' || field === 'end') {
                 addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
                 addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
@@ -4000,15 +3999,8 @@
                                 addActivityEntry(task, 'system', `Progress changed from ${oldPct}% to ${currentProgress}%`);
                             }
 
-                            const recentLog = projectLogs.slice().reverse().find(l =>
-                                l.action === 'updated' && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
-                            );
-                            if (recentLog) {
-                                const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
-                                recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldPct}% → ${currentProgress}%`;
-                                recentLog.timestamp = new Date().toISOString();
-                            } else {
-                                addProjectLog('updated', task.id, task.name, 'details', `Progress: ${oldPct}% → ${currentProgress}%`);
+                            if (currentProgress === 100) {
+                                addProjectLog('completed', task.id, task.name, null, '');
                             }
                             renderMobileCards();
                             renderGantt();
