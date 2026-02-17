@@ -432,8 +432,8 @@
                 <span class="material-icons-round">home</span>
             </button>
             <!-- Mobile sidebar toggle (project view only) -->
-            <button id="mobileSidebarToggle" onclick="toggleMobileSidebar()" class="hidden md:!hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="Open chat">
-                <span class="material-icons-round">chat</span>
+            <button id="mobileSidebarToggle" onclick="toggleMobileSidebar()" class="hidden md:!hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="AI Chat">
+                <span class="material-icons-round">auto_awesome</span>
             </button>
             <div class="w-px h-6 bg-slate-700 hidden sm:block"></div>
             <span class="material-icons-round text-blue-500 hidden sm:block">auto_fix_high</span>
@@ -2894,7 +2894,14 @@
             container.innerHTML = '';
 
             if (tasks.length === 0) {
-                container.innerHTML = '<div class="flex flex-col items-center justify-center py-10 text-slate-600"><span class="material-icons-round text-3xl mb-2">assignment</span><p class="text-sm">No tasks yet</p></div>';
+                container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-slate-600">
+                    <span class="material-icons-round text-3xl mb-2">assignment</span>
+                    <p class="text-sm mb-4">No tasks yet</p>
+                    <button onclick="showAddTaskModal()" class="flex items-center gap-1.5 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] mb-3">
+                        <span class="material-icons-round text-sm">add</span> Add Task Manually
+                    </button>
+                    <p class="text-xs text-slate-500">or tap <span class="material-icons-round align-middle" style="font-size:14px">auto_awesome</span> top-left to generate tasks with AI</p>
+                </div>`;
                 return;
             }
 
