@@ -468,6 +468,221 @@
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
         }
+        /* =============================================
+           Light Theme Overrides (Apple HIG style)
+           ============================================= */
+
+        /* 3A: Base */
+        body.light-theme { background-color: #F2F2F7 !important; color: #1C1C1E; }
+        body.light-theme h1, body.light-theme h2, body.light-theme h3 { letter-spacing: -0.02em; }
+        body.light-theme ::-webkit-scrollbar-track { background: #F2F2F7; }
+        body.light-theme ::-webkit-scrollbar-thumb { background: #C7C7CC; }
+        body.light-theme ::-webkit-scrollbar-thumb:hover { background: #AEAEB2; }
+
+        /* 3B: Tailwind Background Overrides */
+        body.light-theme .bg-slate-900,
+        body.light-theme .bg-slate-950 { background-color: #F2F2F7 !important; }
+        body.light-theme .bg-slate-800 { background-color: #FFFFFF !important; }
+        body.light-theme .bg-slate-800\/30 { background-color: rgba(255,255,255,0.3) !important; }
+        body.light-theme .bg-slate-800\/50 { background-color: rgba(255,255,255,0.5) !important; }
+        body.light-theme .bg-slate-800\/70 { background-color: rgba(255,255,255,0.7) !important; }
+        body.light-theme .bg-slate-900\/50 { background-color: rgba(242,242,247,0.5) !important; }
+        body.light-theme .bg-slate-900\/80 { background-color: rgba(242,242,247,0.8) !important; }
+        body.light-theme .bg-slate-700 { background-color: #E5E5EA !important; }
+        body.light-theme .bg-slate-700\/50 { background-color: rgba(229,229,234,0.5) !important; }
+
+        /* 3C: Tailwind Text Overrides */
+        body.light-theme .text-white { color: #1C1C1E !important; }
+        body.light-theme .text-slate-200 { color: #1C1C1E !important; }
+        body.light-theme .text-slate-300 { color: #3A3A3C !important; }
+        body.light-theme .text-slate-400 { color: #8E8E93 !important; }
+        body.light-theme .text-slate-500 { color: #AEAEB2 !important; }
+        body.light-theme .text-slate-600 { color: #8E8E93 !important; }
+        body.light-theme .text-blue-400 { color: #007AFF !important; }
+        body.light-theme .text-blue-300 { color: #007AFF !important; }
+        body.light-theme .text-green-400 { color: #248A3D !important; }
+        body.light-theme .text-green-500 { color: #248A3D !important; }
+        body.light-theme .text-red-400 { color: #D70015 !important; }
+        body.light-theme .text-yellow-400 { color: #9A6700 !important; }
+        body.light-theme .text-orange-400 { color: #C93400 !important; }
+
+        /* 3D: Tailwind Border Overrides */
+        body.light-theme .border-slate-700 { border-color: rgba(60,60,67,0.18) !important; }
+        body.light-theme .border-slate-600 { border-color: #D1D1D6 !important; }
+        body.light-theme .border-slate-800 { border-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme .divide-slate-700 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(60,60,67,0.12) !important; }
+
+        /* 3E: Tailwind Hover Overrides */
+        body.light-theme .hover\:bg-slate-700:hover { background-color: #E5E5EA !important; }
+        body.light-theme .hover\:bg-slate-800:hover { background-color: #F2F2F7 !important; }
+        body.light-theme .hover\:text-slate-200:hover { color: #1C1C1E !important; }
+        body.light-theme .hover\:text-slate-300:hover { color: #3A3A3C !important; }
+        body.light-theme .hover\:text-blue-400:hover { color: #007AFF !important; }
+        body.light-theme .hover\:text-blue-300:hover { color: #007AFF !important; }
+        body.light-theme .hover\:text-red-400:hover { color: #D70015 !important; }
+        body.light-theme .hover\:border-slate-500:hover { border-color: #C7C7CC !important; }
+
+        /* Ring/focus overrides */
+        body.light-theme .ring-slate-700 { --tw-ring-color: rgba(60,60,67,0.18) !important; }
+        body.light-theme .focus\:ring-blue-500:focus { --tw-ring-color: #007AFF !important; }
+
+        /* BG color utilities */
+        body.light-theme .bg-blue-600 { background-color: #007AFF !important; }
+        body.light-theme .hover\:bg-blue-500:hover { background-color: #0071E3 !important; }
+        body.light-theme .bg-blue-500\/10,
+        body.light-theme .bg-blue-400\/10 { background-color: rgba(0,122,255,0.08) !important; }
+        body.light-theme .bg-green-500\/10,
+        body.light-theme .bg-green-400\/10 { background-color: rgba(36,138,61,0.08) !important; }
+        body.light-theme .bg-red-500\/10,
+        body.light-theme .bg-red-400\/10 { background-color: rgba(215,0,21,0.08) !important; }
+        body.light-theme .bg-yellow-500\/10,
+        body.light-theme .bg-yellow-400\/10 { background-color: rgba(154,103,0,0.08) !important; }
+        body.light-theme .bg-orange-500\/10 { background-color: rgba(201,52,0,0.08) !important; }
+
+        /* 3F: Custom Class Overrides */
+        body.light-theme .glass-panel {
+            background: rgba(255,255,255,0.85) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(60,60,67,0.12) !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        body.light-theme .project-card {
+            background: #FFFFFF !important;
+            border: 1px solid rgba(60,60,67,0.12) !important;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04);
+        }
+        body.light-theme .project-card:hover {
+            border-color: rgba(0,122,255,0.3) !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+        }
+        body.light-theme .new-project-card {
+            border: 2px dashed rgba(60,60,67,0.2) !important;
+            border-radius: 16px;
+        }
+        body.light-theme .new-project-card:hover {
+            border-color: rgba(0,122,255,0.4) !important;
+            background: rgba(0,122,255,0.03) !important;
+        }
+        body.light-theme .td-input,
+        body.light-theme .td-textarea {
+            background: #E5E5EA !important;
+            color: #1C1C1E !important;
+            border: 1px solid transparent;
+        }
+        body.light-theme .td-input:focus,
+        body.light-theme .td-textarea:focus { border-color: #007AFF !important; }
+        body.light-theme .td-input::placeholder,
+        body.light-theme .td-textarea::placeholder { color: #AEAEB2 !important; }
+        body.light-theme .auth-input {
+            background: #E5E5EA !important;
+            color: #1C1C1E !important;
+            border: 1px solid transparent;
+        }
+        body.light-theme .auth-input:focus { border-color: #007AFF !important; }
+        body.light-theme .auth-input::placeholder { color: #AEAEB2 !important; }
+        body.light-theme .file-card {
+            background: #FFFFFF !important;
+            border: 1px solid rgba(60,60,67,0.12) !important;
+            border-radius: 16px;
+        }
+        body.light-theme .file-card:hover { border-color: rgba(60,60,67,0.25) !important; }
+        body.light-theme .meeting-card {
+            background: #FFFFFF !important;
+            border: 1px solid rgba(60,60,67,0.12) !important;
+            border-radius: 16px;
+        }
+        body.light-theme .meeting-card:hover { border-color: rgba(60,60,67,0.25) !important; }
+        body.light-theme .file-drop-zone {
+            border-color: #C7C7CC !important;
+        }
+        body.light-theme .file-drop-zone:hover,
+        body.light-theme .file-drop-zone.dragover {
+            border-color: #007AFF !important;
+            background: rgba(0,122,255,0.03) !important;
+        }
+        body.light-theme .activity-item::before { background: #D1D1D6 !important; }
+        body.light-theme .activity-dot { border-color: #D1D1D6 !important; background: #F2F2F7 !important; }
+        body.light-theme .activity-dot.comment { border-color: #248A3D !important; background: #248A3D !important; }
+        body.light-theme .activity-dot.system { border-color: #007AFF !important; }
+        body.light-theme .dep-chip {
+            background: rgba(0,122,255,0.08) !important;
+            color: #007AFF !important;
+        }
+        body.light-theme .status-completed,
+        body.light-theme .status-on-track { background: rgba(36,138,61,0.1) !important; color: #248A3D !important; }
+        body.light-theme .status-attention { background: rgba(154,103,0,0.1) !important; color: #9A6700 !important; }
+        body.light-theme .status-overdue { background: rgba(215,0,21,0.1) !important; color: #D70015 !important; }
+        body.light-theme .status-overdue-soon { background: rgba(201,52,0,0.1) !important; color: #C93400 !important; }
+        body.light-theme .td-tab:hover { color: #3A3A3C; }
+        body.light-theme .td-tab.active { color: #007AFF !important; border-bottom-color: #007AFF !important; }
+        body.light-theme .td-header { border-bottom-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme .td-tabs { border-bottom-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme .progress-bar-bg { background: rgba(60,60,67,0.1) !important; }
+        body.light-theme #tdProgress { background: #D1D1D6 !important; }
+        body.light-theme #tdProgress::-webkit-slider-runnable-track {
+            background: linear-gradient(to right, #007AFF calc(var(--val, 0) * 1%), #D1D1D6 calc(var(--val, 0) * 1%)) !important;
+        }
+        body.light-theme #tdProgress::-moz-range-track { background: #D1D1D6 !important; }
+        body.light-theme #tdProgress::-moz-range-progress { background: #007AFF !important; }
+        body.light-theme #tdProgress::-webkit-slider-thumb { background: #007AFF !important; border-color: #FFFFFF !important; }
+        body.light-theme #tdProgress::-moz-range-thumb { background: #007AFF !important; border-color: #FFFFFF !important; }
+        body.light-theme .breadcrumb-name { border-bottom-color: rgba(60,60,67,0.2) !important; }
+        body.light-theme .breadcrumb-name:hover { border-bottom-color: rgba(0,122,255,0.5) !important; color: #007AFF !important; }
+        body.light-theme .checklist-item:hover { background: rgba(60,60,67,0.04) !important; }
+        body.light-theme .checklist-item.checked label { color: #AEAEB2 !important; }
+        body.light-theme .color-option:hover,
+        body.light-theme .color-option.selected { border-color: #1C1C1E !important; }
+
+        /* Header — frosted glass light */
+        body.light-theme header {
+            background: rgba(255,255,255,0.85) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        body.light-theme header.border-b { border-bottom-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme #headerDivider { background-color: rgba(60,60,67,0.12) !important; }
+        body.light-theme .project-card .border-t { border-top-color: rgba(60,60,67,0.08) !important; }
+
+        /* Modals */
+        body.light-theme [class*="bg-slate-900\/"] { background-color: rgba(0,0,0,0.3) !important; }
+        body.light-theme .rounded-xl.bg-slate-800,
+        body.light-theme .rounded-2xl.bg-slate-800 {
+            background: #FFFFFF !important;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        /* 3G: Gantt SVG Overrides */
+        body.light-theme .gantt .grid-background { fill: #F2F2F7 !important; }
+        body.light-theme .gantt .grid-header { fill: #FFFFFF !important; stroke: rgba(60,60,67,0.12) !important; }
+        body.light-theme .gantt .grid-row { fill: #FFFFFF !important; }
+        body.light-theme .gantt .grid-row:nth-child(even) { fill: #F2F2F7 !important; }
+        body.light-theme .gantt .upper-text,
+        body.light-theme .gantt .lower-text,
+        body.light-theme .gantt-sticky-header .upper-text,
+        body.light-theme .gantt-sticky-header .lower-text { fill: #8E8E93 !important; }
+        body.light-theme .gantt .today-highlight { fill: #007AFF !important; opacity: 0.1 !important; }
+        body.light-theme .gantt .tick { stroke: rgba(60,60,67,0.08) !important; }
+        body.light-theme .gantt .row-line { stroke: rgba(60,60,67,0.08) !important; }
+        body.light-theme #gantt-target { background: #F2F2F7 !important; }
+        body.light-theme .gantt .bar-label { fill: #3A3A3C !important; }
+
+        /* 3H: Special Cases */
+        body.light-theme #projectLogsView { background: #F2F2F7 !important; }
+        body.light-theme #sidebarPanel { background: #FFFFFF !important; }
+        body.light-theme .sidebar-backdrop { background: rgba(0,0,0,0.3) !important; }
+        body.light-theme #meetingForm.meeting-fullscreen { background: #F2F2F7 !important; }
+        body.light-theme #projMeetingForm.meeting-fullscreen { background: #F2F2F7 !important; }
+
+        /* Placeholder text in light mode */
+        body.light-theme input::placeholder,
+        body.light-theme textarea::placeholder,
+        body.light-theme select { color: #AEAEB2 !important; }
+        body.light-theme select { background-color: #E5E5EA !important; color: #1C1C1E !important; }
+
     </style>
 </head>
 <body class="flex flex-col overflow-hidden" style="height: 100vh; height: 100dvh;">
@@ -491,6 +706,10 @@
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
         </div>
         <div class="flex items-center gap-2 md:gap-4">
+            <!-- Theme toggle -->
+            <button id="themeToggleBtn" onclick="toggleTheme()" class="flex items-center justify-center min-w-[44px] min-h-[44px] text-slate-400 hover:text-blue-400 transition-colors rounded-lg" title="Toggle theme">
+                <span class="material-icons-round" id="themeIcon">light_mode</span>
+            </button>
             <!-- Export buttons (project view only) -->
             <div id="exportButtons" class="flex items-center gap-2 hidden">
                 <button onclick="exportCSV()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]" title="Export CSV">
@@ -528,7 +747,7 @@
             <div class="text-center mb-8">
                 <img src="icon-192.png" alt="Planory" class="w-16 h-16 mx-auto mb-3 rounded-2xl">
                 <h2 class="text-2xl font-bold text-white mb-1">Planory</h2>
-                <p class="text-sm text-slate-400">Sign in to sync your projects across devices. <span class="text-slate-500">Modern look.</span></p>
+                <p class="text-sm text-slate-400">Sign in to sync your projects across devices. <span class="text-slate-500">Modern look_v2</span></p>
             </div>
 
             <div class="glass-panel rounded-xl p-6 space-y-4">
@@ -1185,6 +1404,36 @@
             if (d) { d.classList.remove('hidden'); d.textContent = 'JS Error: ' + msg + ' (line ' + line + ')'; }
             return false;
         };
+
+        // =============================================
+        // Theme Toggle
+        // =============================================
+        function getThemePreference() {
+            return localStorage.getItem('planner_theme') || 'dark';
+        }
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('light-theme');
+            } else {
+                document.body.classList.remove('light-theme');
+            }
+            const icon = document.getElementById('themeIcon');
+            if (icon) icon.textContent = theme === 'light' ? 'dark_mode' : 'light_mode';
+            const meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', theme === 'light' ? '#F2F2F7' : '#0f172a');
+        }
+        function toggleTheme() {
+            const current = getThemePreference();
+            const next = current === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('planner_theme', next);
+            applyTheme(next);
+            // Re-render Gantt if visible
+            const ganttSection = document.getElementById('ganttSection');
+            if (ganttSection && !ganttSection.classList.contains('hidden') && typeof renderGantt === 'function') {
+                renderGantt();
+            }
+        }
+        applyTheme(getThemePreference());
 
         // =============================================
         // Supabase Setup
