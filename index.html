@@ -3017,8 +3017,19 @@
         }
 
         function updateTask(index, field, value) {
-            autoLockTask(tasks[index]);
-            tasks[index][field] = value;
+            const task = tasks[index];
+            if (field === 'start' && task.end && value > task.end) {
+                alert('Start date must be on or before end date.');
+                renderGantt();
+                return;
+            }
+            if (field === 'end' && task.start && value < task.start) {
+                alert('End date must be on or after start date.');
+                renderGantt();
+                return;
+            }
+            autoLockTask(task);
+            task[field] = value;
             clearTimeout(window.renderTimeout);
             window.renderTimeout = setTimeout(() => {
                 renderGantt();
@@ -3098,12 +3109,19 @@
             const name = document.getElementById('addTaskName').value.trim();
             if (!name) { document.getElementById('addTaskName').focus(); return; }
 
+            const startVal = document.getElementById('addTaskStart').value;
+            const endVal = document.getElementById('addTaskEnd').value;
+            if (startVal && endVal && startVal > endVal) {
+                alert('Start date must be on or before end date.');
+                return;
+            }
+
             const maxId = tasks.reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
             tasks.push({
                 id: String(maxId + 1),
                 name: name,
-                start: document.getElementById('addTaskStart').value,
-                end: document.getElementById('addTaskEnd').value,
+                start: startVal,
+                end: endVal,
                 progress: 0,
                 dependencies: '',
                 priority: document.getElementById('addTaskPriority').value,
@@ -3300,6 +3318,16 @@
 
         function updateTaskDetail(field, value) {
             const task = tasks[currentTaskIndex];
+            if (field === 'start' && task.end && value > task.end) {
+                alert('Start date must be on or before end date.');
+                document.getElementById('tdStart').value = task.start;
+                return;
+            }
+            if (field === 'end' && task.start && value < task.start) {
+                alert('End date must be on or after start date.');
+                document.getElementById('tdEnd').value = task.end;
+                return;
+            }
             autoLockTask(task);
             const oldValue = task[field];
             task[field] = value;
