@@ -461,7 +461,7 @@
             <button id="mobileSidebarToggle" onclick="toggleMobileSidebar()" class="hidden md:!hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="AI Chat">
                 <span class="material-icons-round">smart_toy</span>
             </button>
-            <div class="w-px h-6 bg-slate-700 hidden sm:block"></div>
+            <div id="headerDivider" class="w-px h-6 bg-slate-700 hidden sm:block"></div>
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
@@ -1369,6 +1369,7 @@
             document.getElementById('userMenu').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('homeBtn').classList.add('hidden');
+            document.getElementById('headerDivider').classList.add('hidden');
             clearAuthMessages();
         }
 
@@ -1497,6 +1498,7 @@
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('signInHeaderBtn').classList.remove('hidden');
             document.getElementById('homeBtn').classList.remove('hidden');
+            document.getElementById('headerDivider').classList.remove('hidden');
             document.getElementById('userMenu').classList.add('hidden');
             await showDashboard();
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
@@ -1509,6 +1511,7 @@
             document.getElementById('userMenu').classList.remove('hidden');
             document.getElementById('signInHeaderBtn').classList.add('hidden');
             document.getElementById('homeBtn').classList.remove('hidden');
+            document.getElementById('headerDivider').classList.remove('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
             await loadUserProfile();
             await showDashboard();
