@@ -153,6 +153,7 @@
         .status-on-track { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .status-attention { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
         .status-overdue { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        .status-overdue-soon { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
 
         /* Task Detail Page */
         .td-header { border-bottom: 1px solid rgba(255,255,255,0.08); }
@@ -1843,6 +1844,7 @@
                     const pills = [];
                     if (focus.overdue > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`);
                     if (focus.attention > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`);
+                    if (focus.overdueSoon > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20"><span class="w-1 h-1 rounded-full bg-orange-500"></span>${focus.overdueSoon} overdue soon</span>`);
                     if (focus.nearDeadline > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`);
 
                     if (pills.length > 0) {
@@ -2251,9 +2253,9 @@
             const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
             const gap = expectedPct - pct;
 
-            if (gap <= 10) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
-            if (gap <= 30) return { label: 'Attention', color: '#fbbf24', css: 'status-attention', icon: 'warning' };
-            return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
+            if (gap <= 30) return { label: 'On Track', color: '#22c55e', css: 'status-on-track', icon: 'check_circle' };
+            if (gap <= 70) return { label: 'Attention', color: '#fbbf24', css: 'status-attention', icon: 'warning', gap: Math.round(gap) };
+            return { label: 'Overdue Soon', color: '#f97316', css: 'status-overdue-soon', icon: 'schedule', gap: Math.round(gap) };
         }
 
         function applyGanttColors() {
@@ -2449,7 +2451,7 @@
         }
 
         function computeProjectFocus(projectTasks) {
-            const result = { overdue: 0, attention: 0, nearDeadline: 0, total: 0, items: [] };
+            const result = { overdue: 0, attention: 0, overdueSoon: 0, nearDeadline: 0, total: 0, items: [] };
             if (!projectTasks || projectTasks.length === 0) return result;
 
             const today = new Date();
@@ -2472,14 +2474,17 @@
                     result.items.push({ name: task.name, label, priority: 0, sort: daysOverdue });
                 } else if (status.label === 'Attention') {
                     result.attention++;
-                    result.items.push({ name: task.name, label: `${daysUntilEnd}d left`, priority: 1, sort: daysUntilEnd });
+                    result.items.push({ name: task.name, label: `${daysUntilEnd}d left · needs +${status.gap}%`, priority: 1, sort: status.gap });
+                } else if (status.label === 'Overdue Soon') {
+                    result.overdueSoon++;
+                    result.items.push({ name: task.name, label: `${daysUntilEnd}d left · needs +${status.gap}%`, priority: 1.5, sort: status.gap });
                 } else if (today >= start && daysUntilEnd <= 3 && daysUntilEnd >= 0) {
                     result.nearDeadline++;
                     result.items.push({ name: task.name, label: `${daysUntilEnd}d left`, priority: 2, sort: daysUntilEnd });
                 }
             });
 
-            result.total = result.overdue + result.attention + result.nearDeadline;
+            result.total = result.overdue + result.attention + result.overdueSoon + result.nearDeadline;
             result.items.sort((a, b) => {
                 if (a.priority !== b.priority) return a.priority - b.priority;
                 if (a.priority === 2) return a.sort - b.sort;
@@ -2529,11 +2534,10 @@
                     focusTasks.push({ task, priority: 0, sort: daysOverdue, label, color: '#ef4444', dotCss: 'bg-red-500' });
                     focusTaskIds.add(task.id);
                 } else if (status.label === 'Attention') {
-                    const totalDays = Math.max((end - start) / 86400000, 1);
-                    const daysPassed = Math.max((tomorrow - start) / 86400000, 0);
-                    const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
-                    const gap = expectedPct - pct;
-                    focusTasks.push({ task, priority: 1, sort: gap, label: `${daysUntilEnd}d left`, color: '#fbbf24', dotCss: 'bg-amber-400' });
+                    focusTasks.push({ task, priority: 1, sort: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#fbbf24', dotCss: 'bg-amber-400' });
+                    focusTaskIds.add(task.id);
+                } else if (status.label === 'Overdue Soon') {
+                    focusTasks.push({ task, priority: 1.5, sort: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#f97316', dotCss: 'bg-orange-400' });
                     focusTaskIds.add(task.id);
                 } else if (today >= start && daysUntilEnd <= 3 && daysUntilEnd >= 0) {
                     focusTasks.push({ task, priority: 2, sort: daysUntilEnd, label: `${daysUntilEnd}d left`, color: '#3b82f6', dotCss: 'bg-blue-500' });
@@ -2577,7 +2581,7 @@
                     return b.sort - a.sort; // most overdue / biggest gap first
                 });
 
-                const bgMap = { 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+                const bgMap = { 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
                 focusTasks.slice(0, 4).forEach(item => {
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
@@ -3792,11 +3796,12 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             const completed = tl.filter(t => (parseInt(t.progress) || 0) >= 100).length;
             const overdue = tl.filter(t => getTaskStatus(t).label === 'Overdue').length;
             const attention = tl.filter(t => getTaskStatus(t).label === 'Attention').length;
+            const overdueSoon = tl.filter(t => getTaskStatus(t).label === 'Overdue Soon').length;
 
             let context = `--- PROJECT CONTEXT ---\n`;
             context += `Project: ${pn}\n`;
             context += `Date: ${today.toISOString().split('T')[0]}\n`;
-            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Needs Attention: ${attention}\n\n`;
+            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
 
             context += `--- TASKS ---\n`;
             tl.forEach((t, i) => {
@@ -3831,7 +3836,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             // Today's Focus section
             const focusTasks = tl.filter(t => {
                 const s = getTaskStatus(t);
-                return s.label === 'Overdue' || s.label === 'Attention';
+                return s.label === 'Overdue' || s.label === 'Overdue Soon' || s.label === 'Attention';
             });
             if (focusTasks.length > 0) {
                 context += `\n--- TODAY'S FOCUS ---\n`;
