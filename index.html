@@ -2262,8 +2262,9 @@
         function applyGanttColors() {
             document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#0f172a');
             document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
-            document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper, i) => {
-                const task = tasks[i];
+            document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper) => {
+                const taskId = wrapper.getAttribute('data-id');
+                const task = tasks.find(t => t.id === taskId);
                 if (!task) return;
                 const status = getTaskStatus(task);
                 const pct = parseInt(task.progress) || 0;
