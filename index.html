@@ -3981,8 +3981,10 @@
 
             if (editingProjectMeetingIndex !== null) {
                 projectMeetings[editingProjectMeetingIndex] = mtgData;
+                addProjectLog('meeting', null, 'Project', null, 'updated: ' + title);
             } else {
                 projectMeetings.push(mtgData);
+                addProjectLog('meeting', null, 'Project', null, title);
             }
 
             editingProjectMeetingIndex = null;
@@ -3996,7 +3998,8 @@
 
         function deleteProjectMeeting(index) {
             if (!confirm('Delete this meeting?')) return;
-            projectMeetings.splice(index, 1);
+            const removed = projectMeetings.splice(index, 1);
+            addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
             saveProjectFromHub();
             renderProjectMeetingsTab();
         }
@@ -4059,6 +4062,7 @@
             const item = (projectChecklist || []).find(c => c.id === id);
             if (!item) return;
             item.checked = !item.checked;
+            addProjectLog(item.checked ? 'checked' : 'unchecked', null, 'Project', null, (item.checked ? '✓ ' : '☐ ') + item.text);
             saveProjectFromHub();
             renderProjectChecklistTab();
         }
@@ -4253,6 +4257,7 @@
                         storage: storageType,
                         timestamp: new Date().toISOString()
                     });
+                    addProjectLog('attached', null, 'Project', null, file.name);
                     saveProjectFromHub();
                     renderProjectFilesTab();
                 };
@@ -4292,6 +4297,7 @@
             if (!file || !confirm(`Delete "${file.name}"?`)) return;
             const removed = projectFiles.splice(index, 1);
             deleteFileData(removed[0]);
+            addProjectLog('removed', null, 'Project', null, removed[0].name);
             saveProjectFromHub();
             renderProjectFilesTab();
         }
