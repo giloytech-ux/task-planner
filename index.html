@@ -2765,8 +2765,9 @@
             mobileToggle.classList.remove('hidden');
             mobileToggle.classList.add('flex');
 
-            // Hide loading overlay after browser paints
-            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
+            // Overlay is hidden by renderGantt() after colors are applied
+            // Fallback for empty projects (no Gantt to render)
+            if (tasks.length === 0) overlay.classList.add('hidden');
 
             pushNavState('project');
         }
@@ -3127,7 +3128,11 @@
                     custom_popup_html: () => ''
                 });
 
-                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday()); }, 200);
+                setTimeout(() => {
+                    applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday());
+                    const ol = document.getElementById('projectLoadingOverlay');
+                    if (ol && !ol.classList.contains('hidden')) requestAnimationFrame(() => ol.classList.add('hidden'));
+                }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
@@ -3720,8 +3725,7 @@
             document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
             scrollToTask(savedTaskId);
-
-            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
+            // Overlay is hidden by renderGantt() after colors are applied
         }
 
         async function saveAndCloseDetail() {
@@ -3746,8 +3750,7 @@
             await saveProject();
             renderGantt();
             scrollToTask(savedTaskId);
-
-            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
+            // Overlay is hidden by renderGantt() after colors are applied
         }
 
         function switchDetailTab(tabName) {
