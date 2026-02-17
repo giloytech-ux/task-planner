@@ -3675,8 +3675,30 @@
                         if (currentProgress !== oldPct) {
                             autoLockTask(task);
                             task.progress = currentProgress;
-                            addActivityEntry(task, 'system', `Progress changed from ${oldPct}% to ${currentProgress}%`);
-                            addProjectLog('updated', task.id, task.name, 'details', `Progress: ${oldPct}% → ${currentProgress}%`);
+
+                            // Merge into recent progress log entries (within 2 min) instead of creating new ones
+                            const cutoff = Date.now() - 120000;
+                            const recentActivity = (task.activity || []).slice().reverse().find(a =>
+                                a.type === 'system' && a.message.startsWith('Progress changed') && new Date(a.timestamp).getTime() > cutoff
+                            );
+                            if (recentActivity) {
+                                const origFrom = recentActivity.message.match(/from (\d+)%/);
+                                recentActivity.message = `Progress changed from ${origFrom ? origFrom[1] : oldPct}% to ${currentProgress}%`;
+                                recentActivity.timestamp = new Date().toISOString();
+                            } else {
+                                addActivityEntry(task, 'system', `Progress changed from ${oldPct}% to ${currentProgress}%`);
+                            }
+
+                            const recentLog = projectLogs.slice().reverse().find(l =>
+                                l.action === 'updated' && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
+                            );
+                            if (recentLog) {
+                                const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
+                                recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldPct}% → ${currentProgress}%`;
+                                recentLog.timestamp = new Date().toISOString();
+                            } else {
+                                addProjectLog('updated', task.id, task.name, 'details', `Progress: ${oldPct}% → ${currentProgress}%`);
+                            }
                             renderMobileCards();
                             renderGantt();
                             renderTodaysFocus();
