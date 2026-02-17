@@ -458,8 +458,9 @@
             <div id="userMenu" class="flex items-center gap-2 hidden">
                 <span id="tokenIndicator" class="text-xs text-slate-500 hidden sm:inline cursor-pointer hover:text-slate-300" onclick="showTokenDetails()" title="Token usage"></span>
                 <span id="userEmail" class="text-xs text-slate-400 max-w-[150px] truncate hidden sm:inline"></span>
-                <button onclick="handleSignOut()" class="flex items-center justify-center min-w-[44px] min-h-[44px] text-xs text-slate-400 hover:text-red-400 transition-colors" title="Sign Out">
-                    <span class="material-icons-round text-sm">logout</span>
+                <button onclick="handleSignOut()" class="flex items-center gap-1.5 px-3 py-2 min-h-[44px] text-xs text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-400/30 rounded-lg transition-colors" title="Sign Out">
+                    <span class="material-icons-round" style="font-size:18px">logout</span>
+                    <span class="hidden sm:inline">Sign Out</span>
                 </button>
             </div>
             <div id="signInHeaderBtn" class="hidden">
@@ -2043,24 +2044,24 @@
                         <span>${updatedStr}</span>
                     </div>
                     <div class="card-actions flex items-center gap-1 pt-2 border-t border-slate-700/50">
-                        <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
-                            <span class="material-icons-round text-sm">auto_awesome</span>
+                        <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
+                            <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
                         </button>
-                        <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
-                            <span class="material-icons-round text-sm">edit</span>
+                        <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
+                            <span class="material-icons-round" style="font-size:18px">edit</span>
                         </button>
-                        <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
-                            <span class="material-icons-round text-sm">palette</span>
+                        <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
+                            <span class="material-icons-round" style="font-size:18px">palette</span>
                         </button>
-                        <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1 text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
-                            <span class="material-icons-round text-sm">content_copy</span>
+                        <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
+                            <span class="material-icons-round" style="font-size:18px">content_copy</span>
                         </button>
-                        <button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1 text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
-                            <span class="material-icons-round text-sm">${isArchived ? 'unarchive' : 'inventory_2'}</span>
+                        <button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
+                            <span class="material-icons-round" style="font-size:18px">${isArchived ? 'unarchive' : 'inventory_2'}</span>
                         </button>
                         <div class="flex-1"></div>
-                        <button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1 text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
-                            <span class="material-icons-round text-sm">delete</span>
+                        <button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
+                            <span class="material-icons-round" style="font-size:18px">delete</span>
                         </button>
                     </div>
                 `;
