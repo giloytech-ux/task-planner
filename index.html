@@ -1264,15 +1264,17 @@
         }
 
         async function hydrateAndMigrateFiles(tasksArr) {
+            const fileOps = [];
             for (const task of tasksArr) {
                 for (const file of (task.files || [])) {
                     if (file.data && !file.storage) {
-                        file.storage = await saveFileData(file.id, file.data);
+                        fileOps.push(saveFileData(file.id, file.data).then(s => { file.storage = s; }));
                     } else if (!file.data) {
-                        file.data = await loadFileData(file);
+                        fileOps.push(loadFileData(file).then(d => { file.data = d; }));
                     }
                 }
             }
+            if (fileOps.length > 0) await Promise.all(fileOps);
         }
 
         // --- Configuration & State ---
@@ -1698,20 +1700,17 @@
 
         async function loadRegistry() {
             if (currentUser) {
-                const { data: projects, error } = await supabase
-                    .from('projects')
-                    .select('*')
-                    .order('created_at');
+                const [projectsResult, tasksResult] = await Promise.all([
+                    supabase.from('projects').select('*').order('created_at'),
+                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name')
+                ]);
+                const { data: projects, error } = projectsResult;
+                const { data: allTasks } = tasksResult;
                 if (error) {
                     console.error('loadRegistry error:', error);
                     if (isAuthError(error)) { handleSessionExpired(); return []; }
                     return [];
                 }
-
-                // Get task counts + deadline in one query
-                const { data: allTasks } = await supabase
-                    .from('tasks')
-                    .select('project_id, progress, end_date, start_date, name');
 
                 const taskMap = {};
                 const projectTasksMap = {};
@@ -1749,29 +1748,19 @@
 
         async function loadProject(id) {
             if (currentUser) {
-                const { data: taskData, error: taskError } = await supabase
-                    .from('tasks')
-                    .select('*')
-                    .eq('project_id', id)
-                    .order('sort_order');
+                const [taskResult, chatResult, projResult] = await Promise.all([
+                    supabase.from('tasks').select('*').eq('project_id', id).order('sort_order'),
+                    supabase.from('chat_history').select('*').eq('project_id', id).order('created_at'),
+                    supabase.from('projects').select('metadata').eq('id', id).single()
+                ]);
+                const { data: taskData, error: taskError } = taskResult;
+                const { data: chatData, error: chatError } = chatResult;
+                const { data: projData, error: projError } = projResult;
                 if (taskError) {
                     console.error('loadProject tasks error:', taskError);
                     if (isAuthError(taskError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
                 }
-
-                const { data: chatData, error: chatError } = await supabase
-                    .from('chat_history')
-                    .select('*')
-                    .eq('project_id', id)
-                    .order('created_at');
                 if (chatError && isAuthError(chatError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
-
-                // Fetch project metadata (description, meetings, checklist, activity, files, logs)
-                const { data: projData, error: projError } = await supabase
-                    .from('projects')
-                    .select('metadata')
-                    .eq('id', id)
-                    .single();
                 if (projError && isAuthError(projError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
                 const meta = projData?.metadata || {};
 
@@ -2698,7 +2687,7 @@
             overlay.classList.remove('hidden');
 
             currentProjectId = id;
-            const data = await loadProject(id);
+            const [data, registry] = await Promise.all([loadProject(id), loadRegistry()]);
             tasks = data.tasks || [];
             history = data.history || [];
             projectLogs = data.logs || [];
@@ -2708,13 +2697,13 @@
             projectActivity = data.projectActivity || [];
             projectFiles = data.projectFiles || [];
             // Hydrate project file data from storage
-            for (const file of projectFiles) {
-                if (!file.data) file.data = await loadFileData(file);
+            const filesToLoad = projectFiles.filter(f => !f.data);
+            if (filesToLoad.length > 0) {
+                await Promise.all(filesToLoad.map(f => loadFileData(f).then(d => { f.data = d; })));
             }
             _pendingDeletes = [];
 
-            // Breadcrumb (needs async registry load)
-            const registry = await loadRegistry();
+            // Breadcrumb
             const project = registry.find(p => p.id === id);
             if (project) {
                 currentProjectName = project.name;
@@ -2871,11 +2860,12 @@
         }
 
         function applyGanttColors() {
+            const taskMap = new Map(tasks.map(t => [t.id, t]));
             document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#0f172a');
             document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
             document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper) => {
                 const taskId = wrapper.getAttribute('data-id');
-                const task = tasks.find(t => t.id === taskId);
+                const task = taskMap.get(taskId);
                 if (!task) return;
                 wrapper.style.cursor = 'pointer';
                 wrapper.onclick = (e) => {
