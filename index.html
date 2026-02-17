@@ -2387,8 +2387,13 @@
                     sorted.sort((a, b) => {
                         const ua = getProjectUrgencyScore(a);
                         const ub = getProjectUrgencyScore(b);
-                        if (ua !== ub) return ub - ua;
-                        return new Date(b.updatedAt) - new Date(a.updatedAt);
+                        // Both have urgency issues — sort by score desc
+                        if (ua > 1 && ub > 1) return ub - ua;
+                        // Only one has urgency — it goes first
+                        if (ua > 1) return -1;
+                        if (ub > 1) return 1;
+                        // Neither has urgency — keep stable creation order
+                        return new Date(a.createdAt) - new Date(b.createdAt);
                     });
                     break;
                 case 'deadline':
