@@ -2663,7 +2663,7 @@
                 const status = getTaskStatus(task, tomorrow);
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
-                if (status.label === 'Overdue' || status.label === 'Due Today') {
+                if (status.css === 'status-overdue') {
                     result.overdue++;
                     const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
                     const label = status.label === 'Due Today' ? 'due today' : (daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`);
@@ -2724,7 +2724,7 @@
                 const status = getTaskStatus(task, tomorrow);
                 const daysUntilEnd = Math.ceil((end - today) / 86400000);
 
-                if (status.label === 'Overdue' || status.label === 'Due Today') {
+                if (status.css === 'status-overdue') {
                     const daysOverdue = Math.ceil((tomorrow - end) / 86400000);
                     const label = status.label === 'Due Today' ? 'due today' : (daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`);
                     focusTasks.push({ task, priority: 0, sort: daysOverdue, label, color: '#ef4444', dotCss: 'bg-red-500' });
@@ -4312,7 +4312,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
 
             const total = tl.length;
             const completed = tl.filter(t => (parseInt(t.progress) || 0) >= 100).length;
-            const overdue = tl.filter(t => { const l = getTaskStatus(t).label; return l === 'Overdue' || l === 'Due Today'; }).length;
+            const overdue = tl.filter(t => getTaskStatus(t).css === 'status-overdue').length;
             const attention = tl.filter(t => getTaskStatus(t).label === 'Attention').length;
             const overdueSoon = tl.filter(t => getTaskStatus(t).label === 'Overdue Soon').length;
 
@@ -4354,7 +4354,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             // Today's Focus section
             const focusTasks = tl.filter(t => {
                 const s = getTaskStatus(t);
-                return s.label === 'Overdue' || s.label === 'Due Today' || s.label === 'Overdue Soon' || s.label === 'Attention';
+                return s.css === 'status-overdue' || s.label === 'Overdue Soon' || s.label === 'Attention';
             });
             if (focusTasks.length > 0) {
                 context += `\n--- TODAY'S FOCUS ---\n`;
