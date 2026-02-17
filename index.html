@@ -2379,16 +2379,24 @@
 
         function scrollGanttToToday() {
             const container = document.getElementById('gantt-target');
-            const todayEl = container?.querySelector('.today-highlight');
-            if (!todayEl && container) {
-                // Fallback: look for the today marker line
-                const todayLine = container.querySelector('.gantt .today-highlight');
-                if (!todayLine) return;
+            if (!container || !ganttChart || !ganttChart.gantt_start) return;
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const start = ganttChart.gantt_start;
+            const mode = GANTT_VIEW_MODES[currentGanttZoom];
+
+            let todayX;
+            if (mode === 'Month') {
+                const daysDiff = (today - start) / 86400000;
+                todayX = (daysDiff * ganttChart.options.column_width) / 30;
+            } else {
+                const hoursDiff = (today - start) / 3600000;
+                todayX = (hoursDiff / ganttChart.options.step) * ganttChart.options.column_width;
             }
-            if (!todayEl) return;
-            const todayX = parseFloat(todayEl.getAttribute('x')) || 0;
-            const padding = 60; // show a bit of context to the left
-            container.scrollLeft = Math.max(0, todayX - padding);
+
+            const containerWidth = container.clientWidth;
+            container.scrollLeft = Math.max(0, todayX - containerWidth / 3);
         }
 
         function zoomGantt(direction) {
