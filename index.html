@@ -354,6 +354,16 @@
             z-index: 30;
         }
         .sidebar-backdrop.active { display: block; }
+        @media (pointer: coarse) {
+            #tdProgress.slider-locked {
+                pointer-events: none;
+                opacity: 0.7;
+            }
+        }
+        #tdProgress.slider-active {
+            opacity: 1;
+            filter: brightness(1.3);
+        }
     </style>
 </head>
 <body class="flex flex-col overflow-hidden" style="height: 100vh; height: 100dvh;">
@@ -728,8 +738,8 @@
                             </div>
                             <div>
                                 <div class="td-field-label">Progress</div>
-                                <div class="flex items-center gap-2">
-                                    <input type="range" id="tdProgress" min="0" max="100" class="flex-1 accent-blue-500" oninput="updateTaskDetail('progress', this.value)">
+                                <div id="progressSliderWrap" class="flex items-center gap-2">
+                                    <input type="range" id="tdProgress" min="0" max="100" class="flex-1 accent-blue-500 slider-locked" oninput="updateTaskDetail('progress', this.value)">
                                     <span id="tdProgressVal" class="text-sm font-bold text-white w-10 text-right">0%</span>
                                 </div>
                             </div>
@@ -3177,6 +3187,59 @@
             }, 500);
         }
 
+        function initSliderGuard() {
+            const wrap = document.getElementById('progressSliderWrap');
+            const slider = document.getElementById('tdProgress');
+            if (!wrap || !slider || !matchMedia('(pointer: coarse)').matches) return;
+
+            let holdTimer = null;
+            let activated = false;
+            let startX, startY;
+
+            wrap.addEventListener('touchstart', (e) => {
+                const t = e.touches[0];
+                startX = t.clientX;
+                startY = t.clientY;
+                holdTimer = setTimeout(() => {
+                    activated = true;
+                    slider.classList.remove('slider-locked');
+                    slider.classList.add('slider-active');
+                    if (navigator.vibrate) navigator.vibrate(20);
+                    setSliderFromTouch(slider, t);
+                }, 400);
+            }, { passive: true });
+
+            wrap.addEventListener('touchmove', (e) => {
+                const t = e.touches[0];
+                if (!activated) {
+                    if (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) {
+                        clearTimeout(holdTimer);
+                        holdTimer = null;
+                    }
+                } else {
+                    e.preventDefault();
+                    setSliderFromTouch(slider, t);
+                }
+            }, { passive: false });
+
+            wrap.addEventListener('touchend', () => {
+                clearTimeout(holdTimer);
+                if (activated) {
+                    activated = false;
+                    slider.classList.add('slider-locked');
+                    slider.classList.remove('slider-active');
+                }
+            });
+        }
+
+        function setSliderFromTouch(slider, touch) {
+            const rect = slider.getBoundingClientRect();
+            const x = Math.max(0, Math.min(touch.clientX - rect.left, rect.width));
+            const val = Math.round((x / rect.width) * 100);
+            slider.value = val;
+            updateTaskDetail('progress', val);
+        }
+
         // ---- DEPENDENCIES ----
         function renderDependencies(task) {
             const container = document.getElementById('tdDepsContainer');
@@ -4764,6 +4827,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
         }
 
         // Boot
+        initSliderGuard();
         initApp();
     </script>
 
