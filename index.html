@@ -2416,7 +2416,7 @@
                 end: t.end,
                 progress: parseInt(t.progress) || 0,
                 dependencies: t.dependencies
-            }));
+            })).sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 
             try {
                 ganttChart = new Gantt("#gantt-target", formattedTasks, {
