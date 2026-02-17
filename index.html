@@ -567,7 +567,12 @@
                                 <span class="material-icons-round text-sm">admin_panel_settings</span>
                                 <span class="hidden sm:inline">Backup</span>
                             </button>
-                            <div id="adminBackupMenu" class="hidden absolute right-0 top-full mt-1 w-52 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
+                            <div id="adminBackupMenu" class="hidden absolute right-0 top-full mt-1 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
+                                <div class="px-3 py-2 flex items-center gap-2">
+                                    <span class="text-[10px] text-slate-500">Restore mode:</span>
+                                    <button id="backupModeToggle" onclick="toggleBackupMode()" class="text-[10px] px-2 py-0.5 rounded border transition-colors"></button>
+                                </div>
+                                <div class="border-t border-slate-700 my-1"></div>
                                 <button onclick="adminBackupTasks(); closeAdminBackupMenu()" class="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
                                     <span class="material-icons-round text-sm text-emerald-400">table_chart</span> Backup Tasks
                                 </button>
@@ -2481,8 +2486,26 @@
             URL.revokeObjectURL(url);
         }
 
+        let backupMode = 'skip'; // 'skip' or 'overwrite'
+        function toggleBackupMode() {
+            backupMode = backupMode === 'skip' ? 'overwrite' : 'skip';
+            renderBackupModeBtn();
+        }
+        function renderBackupModeBtn() {
+            const btn = document.getElementById('backupModeToggle');
+            if (!btn) return;
+            if (backupMode === 'skip') {
+                btn.textContent = 'Skip existing';
+                btn.className = 'text-[10px] px-2 py-0.5 rounded border transition-colors border-slate-600 text-slate-300 bg-slate-700';
+            } else {
+                btn.textContent = 'Overwrite existing';
+                btn.className = 'text-[10px] px-2 py-0.5 rounded border transition-colors border-amber-600/50 text-amber-400 bg-amber-900/20';
+            }
+        }
         function toggleAdminBackupMenu() {
-            document.getElementById('adminBackupMenu').classList.toggle('hidden');
+            const menu = document.getElementById('adminBackupMenu');
+            menu.classList.toggle('hidden');
+            if (!menu.classList.contains('hidden')) renderBackupModeBtn();
         }
         function closeAdminBackupMenu() {
             document.getElementById('adminBackupMenu').classList.add('hidden');
@@ -2517,7 +2540,14 @@
             const values = rows.map(row => {
                 return '  (' + cols.map(c => sqlEscape(row[c])).join(', ') + ')';
             }).join(',\n');
-            return header + values + '\nON CONFLICT (id) DO NOTHING;\n\n';
+            let conflict;
+            if (backupMode === 'overwrite') {
+                const updateCols = cols.filter(c => c !== 'id');
+                conflict = 'ON CONFLICT (id) DO UPDATE SET ' + updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+            } else {
+                conflict = 'ON CONFLICT (id) DO NOTHING';
+            }
+            return header + values + '\n' + conflict + ';\n\n';
         }
 
         async function adminBackupTasks() {
@@ -2525,7 +2555,7 @@
             try {
                 const { data, full } = await adminFetchTable('tasks');
                 const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-                let sql = `-- Tasks table backup\n-- Generated: ${new Date().toISOString()}\n`;
+                let sql = `-- Tasks table backup\n-- Generated: ${new Date().toISOString()}\n-- Mode: ${backupMode === 'overwrite' ? 'OVERWRITE existing rows' : 'SKIP existing rows'}\n`;
                 sql += full ? '-- Scope: FULL TABLE (all users)\n\n' : '-- Scope: Admin account data only (install RPC functions for full backup)\n\n';
                 sql += buildInsertSQL('tasks', data);
                 downloadSQL(`tasks_backup_${ts}.sql`, sql);
@@ -2540,7 +2570,7 @@
             try {
                 const { data, full } = await adminFetchTable('projects');
                 const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-                let sql = `-- Projects table backup\n-- Generated: ${new Date().toISOString()}\n`;
+                let sql = `-- Projects table backup\n-- Generated: ${new Date().toISOString()}\n-- Mode: ${backupMode === 'overwrite' ? 'OVERWRITE existing rows' : 'SKIP existing rows'}\n`;
                 sql += full ? '-- Scope: FULL TABLE (all users)\n\n' : '-- Scope: Admin account data only\n\n';
                 sql += buildInsertSQL('projects', data);
                 downloadSQL(`projects_backup_${ts}.sql`, sql);
@@ -2560,7 +2590,7 @@
                 ]);
                 const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
                 const isFull = proj.full && tsk.full && prof.full;
-                let sql = `-- Full database backup\n-- Generated: ${new Date().toISOString()}\n`;
+                let sql = `-- Full database backup\n-- Generated: ${new Date().toISOString()}\n-- Mode: ${backupMode === 'overwrite' ? 'OVERWRITE existing rows' : 'SKIP existing rows'}\n`;
                 sql += isFull ? '-- Scope: FULL DATABASE (all users)\n\n' : '-- Scope: Admin account data only (install RPC functions for full backup)\n\n';
                 sql += '-- ========================\n-- PROJECTS\n-- ========================\n';
                 sql += buildInsertSQL('projects', proj.data);
