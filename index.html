@@ -364,6 +364,9 @@
             opacity: 1;
             filter: brightness(1.3);
         }
+        .card-progress-area.progress-active .card-progress-fill-wrap {
+            height: 12px;
+        }
         #meetingForm.meeting-fullscreen {
             position: fixed;
             inset: 0;
@@ -3144,11 +3147,11 @@
                         <span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">date_range</span>${task.start} → ${task.end}</span>
                         ${task.assigned ? '<span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">person</span>' + escapeHtml(task.assigned) + '</span>' : ''}
                     </div>
-                    <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="openTaskDetail(${index})">
-                        <div class="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full rounded-full transition-all" style="width:${pct}%; background:${status.color}"></div>
+                    <div class="card-progress-area flex items-center gap-2 mb-2" data-task-index="${index}">
+                        <div class="card-progress-fill-wrap flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden transition-[height] duration-150">
+                            <div class="card-progress-fill h-full rounded-full transition-all" style="width:${pct}%; background:${status.color}"></div>
                         </div>
-                        <span class="text-[11px] font-medium text-slate-400 w-8 text-right">${pct}%</span>
+                        <span class="card-progress-pct text-[11px] font-medium text-slate-400 w-8 text-right">${pct}%</span>
                     </div>
                     <div class="flex items-center gap-1 pt-2 border-t border-slate-700/50">
                         <button onclick="toggleRowSummary(${index})" class="p-1.5 rounded transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
@@ -3611,6 +3614,81 @@
             slider.value = val;
             slider.style.setProperty('--val', val);
             updateTaskDetail('progress', val);
+        }
+
+        function initCardProgressHold() {
+            const container = document.getElementById('taskCardsContainer');
+            if (!container || !matchMedia('(pointer: coarse)').matches) return;
+
+            let holdTimer = null;
+            let activated = false;
+            let startX, startY;
+            let activeArea = null;
+            let currentProgress = 0;
+
+            container.addEventListener('touchstart', (e) => {
+                const area = e.target.closest('.card-progress-area');
+                if (!area) return;
+                const t = e.touches[0];
+                startX = t.clientX;
+                startY = t.clientY;
+                activeArea = area;
+                holdTimer = setTimeout(() => {
+                    activated = true;
+                    area.classList.add('progress-active');
+                    if (navigator.vibrate) navigator.vibrate(20);
+                    const fillWrap = area.querySelector('.card-progress-fill-wrap');
+                    const rect = fillWrap.getBoundingClientRect();
+                    const x = Math.max(0, Math.min(t.clientX - rect.left, rect.width));
+                    currentProgress = Math.round((x / rect.width) * 100);
+                    area.querySelector('.card-progress-fill').style.width = currentProgress + '%';
+                    area.querySelector('.card-progress-pct').textContent = currentProgress + '%';
+                }, 400);
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!activeArea) return;
+                const t = e.touches[0];
+                if (!activated) {
+                    if (Math.abs(t.clientX - startX) > 10 || Math.abs(t.clientY - startY) > 10) {
+                        clearTimeout(holdTimer);
+                        holdTimer = null;
+                    }
+                } else {
+                    e.preventDefault();
+                    const fillWrap = activeArea.querySelector('.card-progress-fill-wrap');
+                    const rect = fillWrap.getBoundingClientRect();
+                    const x = Math.max(0, Math.min(t.clientX - rect.left, rect.width));
+                    currentProgress = Math.round((x / rect.width) * 100);
+                    activeArea.querySelector('.card-progress-fill').style.width = currentProgress + '%';
+                    activeArea.querySelector('.card-progress-pct').textContent = currentProgress + '%';
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchend', () => {
+                clearTimeout(holdTimer);
+                if (activated && activeArea) {
+                    const idx = parseInt(activeArea.dataset.taskIndex, 10);
+                    const task = tasks[idx];
+                    if (task) {
+                        const oldPct = task.progress || 0;
+                        if (currentProgress !== oldPct) {
+                            autoLockTask(task);
+                            task.progress = currentProgress;
+                            addActivityEntry(task, 'system', `Progress changed from ${oldPct}% to ${currentProgress}%`);
+                            addProjectLog('updated', task.id, task.name, 'details', `Progress: ${oldPct}% → ${currentProgress}%`);
+                            renderMobileCards();
+                            renderGantt();
+                            renderTodaysFocus();
+                            saveProject();
+                        } else {
+                            activeArea.classList.remove('progress-active');
+                        }
+                    }
+                    activated = false;
+                    activeArea = null;
+                }
+            });
         }
 
         // ---- DEPENDENCIES ----
@@ -5978,6 +6056,7 @@ Be concise and actionable. Focus on insights, not just restating data.`;
 
         // Boot
         initSliderGuard();
+        initCardProgressHold();
         initApp();
     </script>
 
