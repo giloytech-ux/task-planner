@@ -2770,9 +2770,8 @@
             mobileToggle.classList.remove('hidden');
             mobileToggle.classList.add('flex');
 
-            // Overlay is hidden by renderGantt() after colors are applied
-            // Fallback for empty projects (no Gantt to render)
-            if (tasks.length === 0) overlay.classList.add('hidden');
+            // Hide loading overlay
+            overlay.classList.add('hidden');
 
             pushNavState('project');
         }
@@ -3133,11 +3132,7 @@
                     custom_popup_html: () => ''
                 });
 
-                setTimeout(() => {
-                    applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday());
-                    const ol = document.getElementById('projectLoadingOverlay');
-                    if (ol && !ol.classList.contains('hidden')) requestAnimationFrame(() => ol.classList.add('hidden'));
-                }, 200);
+                setTimeout(() => { applyGanttColors(); setupGanttStickyHeader(); compressGanttLabels(); requestAnimationFrame(() => scrollGanttToToday()); }, 200);
 
             } catch (e) {
                 console.error("Gantt Error", e);
@@ -3730,7 +3725,7 @@
             document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
             scrollToTask(savedTaskId);
-            // Overlay is hidden by renderGantt() after colors are applied
+            overlay.classList.add('hidden');
         }
 
         async function saveAndCloseDetail() {
@@ -3755,7 +3750,7 @@
             await saveProject();
             renderGantt();
             scrollToTask(savedTaskId);
-            // Overlay is hidden by renderGantt() after colors are applied
+            overlay.classList.add('hidden');
         }
 
         function switchDetailTab(tabName) {
