@@ -3707,8 +3707,11 @@
             pushNavState('taskDetail');
         }
 
-        function closeTaskDetail() {
-            saveProject();
+        async function closeTaskDetail() {
+            const overlay = document.getElementById('projectLoadingOverlay');
+            overlay.classList.remove('hidden');
+
+            await saveProject();
             _taskSnapshot = null;
             const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             currentTaskIndex = null;
@@ -3717,15 +3720,19 @@
             document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
             scrollToTask(savedTaskId);
+
+            overlay.classList.add('hidden');
         }
 
-        function saveAndCloseDetail() {
-            saveProject();
+        async function saveAndCloseDetail() {
             _taskSnapshot = null;
-            closeTaskDetail();
+            await closeTaskDetail();
         }
 
-        function discardAndCloseDetail() {
+        async function discardAndCloseDetail() {
+            const overlay = document.getElementById('projectLoadingOverlay');
+            overlay.classList.remove('hidden');
+
             const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             if (_taskSnapshot && currentTaskIndex != null) {
                 // Restore the snapshot
@@ -3736,9 +3743,11 @@
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
             document.getElementById('summaryPanel')?.classList.add('hidden');
-            saveProject();
+            await saveProject();
             renderGantt();
             scrollToTask(savedTaskId);
+
+            overlay.classList.add('hidden');
         }
 
         function switchDetailTab(tabName) {
