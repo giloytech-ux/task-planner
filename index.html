@@ -2286,8 +2286,9 @@
                 };
                 const status = getTaskStatus(task);
                 const pct = parseInt(task.progress) || 0;
-                // Calculate expected progress using actual today (not tomorrow like getTaskStatus)
+                // Look ahead to tomorrow to match getTaskStatus proactive warnings
                 const today = new Date();
+                today.setDate(today.getDate() + 1);
                 today.setHours(0, 0, 0, 0);
                 const startDate = new Date(task.start + 'T00:00:00');
                 const endDate = new Date(task.end + 'T00:00:00');
