@@ -63,7 +63,8 @@
 
         @keyframes task-highlight-pulse {
             0%   { box-shadow: 0 0 0 2px #6366f1, 0 0 12px rgba(99,102,241,0.4); background-color: rgba(99,102,241,0.12); }
-            100% { box-shadow: 0 0 0 0px transparent, 0 0 0px transparent; background-color: transparent; }
+            50%  { box-shadow: 0 0 0 2px #6366f1, 0 0 12px rgba(99,102,241,0.4); background-color: rgba(99,102,241,0.12); }
+            100% { box-shadow: 0 0 0 1px rgba(99,102,241,0.3); background-color: rgba(99,102,241,0.08); }
         }
         .task-highlight {
             animation: task-highlight-pulse 1.5s ease-out forwards;
@@ -1894,6 +1895,7 @@
                 }
 
                 const card = document.createElement('div');
+                card.setAttribute('data-project-id', project.id);
                 card.className = `project-card rounded-xl p-5 relative ${isArchived ? 'opacity-60' : ''}`;
                 card.onclick = (e) => {
                     if (e.target.closest('.card-actions')) return;
@@ -2081,6 +2083,7 @@
 
         async function showDashboard() {
             clearTimeout(window.detailSaveTimeout);
+            const savedProjectId = currentProjectId;
             if (currentProjectId) {
                 await saveProject();
             }
@@ -2108,6 +2111,7 @@
             localStorage.removeItem('planner_lastProject');
 
             await renderDashboard();
+            scrollToProject(savedProjectId);
         }
 
         async function openProject(id) {
@@ -2278,8 +2282,7 @@
                 wrapper.style.cursor = 'pointer';
                 wrapper.onclick = (e) => {
                     e.stopPropagation();
-                    const idx = tasks.findIndex(t => t.id === taskId);
-                    if (idx !== -1) scrollToTask(idx);
+                    scrollToTask(taskId);
                 };
                 const status = getTaskStatus(task);
                 const pct = parseInt(task.progress) || 0;
@@ -2653,7 +2656,7 @@
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
                     chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
-                    chip.onclick = () => scrollToTask(tasks.indexOf(item.task));
+                    chip.onclick = () => scrollToTask(item.task.id);
                     container.appendChild(chip);
                 });
             }
@@ -2664,7 +2667,7 @@
                     const chip = document.createElement('span');
                     chip.className = 'inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition bg-slate-500/10 text-slate-400 border-slate-500/20';
                     chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
-                    chip.onclick = () => scrollToTask(tasks.indexOf(item.task));
+                    chip.onclick = () => scrollToTask(item.task.id);
                     suggestedContainer.appendChild(chip);
                 });
                 suggestedRow.classList.remove('hidden');
@@ -2684,7 +2687,7 @@
                 const isLocked = !!task.locked;
 
                 const tr = document.createElement('tr');
-                tr.setAttribute('data-task-index', index);
+                tr.setAttribute('data-task-id', task.id);
                 tr.className = `hover:bg-slate-800/50 transition-colors ${isLocked ? 'opacity-80' : ''}`;
                 tr.innerHTML = `
                     <td class="p-2 text-center">
@@ -2757,7 +2760,7 @@
                 const hasContent = hasTaskContent(task);
 
                 const card = document.createElement('div');
-                card.setAttribute('data-task-index', index);
+                card.setAttribute('data-task-id', task.id);
                 card.className = `bg-slate-800/70 border border-slate-700 rounded-lg p-3 transition-colors ${isLocked ? 'opacity-80' : ''}`;
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-2 mb-2 cursor-pointer" onclick="openTaskDetail(${index})">
@@ -2950,7 +2953,8 @@
             if (!task.meetings) task.meetings = [];
         }
 
-        function scrollToTask(index) {
+        function scrollToTask(taskId) {
+            if (!taskId) return;
             document.querySelectorAll('.task-highlight').forEach(el => el.classList.remove('task-highlight'));
 
             const isMobile = window.innerWidth < 768;
@@ -2958,15 +2962,34 @@
 
             if (isMobile) {
                 const container = document.getElementById('taskCardsContainer');
-                target = container?.querySelector(`[data-task-index="${index}"]`);
+                target = container?.querySelector(`[data-task-id="${taskId}"]`);
             } else {
-                target = document.querySelector(`#taskTableBody tr[data-task-index="${index}"]`);
+                target = document.querySelector(`#taskTableBody tr[data-task-id="${taskId}"]`);
             }
 
             if (target) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 requestAnimationFrame(() => target.classList.add('task-highlight'));
-                target.addEventListener('animationend', () => target.classList.remove('task-highlight'), { once: true });
+            }
+        }
+
+        function scrollToProject(projectId) {
+            if (!projectId) return;
+            document.querySelectorAll('.task-highlight').forEach(el => el.classList.remove('task-highlight'));
+            const target = document.querySelector(`#projectGrid [data-project-id="${projectId}"]`);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                requestAnimationFrame(() => target.classList.add('task-highlight'));
+            }
+        }
+
+        function scrollToMeeting(meetingId) {
+            if (!meetingId) return;
+            document.querySelectorAll('.task-highlight').forEach(el => el.classList.remove('task-highlight'));
+            const target = document.querySelector(`#meetingsList [data-meeting-id="${meetingId}"]`);
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                requestAnimationFrame(() => target.classList.add('task-highlight'));
             }
         }
 
@@ -2990,11 +3013,13 @@
         function closeTaskDetail() {
             saveProject();
             _taskSnapshot = null;
+            const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             currentTaskIndex = null;
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('taskDetailView').classList.add('hidden');
             document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
+            scrollToTask(savedTaskId);
         }
 
         function saveAndCloseDetail() {
@@ -3004,6 +3029,7 @@
         }
 
         function discardAndCloseDetail() {
+            const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             if (_taskSnapshot && currentTaskIndex != null) {
                 // Restore the snapshot
                 tasks[currentTaskIndex] = _taskSnapshot;
@@ -3015,6 +3041,7 @@
             document.getElementById('summaryPanel')?.classList.add('hidden');
             saveProject();
             renderGantt();
+            scrollToTask(savedTaskId);
         }
 
         function switchDetailTab(tabName) {
@@ -3425,6 +3452,7 @@
 
             meetings.forEach((mtg, i) => {
                 const card = document.createElement('div');
+                card.setAttribute('data-meeting-id', mtg.id);
                 card.className = 'meeting-card cursor-pointer hover:border-slate-600';
                 card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editMeeting(i); };
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -3471,8 +3499,11 @@
         }
 
         function cancelMeeting() {
+            const task = tasks[currentTaskIndex];
+            const savedMeetingId = editingMeetingIndex != null && task?.meetings?.[editingMeetingIndex] ? task.meetings[editingMeetingIndex].id : null;
             editingMeetingIndex = null;
             document.getElementById('meetingForm').classList.add('hidden');
+            scrollToMeeting(savedMeetingId);
         }
 
         function saveMeeting() {
@@ -3487,6 +3518,7 @@
                 id: editingMeetingIndex !== null ? task.meetings[editingMeetingIndex].id : Date.now().toString(36),
                 title, date, attendees, notes
             };
+            const savedMeetingId = mtgData.id;
 
             autoLockTask(task);
             if (editingMeetingIndex !== null) {
@@ -3500,6 +3532,7 @@
             editingMeetingIndex = null;
             document.getElementById('meetingForm').classList.add('hidden');
             renderMeetingsTab(task);
+            scrollToMeeting(savedMeetingId);
             updateRowIndicators(currentTaskIndex);
             saveProject();
         }
