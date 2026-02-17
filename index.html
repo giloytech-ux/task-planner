@@ -26,7 +26,7 @@
 
     <style>
         /* Custom Dark Mode Tweaks */
-        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        body { background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Helvetica Neue', sans-serif; }
         .glass-panel {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(10px);
@@ -194,7 +194,7 @@
         .td-input {
             width: 100%;
             background: #1e293b;
-            border: 1px solid #334155;
+            border: 1px solid transparent;
             border-radius: 6px;
             padding: 8px 12px;
             color: #e2e8f0;
@@ -206,7 +206,7 @@
         .td-textarea {
             width: 100%;
             background: #1e293b;
-            border: 1px solid #334155;
+            border: 1px solid transparent;
             border-radius: 6px;
             padding: 8px 12px;
             color: #e2e8f0;
@@ -324,7 +324,7 @@
         .auth-input {
             width: 100%;
             background: #1e293b;
-            border: 1px solid #334155;
+            border: 1px solid transparent;
             border-radius: 8px;
             padding: 10px 14px;
             color: #e2e8f0;
@@ -445,6 +445,28 @@
             background: #3b82f6;
             border: 2px solid #1e293b;
             cursor: pointer;
+        }
+        /* Apple HIG polish — button press effect */
+        button:active:not([class*="material-icons"]):not(nav button) {
+            transform: scale(0.98);
+        }
+
+        /* Apple HIG polish — softer hairline borders */
+        header.border-b { border-bottom-color: rgba(255,255,255,0.06) !important; }
+        #ganttSection > div:first-child { border-bottom-color: rgba(255,255,255,0.06) !important; }
+        .project-card .border-t { border-top-color: rgba(255,255,255,0.06) !important; }
+        #headerDivider { background-color: rgba(255,255,255,0.06) !important; }
+
+        /* Apple HIG polish — card resting shadows */
+        .project-card {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Apple HIG polish — frosted glass header */
+        header {
+            background: rgba(15, 23, 42, 0.85) !important;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
     </style>
 </head>
