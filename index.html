@@ -609,6 +609,14 @@
         </div>
     </main>
 
+    <!-- Project loading overlay -->
+    <div id="projectLoadingOverlay" class="hidden fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center">
+        <div class="flex flex-col items-center gap-3">
+            <span class="material-icons-round text-4xl text-blue-400 animate-spin">hourglass_empty</span>
+            <p class="text-sm text-slate-300">Loading project...</p>
+        </div>
+    </div>
+
     <!-- Project View (hidden by default) -->
     <main id="projectView" class="flex-1 flex overflow-hidden hidden">
 
@@ -2635,6 +2643,11 @@
         async function showDashboard() {
             clearTimeout(window.detailSaveTimeout);
             const savedProjectId = currentProjectId;
+
+            // Show loading overlay while saving and rendering dashboard
+            const overlay = document.getElementById('projectLoadingOverlay');
+            overlay.classList.remove('hidden');
+
             if (currentProjectId) {
                 await saveProject();
             }
@@ -2655,6 +2668,16 @@
             closeMobileSidebar();
             document.getElementById('mobileSidebarToggle').classList.add('hidden');
             document.getElementById('mobileSidebarToggle').classList.remove('flex');
+            document.getElementById('breadcrumbSep').classList.add('hidden');
+            document.getElementById('breadcrumbName').classList.add('hidden');
+            document.getElementById('exportButtons').classList.add('hidden');
+
+            localStorage.removeItem('planner_lastProject');
+
+            // Render dashboard fully before showing it
+            await renderDashboard();
+
+            // Now swap views — dashboard is fully rendered
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('dashboardView').classList.remove('hidden');
             document.getElementById('projectView').classList.add('hidden');
@@ -2662,17 +2685,18 @@
             document.getElementById('projectLogsView').classList.add('hidden');
             document.getElementById('ganttSection').classList.remove('hidden');
             document.getElementById('summaryPanel')?.classList.add('hidden');
-            document.getElementById('breadcrumbSep').classList.add('hidden');
-            document.getElementById('breadcrumbName').classList.add('hidden');
-            document.getElementById('exportButtons').classList.add('hidden');
 
-            localStorage.removeItem('planner_lastProject');
-
-            await renderDashboard();
             scrollToProject(savedProjectId);
+
+            // Hide loading overlay
+            overlay.classList.add('hidden');
         }
 
         async function openProject(id) {
+            // Show loading overlay while data loads
+            const overlay = document.getElementById('projectLoadingOverlay');
+            overlay.classList.remove('hidden');
+
             currentProjectId = id;
             const data = await loadProject(id);
             tasks = data.tasks || [];
@@ -2689,18 +2713,7 @@
             }
             _pendingDeletes = [];
 
-            // Update UI
-            document.getElementById('authView').classList.add('hidden');
-            document.getElementById('dashboardView').classList.add('hidden');
-            document.getElementById('projectView').classList.remove('hidden');
-            document.getElementById('projectView').classList.add('flex');
-            document.getElementById('exportButtons').classList.remove('hidden');
-            // Show mobile sidebar toggle
-            const mobileToggle = document.getElementById('mobileSidebarToggle');
-            mobileToggle.classList.remove('hidden');
-            mobileToggle.classList.add('flex');
-
-            // Breadcrumb
+            // Breadcrumb (needs async registry load)
             const registry = await loadRegistry();
             const project = registry.find(p => p.id === id);
             if (project) {
@@ -2713,11 +2726,24 @@
             // Remember last project
             localStorage.setItem('planner_lastProject', id);
 
-            // Rebuild chat
+            // Rebuild chat & render before showing project view
             rebuildChatUI();
-
-            // Render gantt & table
             renderGantt();
+
+            // Now swap views — project is fully rendered
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('dashboardView').classList.add('hidden');
+            document.getElementById('projectView').classList.remove('hidden');
+            document.getElementById('projectView').classList.add('flex');
+            document.getElementById('exportButtons').classList.remove('hidden');
+            // Show mobile sidebar toggle
+            const mobileToggle = document.getElementById('mobileSidebarToggle');
+            mobileToggle.classList.remove('hidden');
+            mobileToggle.classList.add('flex');
+
+            // Hide loading overlay
+            overlay.classList.add('hidden');
+
             pushNavState('project');
         }
 
