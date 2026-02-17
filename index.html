@@ -616,7 +616,7 @@
     </main>
 
     <!-- Project loading overlay -->
-    <div id="projectLoadingOverlay" class="hidden fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center">
+    <div id="projectLoadingOverlay" class="hidden fixed inset-0 bg-slate-900 z-50 flex items-center justify-center">
         <div class="flex flex-col items-center gap-3">
             <span class="material-icons-round text-4xl text-blue-400 animate-spin">hourglass_empty</span>
             <p class="text-sm text-slate-300">Loading project...</p>
@@ -2712,8 +2712,8 @@
 
             scrollToProject(savedProjectId);
 
-            // Hide loading overlay
-            overlay.classList.add('hidden');
+            // Hide loading overlay after browser paints
+            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
         }
 
         async function openProject(id) {
@@ -2765,8 +2765,8 @@
             mobileToggle.classList.remove('hidden');
             mobileToggle.classList.add('flex');
 
-            // Hide loading overlay
-            overlay.classList.add('hidden');
+            // Hide loading overlay after browser paints
+            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
 
             pushNavState('project');
         }
@@ -3721,7 +3721,7 @@
             renderGantt();
             scrollToTask(savedTaskId);
 
-            overlay.classList.add('hidden');
+            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
         }
 
         async function saveAndCloseDetail() {
@@ -3747,7 +3747,7 @@
             renderGantt();
             scrollToTask(savedTaskId);
 
-            overlay.classList.add('hidden');
+            requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
         }
 
         function switchDetailTab(tabName) {
