@@ -1093,7 +1093,7 @@
         let currentProjectName = ''; // cached for export functions in guest mode
 
         // Dashboard state
-        let dashboardSort = localStorage.getItem('planner_sort') || 'updated';
+        let dashboardSort = localStorage.getItem('planner_sort') || 'deadline';
         let showArchived = false;
         function getArchivedIds() {
             try { return new Set(JSON.parse(localStorage.getItem('planner_archived') || '[]')); }
@@ -2912,8 +2912,8 @@
                 const fileCount = (task.files || []).length;
                 let indicators = '';
                 if (mtgCount) indicators += `<span class="flex items-center gap-0.5" title="${mtgCount} meeting${mtgCount !== 1 ? 's' : ''}"><span class="material-icons-round" style="font-size:13px">event</span>${mtgCount}</span>`;
-                if (clItems.length) indicators += `<span class="flex items-center gap-0.5" title="Checklist ${clDone}/${clItems.length}"><span class="material-icons-round" style="font-size:13px">checklist</span>${clDone}/${clItems.length}</span>`;
-                if (actCount) indicators += `<span class="flex items-center gap-0.5" title="${actCount} log entr${actCount !== 1 ? 'ies' : 'y'}"><span class="material-icons-round" style="font-size:13px">chat_bubble_outline</span>${actCount}</span>`;
+                if (clItems.length) indicators += `<span class="flex items-center gap-0.5" title="Checklist ${clDone}/${clItems.length}"><span class="material-icons-round" style="font-size:13px">check_box</span>${clDone}/${clItems.length}</span>`;
+                if (actCount) indicators += `<span class="flex items-center gap-0.5" title="${actCount} log entr${actCount !== 1 ? 'ies' : 'y'}"><span class="material-icons-round" style="font-size:13px">comment</span>${actCount}</span>`;
                 if (fileCount) indicators += `<span class="flex items-center gap-0.5" title="${fileCount} file${fileCount !== 1 ? 's' : ''}"><span class="material-icons-round" style="font-size:13px">attach_file</span>${fileCount}</span>`;
                 const indicatorHtml = indicators ? `<div class="flex items-center gap-2.5 text-[10px] text-slate-500 ml-1 border-l border-slate-700 pl-2">${indicators}</div>` : '';
 
