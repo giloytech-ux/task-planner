@@ -217,11 +217,6 @@
             transition: border-color 0.2s;
         }
         .td-textarea:focus { border-color: #3b82f6; }
-        .priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        .priority-critical { background: #ef4444; }
-        .priority-high { background: #f97316; }
-        .priority-medium { background: #3b82f6; }
-        .priority-low { background: #6b7280; }
 
         /* Checklist */
         .checklist-item {
@@ -959,9 +954,12 @@
                     <!-- Today's Focus Panel -->
                     <div id="todaysFocus" class="hidden px-4 py-2 bg-slate-900/80 border-b border-slate-800 shrink-0">
                       <div class="flex items-center gap-2 mb-1">
-                        <span class="material-icons-round text-amber-400" style="font-size:16px">flag</span>
+                        <span class="material-icons-round text-amber-400" style="font-size:16px">tips_and_updates</span>
                         <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Today's Focus</span>
                         <div class="flex-1"></div>
+                        <button id="taskSortBtn" onclick="toggleTaskSort()" class="flex items-center justify-center w-7 h-7 rounded-lg transition-colors text-slate-500 hover:bg-slate-700/50" title="Sort by priority">
+                            <span class="material-icons-round" style="font-size:16px">sort</span>
+                        </button>
                         <button onclick="showAddTaskModal()" class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors min-h-[36px] shrink-0" title="Add Task">
                           <span class="material-icons-round" style="font-size:16px">add_circle</span>
                           <span class="hidden sm:inline">Add Task</span>
@@ -3143,6 +3141,46 @@
         }
 
         // =============================================
+        // Priority helpers & sort toggle
+        // =============================================
+
+        function getPriorityMeta(p) {
+            const map = {
+                critical: { color: 'text-red-500',    label: 'Critical' },
+                high:     { color: 'text-orange-400',  label: 'High' },
+                medium:   { color: 'text-blue-400',    label: 'Medium' },
+                low:      { color: 'text-slate-500',   label: 'Low' }
+            };
+            return map[p] || map.medium;
+        }
+
+        let taskSortByPriority = localStorage.getItem('planner_task_sort_priority') === 'true';
+
+        function toggleTaskSort() {
+            taskSortByPriority = !taskSortByPriority;
+            localStorage.setItem('planner_task_sort_priority', taskSortByPriority);
+            updateTaskSortBtn();
+            renderTable();
+            renderMobileCards();
+        }
+
+        function updateTaskSortBtn() {
+            const btn = document.getElementById('taskSortBtn');
+            if (!btn) return;
+            btn.classList.toggle('text-amber-400', taskSortByPriority);
+            btn.classList.toggle('text-slate-500', !taskSortByPriority);
+            btn.title = taskSortByPriority ? 'Sorted by priority (click for default)' : 'Sort by priority';
+        }
+
+        function getDisplayTasks() {
+            const indexed = tasks.map((t, i) => ({ task: t, origIndex: i }));
+            if (!taskSortByPriority) return indexed;
+            const order = { critical: 0, high: 1, medium: 2, low: 3 };
+            indexed.sort((a, b) => (order[a.task.priority || 'medium']) - (order[b.task.priority || 'medium']));
+            return indexed;
+        }
+
+        // =============================================
         // Gantt & Table Rendering
         // =============================================
 
@@ -3384,6 +3422,7 @@
                 </div>`;
                 document.getElementById('taskTableBody').innerHTML = '';
                 renderMobileCards();
+                updateTaskSortBtn();
                 renderTodaysFocus();
                 return;
             }
@@ -3420,6 +3459,7 @@
 
             renderTable();
             renderMobileCards();
+            updateTaskSortBtn();
             renderTodaysFocus();
         }
 
@@ -3616,10 +3656,12 @@
             tbody.innerHTML = '';
             const colCount = 9; // total columns in table
 
-            tasks.forEach((task, index) => {
+            const displayTasks = getDisplayTasks();
+            displayTasks.forEach(({ task, origIndex: index }) => {
                 const status = getTaskStatus(task);
                 const hasContent = hasTaskContent(task);
                 const isLocked = !!task.locked;
+                const priMeta = getPriorityMeta(task.priority);
 
                 const tr = document.createElement('tr');
                 tr.setAttribute('data-task-id', task.id);
@@ -3630,7 +3672,7 @@
                             <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
                         </button>
                     </td>
-                    <td class="p-3"><a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
+                    <td class="p-3"><span class="material-icons-round ${priMeta.color} align-middle mr-1" style="font-size:14px" title="${priMeta.label} priority">flag</span><a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
                     <td class="p-3">
                         <input type="text" value="${escapeHtml(task.assigned || '')}"
                                onchange="updateTask(${index}, 'assigned', this.value)"
@@ -3695,11 +3737,13 @@
                 return;
             }
 
-            tasks.forEach((task, index) => {
+            const displayTasks = getDisplayTasks();
+            displayTasks.forEach(({ task, origIndex: index }) => {
                 const status = getTaskStatus(task);
                 const pct = parseInt(task.progress) || 0;
                 const isLocked = !!task.locked;
                 const hasContent = hasTaskContent(task);
+                const priMeta = getPriorityMeta(task.priority);
 
                 // Build compact count indicators
                 const mtgCount = (task.meetings || []).length;
@@ -3719,6 +3763,7 @@
                 card.className = `bg-slate-800/70 border border-slate-700 rounded-lg p-3 transition-colors ${isLocked ? 'opacity-80' : ''}`;
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-2 mb-2 cursor-pointer" onclick="openTaskDetail(${index})">
+                        <span class="material-icons-round ${priMeta.color} shrink-0 mt-0.5" style="font-size:14px" title="${priMeta.label} priority">flag</span>
                         <span class="text-sm font-medium text-white leading-tight flex-1">${escapeHtml(task.name)}</span>
                         <span class="status-badge ${status.css} flex-shrink-0"><span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}</span>
                     </div>
