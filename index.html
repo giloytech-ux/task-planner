@@ -706,10 +706,6 @@
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
         </div>
         <div class="flex items-center gap-2 md:gap-4">
-            <!-- Theme toggle -->
-            <button id="themeToggleBtn" onclick="toggleTheme()" class="flex items-center justify-center min-w-[44px] min-h-[44px] text-slate-400 hover:text-blue-400 transition-colors rounded-lg" title="Toggle theme">
-                <span class="material-icons-round" id="themeIcon">light_mode</span>
-            </button>
             <!-- Export buttons (project view only) -->
             <div id="exportButtons" class="flex items-center gap-2 hidden">
                 <button onclick="exportCSV()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]" title="Export CSV">
@@ -747,7 +743,7 @@
             <div class="text-center mb-8">
                 <img src="icon-192.png" alt="Planory" class="w-16 h-16 mx-auto mb-3 rounded-2xl">
                 <h2 class="text-2xl font-bold text-white mb-1">Planory</h2>
-                <p class="text-sm text-slate-400">Sign in to sync your projects across devices. <span class="text-slate-500">Modern look_v2</span></p>
+                <p class="text-sm text-slate-400">Sign in to sync your projects across devices.</p>
             </div>
 
             <div class="glass-panel rounded-xl p-6 space-y-4">
@@ -965,6 +961,11 @@
                       <div class="flex items-center gap-2 mb-1">
                         <span class="material-icons-round text-amber-400" style="font-size:16px">flag</span>
                         <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Today's Focus</span>
+                        <div class="flex-1"></div>
+                        <button onclick="showAddTaskModal()" class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors min-h-[36px] shrink-0" title="Add Task">
+                          <span class="material-icons-round" style="font-size:16px">add_circle</span>
+                          <span class="hidden sm:inline">Add Task</span>
+                        </button>
                       </div>
                       <div id="focusItems" class="flex flex-col sm:flex-row flex-wrap gap-2"></div>
                       <div id="suggestedRow" class="hidden mt-1.5">
@@ -2610,9 +2611,6 @@
                     <div class="card-actions flex items-center gap-1 pt-2 border-t border-slate-700/50">
                         <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
                             <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
-                        </button>
-                        <button onclick="event.stopPropagation(); openProjectLogs('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-cyan-400 rounded transition-colors" title="Project Info">
-                            <span class="material-icons-round" style="font-size:18px">info</span>
                         </button>
                         <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
                             <span class="material-icons-round" style="font-size:18px">edit</span>
