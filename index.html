@@ -3420,10 +3420,8 @@
                 saveProject();
             }
 
-            // Show loading overlay only if no cached registry (first load)
             const overlay = document.getElementById('projectLoadingOverlay');
-            const hasCachedRegistry = currentUser && DataStore.has('registry');
-            if (!hasCachedRegistry) overlay.classList.remove('hidden');
+            overlay.classList.remove('hidden');
 
             currentProjectId = null;
             currentProjectName = '';
@@ -3481,11 +3479,7 @@
 
         async function openProject(id) {
             const overlay = document.getElementById('projectLoadingOverlay');
-            const cacheKey = 'project:' + id;
-            const hasCached = currentUser && DataStore.has(cacheKey);
-
-            // Show loading overlay only if no cached data
-            if (!hasCached) overlay.classList.remove('hidden');
+            overlay.classList.remove('hidden');
 
             currentProjectId = id;
 
