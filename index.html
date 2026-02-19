@@ -699,6 +699,7 @@
             <!-- Breadcrumb (visible in project view) -->
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
+            <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
         </div>
         <div class="flex items-center gap-2 md:gap-4">
             <!-- Export buttons (project view only) -->
@@ -1572,6 +1573,43 @@
         let projectFiles = [];
         let editingProjectMeetingIndex = null;
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
+
+        // --- Dirty Tracking (Phase 2) ---
+        let _dirtyTasks = new Set();       // Set of _rowId or tempKey for modified tasks
+        let _dirtyFields = new Map();      // Map<key, Set<fieldName>|null> — null means all fields
+        let _dirtyMetadata = false;        // project metadata changed
+        let _dirtyChatHistory = false;     // chat history changed
+
+        function markTaskDirty(task, ...fields) {
+            const key = task._rowId || ('tmp:' + task.id);
+            _dirtyTasks.add(key);
+            if (fields.length === 0) {
+                _dirtyFields.set(key, null); // null = all fields dirty
+            } else {
+                const existing = _dirtyFields.get(key);
+                if (existing === null) return; // already all-dirty
+                if (!existing) _dirtyFields.set(key, new Set(fields));
+                else fields.forEach(f => existing.add(f));
+            }
+        }
+
+        function markAllTasksDirty() {
+            tasks.forEach(t => markTaskDirty(t));
+        }
+
+        function markMetadataDirty() { _dirtyMetadata = true; }
+        function markChatDirty() { _dirtyChatHistory = true; }
+
+        function clearDirtyState() {
+            _dirtyTasks.clear();
+            _dirtyFields.clear();
+            _dirtyMetadata = false;
+            _dirtyChatHistory = false;
+        }
+
+        function hasDirtyState() {
+            return _dirtyTasks.size > 0 || _dirtyMetadata || _dirtyChatHistory;
+        }
         let lastSendTime = 0;
         const SEND_COOLDOWN_MS = 10000; // 10 seconds between sends
         let lastSummaryTime = 0;
@@ -1587,6 +1625,327 @@
         let currentUser = null;     // null = guest mode
         let isAuthSignUp = false;   // toggle between sign-in / sign-up
         let currentProjectName = ''; // cached for export functions in guest mode
+
+        // --- DataStore: In-Memory SWR Cache ---
+        const DataStore = {
+            _cache: {},
+            _STALE_MS: 30000, // 30 seconds
+            get(key) { return this._cache[key]?.data ?? null; },
+            set(key, data) { this._cache[key] = { data, fetchedAt: Date.now() }; },
+            has(key) { return key in this._cache; },
+            isStale(key) {
+                const entry = this._cache[key];
+                if (!entry) return true;
+                return (Date.now() - entry.fetchedAt) > this._STALE_MS;
+            },
+            invalidate(key) { delete this._cache[key]; },
+            clear() { this._cache = {}; }
+        };
+
+        // --- Mutation Queue: Network Resilience (Phase 3) ---
+        const MutationQueue = {
+            _queue: [],
+            _processing: false,
+            _retryTimer: null,
+            _STORAGE_KEY: 'planner_mutation_queue',
+            _MAX_RETRIES: 5,
+            _BACKOFF: [1000, 3000, 10000, 30000, 60000],
+
+            init() {
+                try {
+                    const raw = localStorage.getItem(this._STORAGE_KEY);
+                    this._queue = raw ? JSON.parse(raw) : [];
+                } catch { this._queue = []; }
+                window.addEventListener('online', () => {
+                    _isOnline = true;
+                    this._updateIndicator();
+                    this.processQueue();
+                });
+                window.addEventListener('offline', () => {
+                    _isOnline = false;
+                    this._updateIndicator();
+                });
+                if (this._queue.length > 0 && _isOnline) {
+                    setTimeout(() => this.processQueue(), 2000);
+                }
+                this._updateIndicator();
+            },
+
+            _persist() {
+                try { localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._queue)); } catch {}
+            },
+
+            enqueue(type, projectId, payload) {
+                // Coalesce: replace existing entry with same type+projectId
+                const idx = this._queue.findIndex(e => e.type === type && e.projectId === projectId);
+                const entry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                    timestamp: Date.now(),
+                    type, projectId, payload,
+                    retryCount: 0
+                };
+                if (idx !== -1) this._queue[idx] = entry;
+                else this._queue.push(entry);
+                this._persist();
+                this._updateIndicator();
+                if (_isOnline) this.processQueue();
+            },
+
+            async processQueue() {
+                if (this._processing || this._queue.length === 0 || !_isOnline) return;
+                this._processing = true;
+                this._updateIndicator();
+
+                while (this._queue.length > 0 && _isOnline) {
+                    const entry = this._queue[0];
+                    try {
+                        await this._execute(entry);
+                        this._queue.shift();
+                        this._persist();
+                        this._updateIndicator();
+                    } catch (err) {
+                        console.error('MutationQueue: failed to process entry', entry.type, err);
+                        entry.retryCount++;
+                        if (entry.retryCount >= this._MAX_RETRIES) {
+                            console.warn('MutationQueue: dropping entry after max retries', entry);
+                            this._queue.shift();
+                            this._persist();
+                        } else {
+                            this._persist();
+                            this._scheduleRetry(entry.retryCount);
+                        }
+                        break; // Stop processing on first failure
+                    }
+                }
+                this._processing = false;
+                this._updateIndicator();
+            },
+
+            async _execute(entry) {
+                const { type, projectId, payload } = entry;
+                let result;
+                switch (type) {
+                    case 'tasks_upsert':
+                        result = await supabase.from('tasks').upsert(payload);
+                        break;
+                    case 'tasks_insert':
+                        result = await supabase.from('tasks').insert(payload);
+                        break;
+                    case 'delete_tasks':
+                        result = await supabase.from('tasks').delete().in('id', payload);
+                        break;
+                    case 'metadata':
+                        result = await supabase.from('projects').update(payload).eq('id', projectId);
+                        break;
+                    case 'chat':
+                        await supabase.from('chat_history').delete().eq('project_id', projectId);
+                        if (payload.length > 0) {
+                            result = await supabase.from('chat_history').insert(payload);
+                        }
+                        break;
+                    default:
+                        console.warn('MutationQueue: unknown type', type);
+                        return;
+                }
+                if (result?.error) {
+                    if (isAuthError(result.error)) { handleSessionExpired(); return; }
+                    throw result.error;
+                }
+            },
+
+            _scheduleRetry(retryCount) {
+                clearTimeout(this._retryTimer);
+                const delay = this._BACKOFF[Math.min(retryCount - 1, this._BACKOFF.length - 1)];
+                this._retryTimer = setTimeout(() => this.processQueue(), delay);
+            },
+
+            _updateIndicator() {
+                const el = document.getElementById('networkStatus');
+                if (!el) return;
+                if (!_isOnline) {
+                    el.textContent = 'Offline';
+                    el.className = 'text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-500/20 text-red-400';
+                    el.classList.remove('hidden');
+                } else if (this._processing || this._queue.length > 0) {
+                    el.textContent = `Syncing (${this._queue.length})...`;
+                    el.className = 'text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400';
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            },
+
+            showSaved() {
+                const el = document.getElementById('networkStatus');
+                if (!el || !_isOnline || this._queue.length > 0) return;
+                el.textContent = 'Saved';
+                el.className = 'text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/20 text-green-400';
+                el.classList.remove('hidden');
+                setTimeout(() => { if (el.textContent === 'Saved') el.classList.add('hidden'); }, 1500);
+            },
+
+            get pending() { return this._queue.length; }
+        };
+
+        // --- Supabase Realtime (Phase 5) ---
+        let _realtimeChannel = null;
+        let _lastWriteTimestamps = new Map(); // Map<_rowId, timestamp> for self-echo filtering
+
+        function subscribeToProject(projectId) {
+            unsubscribeRealtime();
+            if (!supabase || !currentUser) return;
+
+            try {
+                _realtimeChannel = supabase.channel('project-' + projectId)
+                    .on('postgres_changes', {
+                        event: '*',
+                        schema: 'public',
+                        table: 'tasks',
+                        filter: 'project_id=eq.' + projectId
+                    }, handleTaskChange)
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'projects',
+                        filter: 'id=eq.' + projectId
+                    }, handleProjectChange)
+                    .subscribe((status) => {
+                        if (status === 'CHANNEL_ERROR') {
+                            console.warn('Realtime: channel error, falling back to SWR cache');
+                        }
+                    });
+            } catch (err) {
+                console.warn('Realtime: subscription failed, falling back to SWR', err);
+            }
+        }
+
+        function unsubscribeRealtime() {
+            if (_realtimeChannel) {
+                try { supabase.removeChannel(_realtimeChannel); } catch {}
+                _realtimeChannel = null;
+            }
+            _lastWriteTimestamps.clear();
+        }
+
+        function markWriteTimestamp(rowId) {
+            _lastWriteTimestamps.set(rowId, Date.now());
+        }
+
+        function handleTaskChange(payload) {
+            if (!currentProjectId) return;
+            const { eventType, new: newRow, old: oldRow } = payload;
+
+            if (eventType === 'UPDATE' && newRow) {
+                const rowId = newRow.id;
+                // Self-echo filtering: if we wrote this row recently, skip
+                const lastWrite = _lastWriteTimestamps.get(rowId);
+                if (lastWrite && (Date.now() - lastWrite) < 5000) {
+                    return; // Our own write echoing back
+                }
+
+                // Find the local task
+                const taskIdx = tasks.findIndex(t => t._rowId === rowId);
+                if (taskIdx === -1) return;
+                const task = tasks[taskIdx];
+
+                // Check for AI summary update (server-side change)
+                const summaryChanged = newRow.last_summary && newRow.last_summary !== task._lastSummary;
+
+                // Merge changed fields into local state
+                task.name = newRow.name;
+                task.start = newRow.start_date;
+                task.end = newRow.end_date;
+                task.progress = newRow.progress;
+                task.dependencies = newRow.dependencies || '';
+                task.priority = newRow.priority || 'medium';
+                task.description = newRow.description || '';
+                task.locked = !!newRow.locked;
+                task.checklist = newRow.checklist || [];
+                task.activity = newRow.activity || [];
+                task.files = newRow.files || [];
+                task.meetings = newRow.meetings || [];
+                task._lastSummary = newRow.last_summary || '';
+                task._lastSummaryHash = newRow.last_summary_hash || '';
+
+                // Update cache
+                DataStore.invalidate('project:' + currentProjectId);
+
+                // Re-render affected UI
+                if (currentTaskIndex === taskIdx) {
+                    // Task detail is open for this task — refresh it
+                    renderTaskDetailHeader();
+                    const activeTab = document.querySelector('.detail-tab.active');
+                    if (activeTab) {
+                        const tabName = activeTab.textContent.trim().toLowerCase().replace(/\s+/g, '');
+                        if (tabName === 'checklist') renderChecklistTab(task);
+                        else if (tabName === 'activitylog') renderActivityTab(task);
+                        else if (tabName === 'meetings') renderMeetingsTab(task);
+                        else if (tabName === 'files') renderFilesTab(task);
+                    }
+                    if (summaryChanged) {
+                        const panel = document.getElementById('summaryPanel');
+                        if (panel && !panel.classList.contains('hidden')) {
+                            document.getElementById('summaryContent').innerHTML = formatSummary(task._lastSummary);
+                            document.getElementById('summaryStatus').textContent = 'Updated via sync';
+                        }
+                    }
+                }
+                updateRowIndicators(taskIdx);
+                renderMobileCards();
+                // Debounce Gantt re-render for rapid updates
+                clearTimeout(window._realtimeGanttTimeout);
+                window._realtimeGanttTimeout = setTimeout(() => renderGantt(), 300);
+
+            } else if (eventType === 'INSERT' && newRow) {
+                // New task from another client
+                const exists = tasks.find(t => t._rowId === newRow.id);
+                if (exists) return; // Already have it (our own insert echoing back)
+                tasks.push({
+                    _rowId: newRow.id,
+                    id: newRow.task_number,
+                    name: newRow.name,
+                    start: newRow.start_date,
+                    end: newRow.end_date,
+                    progress: newRow.progress,
+                    dependencies: newRow.dependencies || '',
+                    priority: newRow.priority || 'medium',
+                    description: newRow.description || '',
+                    locked: !!newRow.locked,
+                    checklist: newRow.checklist || [],
+                    activity: newRow.activity || [],
+                    files: newRow.files || [],
+                    meetings: newRow.meetings || [],
+                    _lastSummary: newRow.last_summary || '',
+                    _lastSummaryHash: newRow.last_summary_hash || ''
+                });
+                DataStore.invalidate('project:' + currentProjectId);
+                renderGantt();
+
+            } else if (eventType === 'DELETE' && oldRow) {
+                const idx = tasks.findIndex(t => t._rowId === oldRow.id);
+                if (idx === -1) return;
+                tasks.splice(idx, 1);
+                DataStore.invalidate('project:' + currentProjectId);
+                renderGantt();
+            }
+        }
+
+        function handleProjectChange(payload) {
+            if (!currentProjectId) return;
+            const { new: newRow } = payload;
+            if (!newRow || !newRow.metadata) return;
+            // Update project-level metadata from server
+            const meta = newRow.metadata;
+            if (meta.description !== undefined) projectDescription = meta.description;
+            if (meta.meetings) projectMeetings = meta.meetings;
+            if (meta.checklist) projectChecklist = meta.checklist;
+            if (meta.activity) projectActivity = meta.activity;
+            if (meta.files) projectFiles = meta.files;
+            if (meta.logs) projectLogs = meta.logs;
+        }
+
+        // --- Network status state ---
+        let _isOnline = navigator.onLine;
 
         // Dashboard state
         let dashboardSort = localStorage.getItem('planner_sort') || 'urgency';
@@ -1738,6 +2097,8 @@
         function handleSessionExpired() {
             if (window._sessionExpiredShown) return true;
             window._sessionExpiredShown = true;
+            unsubscribeRealtime();
+            DataStore.clear();
             alert('Your session has expired. Please sign in again.');
             currentUser = null;
             userProfile = null;
@@ -1749,9 +2110,11 @@
         async function handleSignOut() {
             if (!confirm('Are you sure you want to sign out?')) return;
             clearTimeout(window.detailSaveTimeout);
+            unsubscribeRealtime();
             if (currentProjectId) {
                 await saveProject();
             }
+            DataStore.clear();
             await supabase.auth.signOut();
             currentUser = null;
             userProfile = null;
@@ -1989,8 +2352,13 @@
         // Data Layer — Dual mode (Supabase vs localStorage)
         // =============================================
 
-        async function loadRegistry() {
+        async function loadRegistry(skipCache = false) {
             if (currentUser) {
+                // SWR: return cached if fresh
+                if (!skipCache && DataStore.has('registry') && !DataStore.isStale('registry')) {
+                    return DataStore.get('registry');
+                }
+
                 const [projectsResult, tasksResult] = await Promise.all([
                     supabase.from('projects').select('*').order('created_at'),
                     supabase.from('tasks').select('project_id, progress, end_date, start_date, name')
@@ -2000,6 +2368,8 @@
                 if (error) {
                     console.error('loadRegistry error:', error);
                     if (isAuthError(error)) { handleSessionExpired(); return []; }
+                    // Return stale cache on error if available
+                    if (DataStore.has('registry')) return DataStore.get('registry');
                     return [];
                 }
 
@@ -2016,7 +2386,7 @@
                     projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress });
                 });
 
-                return (projects || []).map(p => ({
+                const result = (projects || []).map(p => ({
                     id: p.id,
                     name: p.name,
                     color: p.color || '#3b82f6',
@@ -2027,6 +2397,8 @@
                     updatedAt: p.updated_at,
                     _tasks: projectTasksMap[p.id] || []
                 }));
+                DataStore.set('registry', result);
+                return result;
             } else {
                 const raw = localStorage.getItem('planner_registry');
                 return raw ? JSON.parse(raw) : [];
@@ -2037,8 +2409,14 @@
             localStorage.setItem('planner_registry', JSON.stringify(registry));
         }
 
-        async function loadProject(id) {
+        async function loadProject(id, skipCache = false) {
             if (currentUser) {
+                const cacheKey = 'project:' + id;
+                // SWR: return cached if fresh
+                if (!skipCache && DataStore.has(cacheKey) && !DataStore.isStale(cacheKey)) {
+                    return DataStore.get(cacheKey);
+                }
+
                 const [taskResult, chatResult, projResult] = await Promise.all([
                     supabase.from('tasks').select('*').eq('project_id', id).order('sort_order'),
                     supabase.from('chat_history').select('*').eq('project_id', id).order('created_at'),
@@ -2050,6 +2428,8 @@
                 if (taskError) {
                     console.error('loadProject tasks error:', taskError);
                     if (isAuthError(taskError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
+                    // Return stale cache on error if available
+                    if (DataStore.has(cacheKey)) return DataStore.get(cacheKey);
                 }
                 if (chatError && isAuthError(chatError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
                 if (projError && isAuthError(projError)) { handleSessionExpired(); return { tasks: [], history: [], logs: [] }; }
@@ -2081,7 +2461,7 @@
                     text: c.message
                 }));
 
-                return {
+                const result = {
                     tasks: rawTasks,
                     history: loadedHistory,
                     logs: meta.logs || [],
@@ -2091,6 +2471,8 @@
                     projectActivity: meta.activity || [],
                     projectFiles: meta.files || []
                 };
+                DataStore.set(cacheKey, result);
+                return result;
             } else {
                 const raw = localStorage.getItem('planner_proj_' + id);
                 const parsed = raw ? JSON.parse(raw) : { tasks: [], history: [], logs: [] };
@@ -2125,20 +2507,35 @@
                 files: (projectFiles || []).map(f => ({ ...f, data: undefined }))
             };
 
+            // Snapshot dirty state, then clear (so new mutations during save are tracked fresh)
+            const snapDirtyTasks = new Set(_dirtyTasks);
+            const snapDirtyFields = new Map(_dirtyFields);
+            const snapDirtyMeta = _dirtyMetadata;
+            const snapDirtyChat = _dirtyChatHistory;
+            clearDirtyState();
+
             try {
             if (currentUser) {
-                // Update project timestamp + metadata
-                await supabase
-                    .from('projects')
-                    .update({ updated_at: new Date().toISOString(), metadata: _metadata })
-                    .eq('id', _projId);
+                // Conditionally update project metadata (only if dirty or deletes pending)
+                if (snapDirtyMeta || _deletes.length > 0) {
+                    await supabase
+                        .from('projects')
+                        .update({ updated_at: new Date().toISOString(), metadata: _metadata })
+                        .eq('id', _projId);
+                } else {
+                    // Always update timestamp (cheap, one field)
+                    await supabase
+                        .from('projects')
+                        .update({ updated_at: new Date().toISOString() })
+                        .eq('id', _projId);
+                }
 
                 // Step 1: Explicit deletes — remove only tasks the user actually deleted
                 if (_deletes.length > 0) {
                     const { error: delError } = await supabase.from('tasks').delete().in('id', _deletes);
                     if (delError) {
                         if (isAuthError(delError)) { handleSessionExpired(); return; }
-                        alert('Failed to delete tasks from server. Will retry on next save.');
+                        MutationQueue.enqueue('delete_tasks', _projId, _deletes);
                     } else {
                         // Remove only the IDs we successfully deleted from the live array
                         const deleted = new Set(_deletes);
@@ -2146,46 +2543,79 @@
                     }
                 }
 
-                // Step 2: Save tasks — split new (insert) vs existing (upsert)
-                // to avoid mixed-batch NOT NULL violation on the id column
-                if (_tasks.length > 0) {
-                    const buildRow = (t, i) => ({
-                        project_id: _projId,
-                        task_number: t.id,
-                        name: t.name,
-                        start_date: t.start,
-                        end_date: t.end,
-                        progress: parseInt(t.progress) || 0,
-                        dependencies: t.dependencies || '',
-                        sort_order: i,
-                        priority: t.priority || 'medium',
-                        description: t.description || '',
-                        locked: !!t.locked,
-                        checklist: t.checklist || [],
-                        activity: t.activity || [],
-                        files: stripFileData(t.files),
-                        meetings: t.meetings || [],
-                        last_summary: t._lastSummary || '',
-                        last_summary_hash: t._lastSummaryHash || ''
-                    });
+                // Step 2: Save tasks — granular dirty-tracked writes
+                const buildRow = (t, i) => ({
+                    project_id: _projId,
+                    task_number: t.id,
+                    name: t.name,
+                    start_date: t.start,
+                    end_date: t.end,
+                    progress: parseInt(t.progress) || 0,
+                    dependencies: t.dependencies || '',
+                    sort_order: i,
+                    priority: t.priority || 'medium',
+                    description: t.description || '',
+                    locked: !!t.locked,
+                    checklist: t.checklist || [],
+                    activity: t.activity || [],
+                    files: stripFileData(t.files),
+                    meetings: t.meetings || [],
+                    last_summary: t._lastSummary || '',
+                    last_summary_hash: t._lastSummaryHash || ''
+                });
 
+                // Map from local field names to DB column names
+                const fieldToCol = {
+                    start_date: t => t.start,
+                    end_date: t => t.end,
+                    name: t => t.name,
+                    progress: t => parseInt(t.progress) || 0,
+                    priority: t => t.priority || 'medium',
+                    description: t => t.description || '',
+                    locked: t => !!t.locked,
+                    checklist: t => t.checklist || [],
+                    activity: t => t.activity || [],
+                    files: t => stripFileData(t.files),
+                    meetings: t => t.meetings || [],
+                    dependencies: t => t.dependencies || '',
+                    last_summary: t => t._lastSummary || '',
+                    last_summary_hash: t => t._lastSummaryHash || ''
+                };
+
+                if (_tasks.length > 0) {
                     const existingRows = [];
                     const newRows = [];
                     _tasks.forEach((t, i) => {
                         if (t._rowId) {
-                            existingRows.push({ id: t._rowId, ...buildRow(t, i) });
+                            const key = t._rowId;
+                            if (!snapDirtyTasks.has(key)) return; // Skip clean tasks
+                            const dirtyFieldSet = snapDirtyFields.get(key);
+                            if (dirtyFieldSet === null || dirtyFieldSet === undefined) {
+                                // All fields dirty — send full row
+                                existingRows.push({ id: t._rowId, ...buildRow(t, i) });
+                            } else {
+                                // Partial row — only changed columns + required identifiers
+                                const partial = { id: t._rowId, project_id: _projId, sort_order: i, task_number: t.id };
+                                for (const field of dirtyFieldSet) {
+                                    if (fieldToCol[field]) partial[field] = fieldToCol[field](t);
+                                }
+                                existingRows.push(partial);
+                            }
                         } else {
+                            // New task — always full row
                             newRows.push(buildRow(t, i));
                         }
                     });
 
-                    // Upsert existing tasks (all have id — no mixed-batch issue)
+                    // Upsert existing dirty tasks
                     if (existingRows.length > 0) {
+                        // Mark write timestamps for Realtime self-echo filtering
+                        existingRows.forEach(r => markWriteTimestamp(r.id));
                         const { error } = await supabase
                             .from('tasks').upsert(existingRows);
                         if (error) {
                             if (isAuthError(error)) { handleSessionExpired(); return; }
-                            alert('Failed to save tasks to server. Your changes are preserved locally.');
+                            MutationQueue.enqueue('tasks_upsert', _projId, existingRows);
                         }
                     }
 
@@ -2195,7 +2625,7 @@
                             .from('tasks').insert(newRows).select('id, task_number');
                         if (error) {
                             if (isAuthError(error)) { handleSessionExpired(); return; }
-                            alert('Failed to save tasks to server. Your changes are preserved locally.');
+                            MutationQueue.enqueue('tasks_insert', _projId, newRows);
                         } else if (insertedRows) {
                             // Sync _rowId back — objects are shared so this updates live tasks too
                             for (const row of insertedRows) {
@@ -2206,7 +2636,6 @@
                     }
                 } else if (_deletes.length === 0) {
                     // Only delete all rows if we confirmed tasks loaded successfully
-                    // (prevents wiping data when load failed due to expired session)
                     const { count } = await supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('project_id', _projId);
                     if (count !== null && count > 0) {
                         console.warn('saveProject: skipping bulk delete — tasks exist in DB but local array is empty (possible load failure)');
@@ -2215,16 +2644,18 @@
                     }
                 }
 
-                // Replace chat history (trimmed to last 20 exchanges)
-                await supabase.from('chat_history').delete().eq('project_id', _projId);
-                const trimmed = _hist.slice(-20);
-                if (trimmed.length > 0) {
-                    const chatRows = trimmed.map(h => ({
-                        project_id: _projId,
-                        role: h.role,
-                        message: h.text
-                    }));
-                    await supabase.from('chat_history').insert(chatRows);
+                // Conditionally replace chat history (only if dirty)
+                if (snapDirtyChat) {
+                    await supabase.from('chat_history').delete().eq('project_id', _projId);
+                    const trimmed = _hist.slice(-20);
+                    if (trimmed.length > 0) {
+                        const chatRows = trimmed.map(h => ({
+                            project_id: _projId,
+                            role: h.role,
+                            message: h.text
+                        }));
+                        await supabase.from('chat_history').insert(chatRows);
+                    }
                 }
             } else {
                 const trimmedHistory = _hist.slice(-20);
@@ -2245,6 +2676,22 @@
                 updateRegistryMetadataLocal();
             }
             } finally {
+                // Update caches after successful save
+                if (_projId && currentUser) {
+                    DataStore.set('project:' + _projId, {
+                        tasks: _tasks.map(t => ({ ...t })),
+                        history: [..._hist],
+                        logs: _metadata.logs || [],
+                        projectDescription: _metadata.description || '',
+                        projectMeetings: _metadata.meetings || [],
+                        projectChecklist: _metadata.checklist || [],
+                        projectActivity: _metadata.activity || [],
+                        projectFiles: _metadata.files || []
+                    });
+                    // Mark registry as stale so next dashboard load refreshes
+                    DataStore.invalidate('registry');
+                    MutationQueue.showSaved();
+                }
                 _saveInFlight = false;
                 if (_saveQueued) {
                     _saveQueued = false;
@@ -2267,6 +2714,7 @@
                     .select()
                     .single();
                 if (error) { console.error('createProject error:', error); return null; }
+                DataStore.invalidate('registry');
                 return data.id;
             } else {
                 const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
@@ -2289,6 +2737,8 @@
         async function deleteProject(id) {
             if (currentUser) {
                 await supabase.from('projects').delete().eq('id', id);
+                DataStore.invalidate('registry');
+                DataStore.invalidate('project:' + id);
             } else {
                 let registry = await loadRegistry();
                 registry = registry.filter(p => p.id !== id);
@@ -2399,6 +2849,20 @@
             entry.deadline = data.tasks.reduce((max, t) => (t.end && (!max || t.end > max)) ? t.end : max, null);
             entry.updatedAt = new Date().toISOString();
             saveRegistryLocal(registry);
+        }
+
+        // Update DataStore registry cache from in-memory task state (avoids network fetch)
+        function updateRegistryCacheFromProject(projectId) {
+            const cached = DataStore.get('registry');
+            if (!cached) return;
+            const entry = cached.find(p => p.id === projectId);
+            if (!entry) return;
+            entry.taskCount = tasks.length;
+            entry.completedCount = tasks.filter(t => parseInt(t.progress) >= 100).length;
+            entry.deadline = tasks.reduce((max, t) => (t.end && (!max || t.end > max)) ? t.end : max, null);
+            entry.updatedAt = new Date().toISOString();
+            entry._tasks = tasks.map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+            DataStore.set('registry', cached);
         }
 
         function saveApiKey() {}
@@ -2951,13 +3415,35 @@
             clearTimeout(window.detailSaveTimeout);
             const savedProjectId = currentProjectId;
 
-            // Show loading overlay while saving and rendering dashboard
-            const overlay = document.getElementById('projectLoadingOverlay');
-            overlay.classList.remove('hidden');
+            // Unsubscribe from Realtime
+            unsubscribeRealtime();
 
-            if (currentProjectId) {
-                await saveProject();
+            // Snapshot project data into cache before clearing globals
+            if (currentProjectId && currentUser) {
+                updateRegistryCacheFromProject(currentProjectId);
+                // Cache current project state so re-opening is instant
+                DataStore.set('project:' + currentProjectId, {
+                    tasks: tasks.map(t => ({ ...t })),
+                    history: [...history],
+                    logs: [...projectLogs],
+                    projectDescription,
+                    projectMeetings: [...projectMeetings],
+                    projectChecklist: [...projectChecklist],
+                    projectActivity: [...projectActivity],
+                    projectFiles: [...projectFiles]
+                });
             }
+
+            // Fire save non-blocking (mutation queue will handle failures)
+            if (currentProjectId) {
+                saveProject();
+            }
+
+            // Show loading overlay only if no cached registry (first load)
+            const overlay = document.getElementById('projectLoadingOverlay');
+            const hasCachedRegistry = currentUser && DataStore.has('registry');
+            if (!hasCachedRegistry) overlay.classList.remove('hidden');
+
             currentProjectId = null;
             currentProjectName = '';
             currentTaskIndex = null;
@@ -2981,7 +3467,7 @@
 
             localStorage.removeItem('planner_lastProject');
 
-            // Render dashboard fully before showing it
+            // Render dashboard (uses cache if available — instant)
             await renderDashboard();
 
             // Now swap views — dashboard is fully rendered
@@ -2997,15 +3483,36 @@
 
             // Hide loading overlay after browser paints
             requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
+
+            // Background refresh: if registry is stale, silently re-fetch and update
+            if (currentUser && DataStore.isStale('registry')) {
+                loadRegistry(true).then(freshRegistry => {
+                    // Only re-render if we're still on dashboard and data actually changed
+                    if (!currentProjectId && freshRegistry) {
+                        const cached = DataStore.get('registry');
+                        if (JSON.stringify(cached) !== JSON.stringify(freshRegistry)) {
+                            renderDashboard();
+                        }
+                    }
+                }).catch(() => {});
+            }
         }
 
         async function openProject(id) {
-            // Show loading overlay while data loads
             const overlay = document.getElementById('projectLoadingOverlay');
-            overlay.classList.remove('hidden');
+            const cacheKey = 'project:' + id;
+            const hasCached = currentUser && DataStore.has(cacheKey);
+
+            // Show loading overlay only if no cached data
+            if (!hasCached) overlay.classList.remove('hidden');
 
             currentProjectId = id;
+
+            // Load data (cache-first via loadProject/loadRegistry SWR)
             const [data, registry] = await Promise.all([loadProject(id), loadRegistry()]);
+            // Guard: user navigated away during fetch
+            if (currentProjectId !== id) return;
+
             tasks = data.tasks || [];
             history = data.history || [];
             projectLogs = data.logs || [];
@@ -3021,7 +3528,7 @@
             }
             _pendingDeletes = [];
 
-            // Breadcrumb
+            // Breadcrumb — use cached registry to get project name
             const project = registry.find(p => p.id === id);
             if (project) {
                 currentProjectName = project.name;
@@ -3051,7 +3558,30 @@
             // Hide loading overlay
             overlay.classList.add('hidden');
 
+            // Subscribe to Realtime changes for this project
+            if (currentUser) subscribeToProject(id);
+
             pushNavState('project');
+
+            // Background refresh: if project data was from stale cache, silently re-fetch
+            if (currentUser && DataStore.isStale(cacheKey)) {
+                loadProject(id, true).then(freshData => {
+                    if (currentProjectId !== id) return; // navigated away
+                    // Only update if data actually changed
+                    const freshTasks = freshData.tasks || [];
+                    if (JSON.stringify(freshTasks.map(t => t._rowId)) !== JSON.stringify(tasks.map(t => t._rowId))) {
+                        tasks = freshTasks;
+                        history = freshData.history || [];
+                        projectLogs = freshData.logs || [];
+                        projectDescription = freshData.projectDescription || '';
+                        projectMeetings = freshData.projectMeetings || [];
+                        projectChecklist = freshData.projectChecklist || [];
+                        projectActivity = freshData.projectActivity || [];
+                        projectFiles = freshData.projectFiles || [];
+                        renderGantt();
+                    }
+                }).catch(() => {});
+            }
         }
 
         function rebuildChatUI() {
@@ -3831,6 +4361,7 @@
             if (!task.locked) {
                 task.locked = true;
                 addActivityEntry(task, 'system', 'Task auto-locked due to user edit');
+                markTaskDirty(task, 'locked', 'activity');
                 updateRowIndicators(tasks.indexOf(task));
             }
         }
@@ -3849,6 +4380,8 @@
             }
             autoLockTask(task);
             task[field] = value;
+            const fieldMap = { start: 'start_date', end: 'end_date', name: 'name', progress: 'progress', priority: 'priority', description: 'description' };
+            markTaskDirty(task, fieldMap[field] || field);
             clearTimeout(window.renderTimeout);
             window.renderTimeout = setTimeout(() => {
                 renderGantt();
@@ -3886,12 +4419,16 @@
                 if (log.taskId === deletedId) log.taskId = null;
                 else if (log.taskId && oldToNew[log.taskId]) log.taskId = oldToNew[log.taskId];
             });
+            // All remaining tasks dirty (sort_order, id, dependencies renumbered)
+            markAllTasksDirty();
+            markMetadataDirty();
             renderGantt();
             saveProject();
         }
 
         function toggleTaskLock(index) {
             tasks[index].locked = !tasks[index].locked;
+            markTaskDirty(tasks[index], 'locked');
             updateRowIndicators(index);
             saveProject();
         }
@@ -3901,6 +4438,7 @@
             const newState = !allLocked;
             tasks.forEach((t, i) => {
                 t.locked = newState;
+                markTaskDirty(t, 'locked');
                 updateRowIndicators(i);
             });
             const btn = document.getElementById('lockAllBtn');
@@ -3958,6 +4496,7 @@
                 meetings: []
             });
             addProjectLog('created', String(maxId + 1), name, null, '');
+            markMetadataDirty(); // project logs changed
             cancelAddTask();
             renderGantt();
             saveProject();
@@ -4037,11 +4576,8 @@
             pushNavState('taskDetail');
         }
 
-        async function closeTaskDetail() {
-            const overlay = document.getElementById('projectLoadingOverlay');
-            overlay.classList.remove('hidden');
-
-            await saveProject();
+        function closeTaskDetail() {
+            saveProject(); // non-blocking — mutation queue handles failures
             _taskSnapshot = null;
             const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             currentTaskIndex = null;
@@ -4050,12 +4586,11 @@
             document.getElementById('summaryPanel')?.classList.add('hidden');
             renderGantt();
             scrollToTask(savedTaskId);
-            overlay.classList.add('hidden');
         }
 
-        async function saveAndCloseDetail() {
+        function saveAndCloseDetail() {
             _taskSnapshot = null;
-            await closeTaskDetail();
+            closeTaskDetail();
         }
 
         async function discardAndCloseDetail() {
@@ -4165,6 +4700,8 @@
             autoLockTask(task);
             const oldValue = task[field];
             task[field] = value;
+            const fieldMap = { start: 'start_date', end: 'end_date', name: 'name', progress: 'progress', priority: 'priority', description: 'description' };
+            markTaskDirty(task, fieldMap[field] || field);
 
             if (field === 'progress') {
                 document.getElementById('tdProgressVal').textContent = value + '%';
@@ -4173,6 +4710,7 @@
             // Auto-log changes
             if (field === 'progress' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
+                markTaskDirty(task, 'activity');
                 const action = parseInt(value) === 100 ? 'completed' : 'updated';
                 const cutoff = Date.now() - 120000;
                 const recentLog = projectLogs.slice().reverse().find(l =>
@@ -4186,12 +4724,17 @@
                 } else {
                     addProjectLog(action, task.id, task.name, null, `Progress: ${oldValue || 0}% → ${value}%`);
                 }
+                markMetadataDirty();
             } else if (field === 'start' || field === 'end') {
                 addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
+                markTaskDirty(task, 'activity');
                 addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
+                markMetadataDirty();
             } else if (field === 'priority' && oldValue !== value) {
                 addActivityEntry(task, 'system', `Priority changed to ${value}`);
+                markTaskDirty(task, 'activity');
                 addProjectLog('priority', task.id, task.name, null, `${oldValue} → ${value}`);
+                markMetadataDirty();
             }
 
             renderTaskDetailHeader();
@@ -4343,6 +4886,8 @@
                             } else {
                                 addProjectLog(action, task.id, task.name, null, `Progress: ${oldPct}% → ${currentProgress}%`);
                             }
+                            markTaskDirty(task, 'progress', 'activity');
+                            markMetadataDirty();
                             renderMobileCards();
                             renderGantt();
                             renderTodaysFocus();
@@ -4402,6 +4947,8 @@
                 task.dependencies = depIds.join(', ');
                 const depTask = tasks.find(t => t.id === depId);
                 addActivityEntry(task, 'system', `Dependency added: "${depTask ? depTask.name : depId}"`);
+                markTaskDirty(task, 'dependencies', 'activity');
+                markMetadataDirty();
                 renderDependencies(task);
                 updateRowIndicators(currentTaskIndex);
                 saveProject();
@@ -4418,6 +4965,8 @@
                 task.dependencies = depIds.join(', ');
                 const depTask = tasks.find(t => t.id === depId);
                 addActivityEntry(task, 'system', `Dependency removed: "${depTask ? depTask.name : depId}"`);
+                markTaskDirty(task, 'dependencies', 'activity');
+                markMetadataDirty();
                 renderDependencies(task);
                 updateRowIndicators(currentTaskIndex);
                 saveProject();
@@ -4564,6 +5113,7 @@
             const half = Math.ceil(count / 2);
             if (!confirm(`Clear the ${half} oldest log entries?`)) return;
             projectLogs = projectLogs.slice(half);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectLogs();
             showToast(`Cleared ${half} oldest entries. ${projectLogs.length} remaining.`, 'info');
@@ -4754,6 +5304,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         function saveProjectDescription() {
             projectDescription = document.getElementById('projDescriptionInput').value;
+            markMetadataDirty();
             saveProjectFromHub();
         }
 
@@ -4859,6 +5410,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             form.classList.remove('meeting-fullscreen');
             form.classList.add('hidden');
             document.getElementById('projMtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectMeetingsTab();
         }
@@ -4867,6 +5419,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!confirm('Delete this meeting?')) return;
             const removed = projectMeetings.splice(index, 1);
             addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectMeetingsTab();
         }
@@ -4921,6 +5474,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 timestamp: new Date().toISOString()
             });
             input.value = '';
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
         }
@@ -4930,6 +5484,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!item) return;
             item.checked = !item.checked;
             addProjectLog(item.checked ? 'checked' : 'unchecked', null, 'Project', null, (item.checked ? '✓ ' : '☐ ') + item.text);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
         }
@@ -4948,6 +5503,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const newVal = document.getElementById('projCl-edit-' + id).querySelector('input').value.trim();
             if (!newVal) return;
             item.text = newVal;
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
         }
@@ -4962,6 +5518,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (idx === -1) return;
             if (!confirm('Delete this checklist item?')) return;
             projectChecklist.splice(idx, 1);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
         }
@@ -5023,6 +5580,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 timestamp: new Date().toISOString()
             });
             input.value = '';
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
         }
@@ -5046,6 +5604,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const newVal = document.getElementById('projActivity-edit-' + id).querySelector('textarea').value.trim();
             if (!newVal) return;
             entry.message = newVal;
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
         }
@@ -5055,6 +5614,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (idx === -1) return;
             if (!confirm('Delete this activity entry?')) return;
             projectActivity.splice(idx, 1);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
         }
@@ -5134,6 +5694,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 await Promise.all(projectFiles.slice(-added).map(async f => {
                     f.storage = await saveFileData(f.id, f.data);
                 }));
+                markMetadataDirty();
                 saveProjectFromHub();
                 renderProjectFilesTab();
             } finally {
@@ -5174,6 +5735,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const removed = projectFiles.splice(index, 1);
             deleteFileData(removed[0]);
             addProjectLog('removed', null, 'Project', null, removed[0].name);
+            markMetadataDirty();
             saveProjectFromHub();
             renderProjectFilesTab();
         }
@@ -5257,6 +5819,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             autoLockTask(task);
             addActivityEntry(task, 'comment', val);
+            markTaskDirty(task, 'activity');
             input.value = '';
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
@@ -5284,6 +5847,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!newVal) return;
             autoLockTask(task);
             entry.message = newVal;
+            markTaskDirty(task, 'activity');
             renderActivityTab(task);
             saveProject();
         }
@@ -5295,6 +5859,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!confirm('Delete this activity entry?')) return;
             autoLockTask(task);
             task.activity.splice(idx, 1);
+            markTaskDirty(task, 'activity');
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
             saveProject();
@@ -5351,6 +5916,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 timestamp: new Date().toISOString()
             });
             input.value = '';
+            markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -5362,7 +5928,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!item) return;
             autoLockTask(task);
             item.checked = !item.checked;
+            markTaskDirty(task, 'checklist');
             addProjectLog(item.checked ? 'checked' : 'unchecked', task.id, task.name, 'checklist', (item.checked ? '✓ ' : '☐ ') + item.text);
+            markMetadataDirty();
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -5384,6 +5952,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!newVal) return;
             autoLockTask(task);
             item.text = newVal;
+            markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -5401,6 +5970,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!confirm('Delete this checklist item?')) return;
             autoLockTask(task);
             task.checklist.splice(idx, 1);
+            markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -5480,6 +6050,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 await Promise.all(task.files.slice(-added).map(async f => {
                     f.storage = await saveFileData(f.id, f.data);
                 }));
+                markTaskDirty(task, 'files');
+                markTaskDirty(task, 'activity');
+                markMetadataDirty();
                 saveProject();
                 renderFilesTab(task);
                 renderTaskDetailHeader();
@@ -5527,6 +6100,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             deleteFileData(removed[0]);
             addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
             addProjectLog('removed', task.id, task.name, 'files', removed[0].name);
+            markTaskDirty(task, 'files');
+            markTaskDirty(task, 'activity');
+            markMetadataDirty();
             renderFilesTab(task);
             renderTaskDetailHeader();
             updateRowIndicators(currentTaskIndex);
@@ -5675,6 +6251,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             saveForm.classList.remove('meeting-fullscreen');
             saveForm.classList.add('hidden');
             document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+            markTaskDirty(task, 'meetings');
+            markTaskDirty(task, 'activity');
+            markMetadataDirty();
             renderMeetingsTab(task);
             scrollToMeeting(savedMeetingId);
             updateRowIndicators(currentTaskIndex);
@@ -5688,6 +6267,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const removed = task.meetings.splice(index, 1);
             addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
             addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
+            markTaskDirty(task, 'meetings');
+            markTaskDirty(task, 'activity');
+            markMetadataDirty();
             renderMeetingsTab(task);
             updateRowIndicators(currentTaskIndex);
             saveProject();
@@ -5927,6 +6509,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 task._lastSummary = aiText;
                 task._lastSummaryHash = currentHash;
                 incrementSummaryCount();
+                markTaskDirty(task, 'last_summary', 'last_summary_hash');
                 saveProject();
 
                 if (mContent) mContent.innerHTML = formatSummary(aiText);
@@ -6008,6 +6591,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 task._lastSummary = aiText;
                 task._lastSummaryHash = currentHash;
                 incrementSummaryCount();
+                markTaskDirty(task, 'last_summary', 'last_summary_hash');
                 saveProject();
 
                 document.getElementById('summaryContent').innerHTML = formatSummary(aiText);
@@ -6461,6 +7045,9 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             pendingPrompt = null;
             pendingAiText = null;
 
+            markAllTasksDirty();
+            markChatDirty();
+            markMetadataDirty();
             renderGantt();
             addToChat('model', 'Changes applied successfully.');
             saveProject();
@@ -6549,7 +7136,9 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
                         addToChat('model', "I've created your project plan. Review the Gantt chart and task table.");
                         history.push({ role: "user", text: prompt });
                         history.push({ role: "model", text: aiText });
-                        await saveProject();
+                        markAllTasksDirty();
+                        markChatDirty();
+                        saveProject(); // non-blocking
                         closeMobileSidebar();
                     } else if (!hasChanges) {
                         addToChat('model', "I analyzed your request but found no changes needed to the existing plan.");
@@ -6874,6 +7463,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             }
 
             restoreApiKey();
+            MutationQueue.init();
 
             try {
                 // Check for existing Supabase session
