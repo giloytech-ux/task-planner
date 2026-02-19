@@ -6638,7 +6638,8 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 })),
                 projMeetings: (pd.meetings || []).length,
                 projActivity: (pd.activity || []).filter(a => a.type === 'comment').length,
-                projChecklist: (pd.checklist || []).map(c => ({ text: c.text, checked: c.checked }))
+                projChecklist: (pd.checklist || []).map(c => ({ text: c.text, checked: c.checked })),
+                projDescription: (pd.description || '').trim()
             };
             const str = JSON.stringify(data);
             let hash = 0;
@@ -6666,7 +6667,12 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             let context = `--- PROJECT CONTEXT ---\n`;
             context += `Project: ${pn}\n`;
             context += `Date: ${today.toISOString().split('T')[0]}\n`;
-            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
+            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n`;
+            const desc = (pd.description || '').trim();
+            if (desc) {
+                context += `Description: ${desc.slice(0, 500)}\n`;
+            }
+            context += `\n`;
 
             // Project-level meetings
             const pMeetings = pd.meetings || [];
@@ -6778,7 +6784,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                 try {
                     const data = await loadProject(projectId);
                     taskList = data.tasks || [];
-                    projData = { meetings: data.projectMeetings || [], activity: data.projectActivity || [], checklist: data.projectChecklist || [] };
+                    projData = { meetings: data.projectMeetings || [], activity: data.projectActivity || [], checklist: data.projectChecklist || [], description: data.projectDescription || '' };
                     if (data.projectSummary) _projectSummaryCache[projectId] = data.projectSummary;
                     if (data.logSummary) _logSummaryCache[projectId] = data.logSummary;
                 } catch (err) {
@@ -6788,11 +6794,17 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             } else {
                 // Called from within the open project — use globals
                 taskList = tasks;
-                projData = { meetings: projectMeetings, activity: projectActivity, checklist: projectChecklist };
+                projData = { meetings: projectMeetings, activity: projectActivity, checklist: projectChecklist, description: projectDescription };
             }
 
-            if (taskList.length === 0) {
-                content.innerHTML = '<span class="text-slate-500">No tasks to summarize. Create a project plan first.</span>';
+            const hasContent = taskList.length > 0
+                || (projData.meetings || []).length > 0
+                || (projData.activity || []).filter(a => a.type === 'comment').length > 0
+                || (projData.checklist || []).length > 0
+                || (projData.description || '').trim().length > 0;
+
+            if (!hasContent) {
+                content.innerHTML = '<span class="text-slate-500">Nothing to summarize yet. Add tasks, meetings, or activity log entries first.</span>';
                 statusEl.textContent = '';
                 return;
             }
