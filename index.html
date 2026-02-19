@@ -1932,6 +1932,8 @@
             if (meta.activity) projectActivity = meta.activity;
             if (meta.files) projectFiles = meta.files;
             if (meta.logs) projectLogs = meta.logs;
+            if (meta.projectSummary) _projectSummaryCache[currentProjectId] = meta.projectSummary;
+            if (meta.logSummary) _logSummaryCache[currentProjectId] = meta.logSummary;
         }
 
         // --- Network status state ---
@@ -2459,7 +2461,9 @@
                     projectMeetings: meta.meetings || [],
                     projectChecklist: meta.checklist || [],
                     projectActivity: meta.activity || [],
-                    projectFiles: meta.files || []
+                    projectFiles: meta.files || [],
+                    projectSummary: meta.projectSummary || null,
+                    logSummary: meta.logSummary || null
                 };
                 DataStore.set(cacheKey, result);
                 return result;
@@ -2494,7 +2498,9 @@
                 meetings: [...projectMeetings],
                 checklist: [...projectChecklist],
                 activity: [...projectActivity],
-                files: (projectFiles || []).map(f => ({ ...f, data: undefined }))
+                files: (projectFiles || []).map(f => ({ ...f, data: undefined })),
+                projectSummary: _projectSummaryCache[_projId] || null,
+                logSummary: _logSummaryCache[_projId] || null
             };
 
             // Snapshot dirty state, then clear (so new mutations during save are tracked fresh)
@@ -2637,7 +2643,9 @@
                     projectMeetings,
                     projectChecklist,
                     projectActivity,
-                    projectFiles: (projectFiles || []).map(f => ({ ...f, data: undefined }))
+                    projectFiles: (projectFiles || []).map(f => ({ ...f, data: undefined })),
+                    projectSummary: _projectSummaryCache[_projId] || null,
+                    logSummary: _logSummaryCache[_projId] || null
                 }));
                 updateRegistryMetadataLocal();
             }
@@ -2652,7 +2660,9 @@
                         projectMeetings: _metadata.meetings || [],
                         projectChecklist: _metadata.checklist || [],
                         projectActivity: _metadata.activity || [],
-                        projectFiles: _metadata.files || []
+                        projectFiles: _metadata.files || [],
+                        projectSummary: _metadata.projectSummary || null,
+                        logSummary: _metadata.logSummary || null
                     });
                     // Mark registry as stale so next dashboard load refreshes
                     DataStore.invalidate('registry');
@@ -3487,6 +3497,8 @@
             projectChecklist = data.projectChecklist || [];
             projectActivity = data.projectActivity || [];
             projectFiles = data.projectFiles || [];
+            if (data.projectSummary) _projectSummaryCache[id] = data.projectSummary;
+            if (data.logSummary) _logSummaryCache[id] = data.logSummary;
             // Hydrate project file data from storage
             const filesToLoad = projectFiles.filter(f => !f.data);
             if (filesToLoad.length > 0) {
@@ -3544,6 +3556,8 @@
                         projectChecklist = freshData.projectChecklist || [];
                         projectActivity = freshData.projectActivity || [];
                         projectFiles = freshData.projectFiles || [];
+                        if (freshData.projectSummary) _projectSummaryCache[id] = freshData.projectSummary;
+                        if (freshData.logSummary) _logSummaryCache[id] = freshData.logSummary;
                         renderGantt();
                     }
                 }).catch(() => {});
@@ -5041,6 +5055,8 @@
                 projectChecklist = data.projectChecklist || [];
                 projectActivity = data.projectActivity || [];
                 projectFiles = data.projectFiles || [];
+                if (data.projectSummary) _projectSummaryCache[projectId] = data.projectSummary;
+                if (data.logSummary) _logSummaryCache[projectId] = data.logSummary;
                 // Hydrate project file data from storage
                 for (const file of projectFiles) {
                     if (!file.data) file.data = await loadFileData(file);
@@ -5196,6 +5212,8 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
                 _logSummaryCache[projId] = { text: aiText, hash: currentHash };
                 incrementSummaryCount();
+                markMetadataDirty();
+                saveProject();
 
                 content.innerHTML = formatSummary(aiText);
                 statusEl.textContent = 'Generated just now';
@@ -5240,7 +5258,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     meetings: projectMeetings,
                     checklist: projectChecklist,
                     activity: projectActivity,
-                    files: (projectFiles || []).map(f => ({ ...f, data: undefined }))
+                    files: (projectFiles || []).map(f => ({ ...f, data: undefined })),
+                    projectSummary: _projectSummaryCache[pid] || null,
+                    logSummary: _logSummaryCache[pid] || null
                 };
                 if (currentUser) {
                     supabase.from('projects')
@@ -5256,6 +5276,8 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                         parsed.projectChecklist = projectChecklist;
                         parsed.projectActivity = projectActivity;
                         parsed.projectFiles = meta.files;
+                        parsed.projectSummary = _projectSummaryCache[pid] || null;
+                        parsed.logSummary = _logSummaryCache[pid] || null;
                         localStorage.setItem('planner_proj_' + pid, JSON.stringify(parsed));
                     }
                 }
@@ -6757,6 +6779,8 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
                     const data = await loadProject(projectId);
                     taskList = data.tasks || [];
                     projData = { meetings: data.projectMeetings || [], activity: data.projectActivity || [], checklist: data.projectChecklist || [] };
+                    if (data.projectSummary) _projectSummaryCache[projectId] = data.projectSummary;
+                    if (data.logSummary) _logSummaryCache[projectId] = data.logSummary;
                 } catch (err) {
                     content.innerHTML = `<div class="text-center py-8"><span class="material-icons-round text-2xl text-red-400 mb-2 block">error_outline</span><p class="text-red-400 text-sm">Failed to load project data.</p></div>`;
                     return;
@@ -6811,6 +6835,8 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
 
                 _projectSummaryCache[projId] = { text: aiText, hash: currentHash };
                 incrementSummaryCount();
+                markMetadataDirty();
+                saveProject();
 
                 content.innerHTML = formatSummary(aiText);
                 statusEl.textContent = 'Generated just now';
