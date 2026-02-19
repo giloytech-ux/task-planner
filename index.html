@@ -1576,21 +1576,12 @@
 
         // --- Dirty Tracking (Phase 2) ---
         let _dirtyTasks = new Set();       // Set of _rowId or tempKey for modified tasks
-        let _dirtyFields = new Map();      // Map<key, Set<fieldName>|null> — null means all fields
         let _dirtyMetadata = false;        // project metadata changed
         let _dirtyChatHistory = false;     // chat history changed
 
-        function markTaskDirty(task, ...fields) {
+        function markTaskDirty(task) {
             const key = task._rowId || ('tmp:' + task.id);
             _dirtyTasks.add(key);
-            if (fields.length === 0) {
-                _dirtyFields.set(key, null); // null = all fields dirty
-            } else {
-                const existing = _dirtyFields.get(key);
-                if (existing === null) return; // already all-dirty
-                if (!existing) _dirtyFields.set(key, new Set(fields));
-                else fields.forEach(f => existing.add(f));
-            }
         }
 
         function markAllTasksDirty() {
@@ -1602,7 +1593,6 @@
 
         function clearDirtyState() {
             _dirtyTasks.clear();
-            _dirtyFields.clear();
             _dirtyMetadata = false;
             _dirtyChatHistory = false;
         }
@@ -2509,7 +2499,6 @@
 
             // Snapshot dirty state, then clear (so new mutations during save are tracked fresh)
             const snapDirtyTasks = new Set(_dirtyTasks);
-            const snapDirtyFields = new Map(_dirtyFields);
             const snapDirtyMeta = _dirtyMetadata;
             const snapDirtyChat = _dirtyChatHistory;
             clearDirtyState();
@@ -2518,16 +2507,24 @@
             if (currentUser) {
                 // Conditionally update project metadata (only if dirty or deletes pending)
                 if (snapDirtyMeta || _deletes.length > 0) {
-                    await supabase
+                    const metaPayload = { updated_at: new Date().toISOString(), metadata: _metadata };
+                    const { error: metaError } = await supabase
                         .from('projects')
-                        .update({ updated_at: new Date().toISOString(), metadata: _metadata })
+                        .update(metaPayload)
                         .eq('id', _projId);
+                    if (metaError) {
+                        if (isAuthError(metaError)) { handleSessionExpired(); return; }
+                        MutationQueue.enqueue('metadata', _projId, metaPayload);
+                    }
                 } else {
                     // Always update timestamp (cheap, one field)
-                    await supabase
+                    const { error: tsError } = await supabase
                         .from('projects')
                         .update({ updated_at: new Date().toISOString() })
                         .eq('id', _projId);
+                    if (tsError) {
+                        if (isAuthError(tsError)) { handleSessionExpired(); return; }
+                    }
                 }
 
                 // Step 1: Explicit deletes — remove only tasks the user actually deleted
@@ -2564,45 +2561,14 @@
                     last_summary_hash: t._lastSummaryHash || ''
                 });
 
-                // Map from local field names to DB column names
-                const fieldToCol = {
-                    start_date: t => t.start,
-                    end_date: t => t.end,
-                    name: t => t.name,
-                    progress: t => parseInt(t.progress) || 0,
-                    priority: t => t.priority || 'medium',
-                    description: t => t.description || '',
-                    locked: t => !!t.locked,
-                    checklist: t => t.checklist || [],
-                    activity: t => t.activity || [],
-                    files: t => stripFileData(t.files),
-                    meetings: t => t.meetings || [],
-                    dependencies: t => t.dependencies || '',
-                    last_summary: t => t._lastSummary || '',
-                    last_summary_hash: t => t._lastSummaryHash || ''
-                };
-
                 if (_tasks.length > 0) {
                     const existingRows = [];
                     const newRows = [];
                     _tasks.forEach((t, i) => {
                         if (t._rowId) {
-                            const key = t._rowId;
-                            if (!snapDirtyTasks.has(key)) return; // Skip clean tasks
-                            const dirtyFieldSet = snapDirtyFields.get(key);
-                            if (dirtyFieldSet === null || dirtyFieldSet === undefined) {
-                                // All fields dirty — send full row
-                                existingRows.push({ id: t._rowId, ...buildRow(t, i) });
-                            } else {
-                                // Partial row — only changed columns + required identifiers
-                                const partial = { id: t._rowId, project_id: _projId, sort_order: i, task_number: t.id };
-                                for (const field of dirtyFieldSet) {
-                                    if (fieldToCol[field]) partial[field] = fieldToCol[field](t);
-                                }
-                                existingRows.push(partial);
-                            }
+                            if (!snapDirtyTasks.has(t._rowId)) return; // Skip clean tasks
+                            existingRows.push({ id: t._rowId, ...buildRow(t, i) });
                         } else {
-                            // New task — always full row
                             newRows.push(buildRow(t, i));
                         }
                     });
