@@ -3793,7 +3793,12 @@
                     if (!remainRect) {
                         remainRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                         remainRect.classList.add('bar-remaining');
-                        barGroup.appendChild(remainRect);
+                        const labelEl = barGroup.querySelector('.bar-label');
+                        if (labelEl) {
+                            barGroup.insertBefore(remainRect, labelEl);
+                        } else {
+                            barGroup.appendChild(remainRect);
+                        }
                     }
                     remainRect.setAttribute('x', remX);
                     remainRect.setAttribute('y', y);
