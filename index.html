@@ -5697,12 +5697,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             let data = file.data || await loadFileData(file);
             if (!data) { alert('File data not available'); return; }
             file.data = data;
-            const win = window.open('', '_blank');
-            if (file.type && file.type.startsWith('image/')) {
-                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${data}"></body></html>`);
-            } else {
-                win.document.write(`<iframe src="${data}" style="width:100%;height:100%;border:none"></iframe>`);
-            }
+            openFilePreview(file.name, data, file.type);
         }
 
         async function downloadProjectFile(index) {
@@ -6051,6 +6046,42 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             }
         }
 
+        function openFilePreview(name, data, type) {
+            const overlay = document.getElementById('filePreviewOverlay');
+            const content = document.getElementById('filePreviewContent');
+            const nameEl = document.getElementById('filePreviewName');
+            nameEl.textContent = name || '';
+            content.innerHTML = '';
+            if (type && type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = data;
+                img.className = 'max-w-full max-h-full object-contain';
+                img.alt = name || 'Preview';
+                content.appendChild(img);
+            } else {
+                const iframe = document.createElement('iframe');
+                iframe.src = data;
+                iframe.className = 'w-full h-full border-none rounded';
+                iframe.setAttribute('sandbox', 'allow-same-origin');
+                content.appendChild(iframe);
+            }
+            overlay.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFilePreview() {
+            const overlay = document.getElementById('filePreviewOverlay');
+            overlay.classList.add('hidden');
+            document.getElementById('filePreviewContent').innerHTML = '';
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !document.getElementById('filePreviewOverlay').classList.contains('hidden')) {
+                closeFilePreview();
+            }
+        });
+
         async function previewFile(index) {
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
@@ -6058,12 +6089,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             let data = file.data || await loadFileData(file);
             if (!data) { alert('File data not available'); return; }
             file.data = data;
-            const win = window.open('', '_blank');
-            if (file.type && file.type.startsWith('image/')) {
-                win.document.write(`<html><head><title>${escapeHtml(file.name)}</title><style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${data}"></body></html>`);
-            } else {
-                win.document.write(`<iframe src="${data}" style="width:100%;height:100%;border:none"></iframe>`);
-            }
+            openFilePreview(file.name, data, file.type);
         }
 
         async function downloadFile(index) {
@@ -7640,6 +7666,15 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
         <div id="logSummaryContent" class="flex-1 overflow-y-auto px-5 py-4 text-xs text-slate-300 leading-relaxed"></div>
       </div>
     </div>
+<!-- File Preview Overlay -->
+<div id="filePreviewOverlay" class="hidden fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center" onclick="if(event.target===this)closeFilePreview()">
+    <button onclick="closeFilePreview()" class="absolute top-4 right-4 z-10 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center transition-colors" title="Close preview">
+        <span class="material-icons-round text-3xl">close</span>
+    </button>
+    <p id="filePreviewName" class="absolute top-4 left-4 right-16 text-white/70 text-sm truncate pointer-events-none"></p>
+    <div id="filePreviewContent" class="w-full h-full flex items-center justify-center p-4 pt-14"></div>
+</div>
+
 <div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });</script>
 </body>
