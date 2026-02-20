@@ -1957,25 +1957,110 @@
 
         const PROJECT_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
-        const SYSTEM_PROMPT = `
-        You are an expert Project Manager AI.
-        Current Date: February 16, 2026.
+        function buildSystemPrompt(taskContextJson) {
+            const today = new Date().toISOString().slice(0, 10);
+            const projectJson = taskContextJson || '[]';
+            return `**ROLE**
+You are an Expert AI Project Manager operating inside a **dedicated chat box** for a single specific project.
+Your entire universe is limited to this project's context. You are powered by Frappe Gantt (Frontend) and Supabase (Backend).
 
-        Your Goal: Break down user requests into a logical project schedule.
+==================================================
+CONTEXT VARIABLES (INJECTED AT RUNTIME)
+==================================================
+- CURRENT_DATE: ${today} (The anchor for "Today")
+- CURRENT_PROJECT_TASKS: ${projectJson}
 
-        CRITICAL OUTPUT RULES:
-        1. You must ONLY respond with a valid JSON object. No markdown, no conversational text.
-        2. Structure: { "tasks": [ { "id": "1", "name": "Task Name", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "progress": 0, "dependencies": "" } ] }
-        3. Break large projects into specific subtasks (Prep, Review, Execution, etc.).
-        4. Dates must be realistic. 'dependencies' is the ID of the previous task (optional).
-        5. If the user asks for changes (e.g., "Make review longer"), modify the existing JSON structure and return the FULL updated JSON.
-        6. SCHEDULING CONSTRAINTS (IMPORTANT):
-           - The user has ~5-6 productive work hours per day. Size task durations accordingly.
-           - Limit concurrent (parallel) tasks to 2-3 at most. Stagger start dates.
-           - Use 'dependencies' to chain tasks logically — finishing task A should unlock task B.
-           - Account for weekends (Sat/Sun are non-work days) — extend durations that span them.
-           - Leave at least 1 day buffer between a task's end and its dependent task's start.
-        `;
+==================================================
+SCOPE & SECURITY (CRITICAL)
+==================================================
+1. **Chat Box Isolation:**
+   - You act ONLY within the scope of this specific chat session and project.
+   - You DO NOT have access to the user's other projects, calendars, or team members outside this chat box.
+   - You must NEVER attempt to link dependencies to IDs that are not present in CURRENT_PROJECT_TASKS.
+
+2. **Data Integrity:**
+   - When editing, you must respect the id of existing tasks exactly.
+   - If the user asks to link to an external project or any outside data, you must refuse politely in the summary, stating you only have access to the current project's chat box.
+
+==================================================
+CORE BEHAVIOR
+==================================================
+Your goal is to manipulate the JSON data to visualize the schedule based on the chat input.
+
+1. **Strict JSON Output:**
+   - You must **ONLY** return a single Valid JSON Object.
+   - NO conversational text outside the JSON.
+   - NO markdown formatting (like \`\`\`json).
+
+2. **Scheduling Logic:**
+   - **Start Date:** If not specified, use CURRENT_DATE.
+   - **Deadlines:** If a deadline is given, use **BACKWARD Scheduling** (Deadline -> Start).
+   - **Weekends:** Do NOT schedule tasks on weekends unless explicitly asked ("Crunch Mode").
+   - **Dependencies:** Ensure logical flow (e.g., Task B start > Task A end).
+   - The user has ~5-6 productive work hours per day. Size task durations accordingly.
+   - Limit concurrent (parallel) tasks to 2-3 at most. Stagger start dates.
+   - Leave at least 1 day buffer between a task's end and its dependent task's start.
+
+==================================================
+ALLOWED ACTIONS
+==================================================
+Determine the User's intent and select ONE action:
+
+1. \`create\` -> Populate a new empty project from scratch.
+2. \`update\` -> Edit dates, names, dependencies, or add/remove tasks in the current list.
+3. \`delete\` -> Remove specific tasks from the current list.
+4. \`clarify\` -> If the prompt is nonsensical, ambiguous, or asks for outside data.
+
+==================================================
+OUTPUT JSON SCHEMA
+==================================================
+Your response must validate against this structure exactly:
+
+{
+  "action": "create | update | delete | clarify",
+  "summary": "A brief, professional message to display in the chat bubble (e.g., 'I have shifted the timeline by 2 days').",
+  "tasks": [
+    {
+      "id": "unique_string_id",
+      "name": "Task Name",
+      "start": "YYYY-MM-DD",
+      "end": "YYYY-MM-DD",
+      "progress": 0,
+      "dependencies": ["id_1"],
+      "custom_class": "bar-blue"
+    }
+  ]
+}
+
+Notes:
+- "id": MUST preserve existing IDs if editing.
+- "dependencies": Array of Strings. Empty [] if none.
+- "custom_class": Options: bar-blue, bar-red, bar-milestone. Default to "" if unsure.
+
+==================================================
+FEW-SHOT EXAMPLES
+==================================================
+
+**Input:** "Push the Design phase back by 2 days."
+**Context:** CURRENT_PROJECT_TASKS has a task "Design" (id: "t1") starting Oct 01.
+**Output:**
+{
+  "action": "update",
+  "summary": "I've delayed the Design phase by 2 days and updated dependent tasks.",
+  "tasks": [
+    { "id": "t1", "name": "Design", "start": "2023-10-03", "end": "2023-10-05", "progress": 0, "dependencies": [], "custom_class": "bar-blue" }
+  ]
+}
+
+**Input:** "Link this to my other Marketing Campaign project."
+**Logic:** Out of scope (Chat Box Isolation).
+**Output:**
+{
+  "action": "clarify",
+  "summary": "I cannot access external projects. I can only manage tasks within this specific project's chat box.",
+  "tasks": []
+}`;
+        }
 
         let ganttChart = null;
         const GANTT_VIEW_MODES = ['Month', 'Week', 'Day'];
@@ -3959,7 +4044,8 @@
                 start: t.start,
                 end: t.end,
                 progress: parseInt(t.progress) || 0,
-                dependencies: t.dependencies
+                dependencies: t.dependencies,
+                custom_class: t.custom_class || ''
             })).sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 
             try {
@@ -6950,6 +7036,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
         let pendingMerge = null;
         let pendingPrompt = null;
         let pendingAiText = null;
+        let pendingAction = null;
 
         // Layer 1: Smart Merge — only update scheduling fields, preserve rich data
         function mergeTasks(existing, aiTasks) {
@@ -7025,12 +7112,14 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             const icons = {
                 modified: '✏️',
                 added: '➕',
+                removed: '🗑️',
                 kept: '📌',
                 locked: '🔒',
                 unchanged: '—'
             };
             const modified = changes.filter(c => c.type === 'modified');
             const added = changes.filter(c => c.type === 'added');
+            const removed = changes.filter(c => c.type === 'removed');
             const kept = changes.filter(c => c.type === 'kept');
             const locked = changes.filter(c => c.type === 'locked');
             const unchanged = changes.filter(c => c.type === 'unchanged');
@@ -7046,6 +7135,11 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             if (added.length > 0) {
                 added.forEach(c => {
                     html += `<div>${icons.added} <strong>${escapeHtml(c.name)}</strong> (new task)</div>`;
+                });
+            }
+            if (removed.length > 0) {
+                removed.forEach(c => {
+                    html += `<div>${icons.removed} <strong>${escapeHtml(c.name)}</strong> (will be removed)</div>`;
                 });
             }
             if (kept.length > 0) {
@@ -7090,6 +7184,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             pendingMerge = null;
             pendingPrompt = null;
             pendingAiText = null;
+            pendingAction = null;
 
             markAllTasksDirty();
             markChatDirty();
@@ -7104,6 +7199,7 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
             pendingMerge = null;
             pendingPrompt = null;
             pendingAiText = null;
+            pendingAction = null;
             addToChat('model', 'Changes discarded. Your tasks remain unchanged.');
         }
 
@@ -7144,59 +7240,94 @@ Be concise and actionable. Focus on insights, not just restating data. Leverage 
 
             conversation.push({ role: "user", parts: [{ text: prompt }] });
 
-            // Layer 2: Only send unlocked tasks as context to AI
+            // Layer 2: Build task context for system prompt (unlocked tasks only)
+            let taskContextJson = '[]';
             if (tasks.length > 0) {
                 const unlockedTasks = tasks.filter(t => !t.locked).map(t => ({
                     id: t.id, name: t.name, start: t.start, end: t.end,
-                    progress: t.progress, dependencies: t.dependencies || ''
+                    progress: t.progress,
+                    dependencies: (t.dependencies || '').split(',').map(s => s.trim()).filter(Boolean),
+                    custom_class: t.custom_class || ''
                 }));
                 const lockedCount = tasks.length - unlockedTasks.length;
-                let contextMsg = `Current JSON State: ${JSON.stringify({tasks: unlockedTasks})}. Update this based on the user's latest request.`;
+                taskContextJson = JSON.stringify(unlockedTasks);
                 if (lockedCount > 0) {
-                    contextMsg += ` Note: ${lockedCount} task(s) are locked and excluded — do not add or reference them.`;
+                    conversation.push({ role: "user", parts: [{ text: `Note: ${lockedCount} task(s) are locked and excluded — do not add or reference them.` }] });
                 }
-                conversation.push({ role: "user", parts: [{ text: contextMsg }] });
             }
 
             try {
                 const data = await callGemini({
                     contents: conversation,
-                    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                    system_instruction: { parts: [{ text: buildSystemPrompt(taskContextJson) }] },
                     generationConfig: { responseMimeType: "application/json" }
                 });
 
                 const aiText = data.candidates[0].content.parts[0].text;
                 const parsed = JSON.parse(aiText);
 
+                // Normalize dependencies from arrays to comma-separated strings
                 if (parsed.tasks) {
-                    // Layer 1: Smart merge instead of replace
-                    const { merged, changes } = mergeTasks(tasks, parsed.tasks);
+                    parsed.tasks.forEach(t => {
+                        if (Array.isArray(t.dependencies)) {
+                            t.dependencies = t.dependencies.join(', ');
+                        } else {
+                            t.dependencies = t.dependencies || '';
+                        }
+                        t.custom_class = t.custom_class || '';
+                    });
+                }
 
-                    // Check if there are any actual changes
-                    const hasChanges = changes.some(c => c.type === 'modified' || c.type === 'added');
+                const action = parsed.action || null;
+                const summary = parsed.summary || '';
 
-                    if (tasks.length === 0) {
-                        // First time — no existing tasks, apply directly
+                // Handle by action type
+                if (action === 'clarify') {
+                    // Clarify — show AI summary, no task processing
+                    addToChat('model', escapeHtml(summary) || "Could you clarify your request?");
+                    history.push({ role: "user", text: prompt });
+                    history.push({ role: "model", text: aiText });
+                } else if (parsed.tasks) {
+                    // Layer 1: Smart merge
+                    let { merged, changes } = mergeTasks(tasks, parsed.tasks);
+
+                    // For delete action: re-label 'kept' as 'removed' and filter them out
+                    if (action === 'delete') {
+                        changes = changes.map(c => c.type === 'kept' ? { ...c, type: 'removed' } : c);
+                        const removedIds = new Set(changes.filter(c => c.type === 'removed').map(c => c.id));
+                        merged = merged.filter(t => !removedIds.has(t.id));
+                    }
+
+                    const hasChanges = changes.some(c => c.type === 'modified' || c.type === 'added' || c.type === 'removed');
+
+                    if (action === 'create' && tasks.length === 0) {
+                        // First run — apply directly
                         tasks = merged;
                         renderGantt();
-                        addToChat('model', "I've created your project plan. Review the Gantt chart and task table.");
+                        addToChat('model', escapeHtml(summary) || "I've created your project plan. Review the Gantt chart and task table.");
                         history.push({ role: "user", text: prompt });
                         history.push({ role: "model", text: aiText });
                         markAllTasksDirty();
                         markChatDirty();
-                        saveProject(); // non-blocking
+                        saveProject();
                         closeMobileSidebar();
                     } else if (!hasChanges) {
-                        addToChat('model', "I analyzed your request but found no changes needed to the existing plan.");
+                        addToChat('model', escapeHtml(summary) || "I analyzed your request but found no changes needed to the existing plan.");
                     } else {
-                        // Layer 3: Show change summary, wait for approval
+                        // Show AI summary + change diff with Apply/Cancel
                         pendingMerge = merged;
                         pendingPrompt = prompt;
                         pendingAiText = aiText;
-                        addToChat('model', buildChangeSummaryHTML(changes));
+                        pendingAction = action;
+                        let html = '';
+                        if (summary) {
+                            html += `<div style="margin-bottom:10px">${escapeHtml(summary)}</div>`;
+                        }
+                        html += buildChangeSummaryHTML(changes);
+                        addToChat('model', html);
                     }
                 } else {
-                    addToChat('model', "I couldn't generate a valid plan. Please try again.");
+                    addToChat('model', escapeHtml(summary) || "I couldn't generate a valid plan. Please try again.");
                 }
 
                 statusEl.innerText = "Ready";
