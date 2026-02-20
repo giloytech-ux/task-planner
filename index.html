@@ -6508,6 +6508,17 @@ Your goal is to help the user **"Context Switch"** instantly into this specific 
 - **Evidence:** Attached Files (Names & Dates).
 
 ==================================================
+🔍 CONTEXTUAL AWARENESS
+==================================================
+
+Before performing analysis, read the TASK_METADATA Description to understand what this task is trying to achieve.
+
+- **Connect the Dots:** When summarizing Activity Logs, reference the Description to add clarity.
+  Example: If the Description says "Client X needs a refund" and the Log says "Email sent," summarize as: "User sent the email regarding Client X's refund."
+- **Soft Validation:** If the Description mentions specific details (like a phone number or a link), check if the Activity Logs mention using them. If not, just ignore it — do not flag as an error.
+- **No Strict Enforcement:** Do not treat the Description as a checklist.
+
+==================================================
 🧠 MICRO-ANALYSIS LOGIC
 ==================================================
 
@@ -6535,7 +6546,8 @@ OUTPUT STRUCTURE (TACTICAL VIEW)
 - **Time Check:** "Last active [X] days ago." (Based on latest log/file).
 
 ### 2. 🗣️ The Story So Far (Context)
-*Synthesize the logs and meeting notes into a brief status update.*
+*Synthesize the Description + logs + meeting notes into a brief status update.*
+- **Task Goal:** "[1-sentence summary of the Description]."
 - "Latest Update: [User Name] noted on [Date] that [Key Point from log]."
 - "Blockers: [Mention any 'blocked' or 'waiting' keywords found in logs]."
 
@@ -7080,6 +7092,14 @@ You will receive structured data with these labeled sections:
 - FILES — file attachment metadata per task
 - TODAY'S FOCUS — overdue, overdue-soon, and attention tasks
 
+## CONTEXTUAL AWARENESS
+
+Before performing audit checks, read the PROJECT_METADATA Description field to understand the domain and purpose of this project.
+
+- **Interpret Logs in Context:** When summarizing User Activity Logs, reference the Description to add clarity.
+  Example: If the Log says "Fixed the header" and the Description mentions "New Website Redesign," summarize as "Progress made on Website Redesign (Header fix)."
+- **No Strict Enforcement:** Do not treat the Description as a checklist. Use it to explain *why* recent activities matter.
+
 ## AUDIT LOGIC
 
 Perform three checks before writing your report:
@@ -7098,7 +7118,7 @@ Scan user activity logs and meeting notes for language indicating blockers, frus
 Output exactly 4 sections in markdown:
 
 ### 1. Executive Snapshot
-2-3 sentences on overall project health, timeline status, and completion trajectory. Be honest — if the project is behind, say so.
+Combine the Project Description with the latest status. Lead with "Current Focus:" connecting the project's stated purpose to recent activity. Then 1-2 sentences on overall health, timeline status, and completion trajectory. Be honest — if the project is behind, say so.
 
 ### 2. Reality Checks
 - **Integrity Flags:** List any tasks where progress % doesn't match checklist completion. If none, say "No integrity issues detected."
