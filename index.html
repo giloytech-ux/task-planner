@@ -7468,7 +7468,10 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
 
                     // For delete action: re-label 'kept' as 'removed' and filter them out
                     if (action === 'delete') {
-                        changes = changes.map(c => c.type === 'kept' ? { ...c, type: 'removed' } : c);
+                        const lockedIds = new Set(merged.filter(t => t.locked).map(t => t.id));
+                        changes = changes.map(c => c.type === 'kept'
+                            ? (lockedIds.has(c.id) ? { ...c, type: 'locked' } : { ...c, type: 'removed' })
+                            : c);
                         const removedIds = new Set(changes.filter(c => c.type === 'removed').map(c => c.id));
                         merged = merged.filter(t => !removedIds.has(t.id));
                     }
