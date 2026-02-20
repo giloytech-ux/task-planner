@@ -1064,6 +1064,7 @@
                                 <button id="taskRedoBtn" onclick="taskRedo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Redo">
                                     <span class="material-icons-round" style="font-size:18px">redo</span>
                                 </button>
+                                <span id="taskUndoStatus" class="text-[11px] text-blue-400 opacity-0 transition-opacity duration-300 truncate max-w-[200px]"></span>
                             </div>
                             <div class="flex items-center gap-3 mt-2 text-xs text-slate-400">
                                 <span id="tdTaskDates" class="flex items-center gap-1"><span class="material-icons-round text-sm">date_range</span></span>
@@ -1241,6 +1242,7 @@
                         <button id="projRedoBtn" onclick="projRedo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Redo">
                             <span class="material-icons-round" style="font-size:18px">redo</span>
                         </button>
+                        <span id="projUndoStatus" class="text-[11px] text-blue-400 opacity-0 transition-opacity duration-300 truncate max-w-[200px]"></span>
                     </div>
                 </div>
                 <div class="td-tabs flex items-center px-3 md:px-5 bg-slate-900/50 overflow-x-auto shrink-0">
@@ -4758,6 +4760,16 @@ FEW-SHOT EXAMPLES
             updateProjUndoButtons();
         }
 
+        let _undoStatusTimer = null;
+        function showUndoStatus(scope, message) {
+            const el = document.getElementById(scope === 'task' ? 'taskUndoStatus' : 'projUndoStatus');
+            if (!el) return;
+            el.textContent = message;
+            el.style.opacity = '1';
+            clearTimeout(_undoStatusTimer);
+            _undoStatusTimer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+        }
+
         function taskUndo() {
             if (!_taskUndoStack.length) return;
             const entry = _taskUndoStack.pop();
@@ -4766,7 +4778,7 @@ FEW-SHOT EXAMPLES
             _taskRedoStack.push(entry);
             updateTaskUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
-            showToast('Undo: ' + entry.description, 'info', 2500);
+            showUndoStatus('task', 'Undo: ' + entry.description);
         }
 
         function taskRedo() {
@@ -4777,7 +4789,7 @@ FEW-SHOT EXAMPLES
             _taskUndoStack.push(entry);
             updateTaskUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
-            showToast('Redo: ' + entry.description, 'info', 2500);
+            showUndoStatus('task', 'Redo: ' + entry.description);
         }
 
         function projUndo() {
@@ -4788,7 +4800,7 @@ FEW-SHOT EXAMPLES
             _projRedoStack.push(entry);
             updateProjUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
-            showToast('Undo: ' + entry.description, 'info', 2500);
+            showUndoStatus('project', 'Undo: ' + entry.description);
         }
 
         function projRedo() {
@@ -4799,7 +4811,7 @@ FEW-SHOT EXAMPLES
             _projUndoStack.push(entry);
             updateProjUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
-            showToast('Redo: ' + entry.description, 'info', 2500);
+            showUndoStatus('project', 'Redo: ' + entry.description);
         }
 
         function updateTaskUndoButtons() {
