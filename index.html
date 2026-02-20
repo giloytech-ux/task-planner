@@ -2033,7 +2033,10 @@ Your response must validate against this structure exactly:
       "end": "YYYY-MM-DD",
       "progress": 0,
       "dependencies": ["id_1"],
-      "custom_class": "bar-blue"
+      "custom_class": "bar-blue",
+      "description": "Brief explanation of task scope, purpose, and key instructions.",
+      "checklist": ["Step or sub-task 1", "Step or sub-task 2"],
+      "assigned": "Me"
     }
   ]
 }
@@ -2042,6 +2045,9 @@ Notes:
 - "id": MUST preserve existing IDs if editing.
 - "dependencies": Array of Strings. Empty [] if none.
 - "custom_class": Options: bar-blue, bar-red, bar-milestone. Default to "" if unsure.
+- "description": 1-3 sentences covering what the task is about, its context and purpose.
+- "checklist": Array of up to 5 short actionable strings; keep items concise.
+- "assigned": Who the task is assigned to. Always default to "Me".
 
 ==================================================
 FEW-SHOT EXAMPLES
@@ -7294,8 +7300,9 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                         ...aiTask,
                         progress: 0,
                         priority: 'medium',
-                        description: '',
-                        checklist: [],
+                        description: aiTask.description || '',
+                        checklist: aiTask.checklist || [],
+                        assigned: aiTask.assigned || 'Me',
                         activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created by AI', timestamp: new Date().toISOString() }],
                         files: [],
                         meetings: []
@@ -7483,6 +7490,18 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                             t.dependencies = t.dependencies || '';
                         }
                         t.custom_class = t.custom_class || '';
+                        if (Array.isArray(t.checklist)) {
+                            t.checklist = t.checklist.map(text => ({
+                                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                                text: typeof text === 'string' ? text : (text.text || ''),
+                                checked: false,
+                                timestamp: new Date().toISOString()
+                            }));
+                        } else {
+                            t.checklist = [];
+                        }
+                        t.description = t.description || '';
+                        t.assigned = t.assigned || 'Me';
                     });
                 }
 
