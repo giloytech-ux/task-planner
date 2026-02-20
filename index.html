@@ -79,6 +79,9 @@
             border-radius: 6px;
         }
 
+        @keyframes tab-flash { 0%,50%{background-color:rgba(59,130,246,0.3)} 100%{background-color:transparent} }
+        .tab-flash { animation: tab-flash 0.8s ease-out; }
+
         /* Dashboard Cards */
         .project-card {
             background: rgba(30, 41, 59, 0.7);
@@ -1053,7 +1056,15 @@
                     </div>
                     <div class="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-4">
                         <div class="flex-1 min-w-0">
-                            <h2 id="tdTaskName" class="text-lg font-bold text-white truncate"></h2>
+                            <div class="flex items-center gap-2">
+                                <h2 id="tdTaskName" class="text-lg font-bold text-white truncate"></h2>
+                                <button id="taskUndoBtn" onclick="taskUndo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Undo">
+                                    <span class="material-icons-round" style="font-size:18px">undo</span>
+                                </button>
+                                <button id="taskRedoBtn" onclick="taskRedo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Redo">
+                                    <span class="material-icons-round" style="font-size:18px">redo</span>
+                                </button>
+                            </div>
                             <div class="flex items-center gap-3 mt-2 text-xs text-slate-400">
                                 <span id="tdTaskDates" class="flex items-center gap-1"><span class="material-icons-round text-sm">date_range</span></span>
                                 <span id="tdTaskDaysLeft" class="flex items-center gap-1"><span class="material-icons-round text-sm">schedule</span></span>
@@ -1141,15 +1152,6 @@
                             </div>
                             <textarea id="tdDescription" class="td-textarea" rows="4" placeholder="Add notes, context, or instructions..." onchange="updateTaskDetail('description', this.value)" oninput="document.getElementById('clearDescriptionBtn').style.display = this.value ? '' : 'none'"></textarea>
                         </div>
-                        <!-- Save / Cancel actions -->
-                        <div class="flex items-center gap-3 pt-4 border-t border-slate-700/50">
-                            <button onclick="discardAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
-                                <span class="material-icons-round" style="font-size:15px">undo</span> Discard
-                            </button>
-                            <button onclick="saveAndCloseDetail()" class="flex-1 sm:flex-none px-5 py-2.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-1.5">
-                                <span class="material-icons-round" style="font-size:15px">check</span> Save & Back
-                            </button>
-                        </div>
                     </div>
 
                     <!-- ACTIVITY LOG TAB -->
@@ -1231,8 +1233,14 @@
                     <button onclick="closeProjectLogs()" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-lg">
                         <span class="material-icons-round">arrow_back</span>
                     </button>
-                    <div class="flex-1 min-w-0">
+                    <div class="flex-1 min-w-0 flex items-center gap-2">
                         <h2 id="projectLogsTitle" class="text-sm font-semibold text-white truncate">Project Info</h2>
+                        <button id="projUndoBtn" onclick="projUndo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Undo">
+                            <span class="material-icons-round" style="font-size:18px">undo</span>
+                        </button>
+                        <button id="projRedoBtn" onclick="projRedo()" disabled class="p-1 text-slate-500 hover:text-blue-400 disabled:opacity-30 disabled:cursor-default transition-colors flex-shrink-0" title="Redo">
+                            <span class="material-icons-round" style="font-size:18px">redo</span>
+                        </button>
                     </div>
                 </div>
                 <div class="td-tabs flex items-center px-3 md:px-5 bg-slate-900/50 overflow-x-auto shrink-0">
@@ -3317,7 +3325,7 @@ FEW-SHOT EXAMPLES
             return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
-        function showToast(message, type = 'info') {
+        function showToast(message, type = 'info', duration = 4000) {
             const colors = { info: 'bg-blue-600', warning: 'bg-amber-600', error: 'bg-red-600', success: 'bg-emerald-600' };
             const container = document.getElementById('toastContainer');
             const el = document.createElement('div');
@@ -3328,7 +3336,7 @@ FEW-SHOT EXAMPLES
             setTimeout(() => {
                 el.classList.add('opacity-0', 'translate-y-2');
                 setTimeout(() => el.remove(), 300);
-            }, 4000);
+            }, duration);
         }
 
         // =============================================
@@ -3533,7 +3541,6 @@ FEW-SHOT EXAMPLES
             currentProjectId = null;
             currentProjectName = '';
             currentTaskIndex = null;
-            _taskSnapshot = null;
             tasks = [];
             history = [];
             projectLogs = [];
@@ -4692,14 +4699,11 @@ FEW-SHOT EXAMPLES
             }
         }
 
-        let _taskSnapshot = null; // snapshot for discard
-
         function openTaskDetail(index) {
             currentTaskIndex = index;
             const task = tasks[index];
             ensureTaskRichData(task);
-            // Save snapshot for discard
-            _taskSnapshot = JSON.parse(JSON.stringify(task));
+            clearTaskUndoStacks();
 
             document.getElementById('ganttSection').classList.add('hidden');
             document.getElementById('taskDetailView').classList.remove('hidden');
@@ -4711,7 +4715,7 @@ FEW-SHOT EXAMPLES
 
         function closeTaskDetail() {
             saveProject(); // non-blocking — mutation queue handles failures
-            _taskSnapshot = null;
+            clearTaskUndoStacks();
             const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
             currentTaskIndex = null;
             document.getElementById('ganttSection').classList.remove('hidden');
@@ -4721,29 +4725,129 @@ FEW-SHOT EXAMPLES
             scrollToTask(savedTaskId);
         }
 
-        function saveAndCloseDetail() {
-            _taskSnapshot = null;
-            closeTaskDetail();
-        }
+        // ============ UNDO / REDO ENGINE ============
+        const UNDO_MAX = 20;
+        let _taskUndoStack = [];
+        let _taskRedoStack = [];
+        let _projUndoStack = [];
+        let _projRedoStack = [];
+        let _isUndoRedo = false;
 
-        async function discardAndCloseDetail() {
-            const overlay = document.getElementById('projectLoadingOverlay');
-            overlay.classList.remove('hidden');
+        const _taskTabNames = ['details','meetings','checklist','activitylog','files'];
+        const _projTabNames = ['details','meetings','checklist','activitylog','files','logs'];
 
-            const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
-            if (_taskSnapshot && currentTaskIndex != null) {
-                // Restore the snapshot
-                tasks[currentTaskIndex] = _taskSnapshot;
+        function pushTaskUndo(entry) {
+            _taskUndoStack.push(entry);
+            if (_taskUndoStack.length > UNDO_MAX) {
+                const evicted = _taskUndoStack.shift();
+                if (evicted.onEvict) evicted.onEvict();
             }
-            _taskSnapshot = null;
-            currentTaskIndex = null;
-            document.getElementById('ganttSection').classList.remove('hidden');
-            document.getElementById('taskDetailView').classList.add('hidden');
-            document.getElementById('summaryPanel')?.classList.add('hidden');
-            await saveProject();
-            renderGantt();
-            scrollToTask(savedTaskId);
-            overlay.classList.add('hidden');
+            _taskRedoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _taskRedoStack = [];
+            updateTaskUndoButtons();
+        }
+
+        function pushProjUndo(entry) {
+            _projUndoStack.push(entry);
+            if (_projUndoStack.length > UNDO_MAX) {
+                const evicted = _projUndoStack.shift();
+                if (evicted.onEvict) evicted.onEvict();
+            }
+            _projRedoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _projRedoStack = [];
+            updateProjUndoButtons();
+        }
+
+        function taskUndo() {
+            if (!_taskUndoStack.length) return;
+            const entry = _taskUndoStack.pop();
+            _isUndoRedo = true;
+            try { entry.undoFn(); } finally { _isUndoRedo = false; }
+            _taskRedoStack.push(entry);
+            updateTaskUndoButtons();
+            if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
+            showToast('Undo: ' + entry.description, 'info', 2500);
+        }
+
+        function taskRedo() {
+            if (!_taskRedoStack.length) return;
+            const entry = _taskRedoStack.pop();
+            _isUndoRedo = true;
+            try { entry.redoFn(); } finally { _isUndoRedo = false; }
+            _taskUndoStack.push(entry);
+            updateTaskUndoButtons();
+            if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
+            showToast('Redo: ' + entry.description, 'info', 2500);
+        }
+
+        function projUndo() {
+            if (!_projUndoStack.length) return;
+            const entry = _projUndoStack.pop();
+            _isUndoRedo = true;
+            try { entry.undoFn(); } finally { _isUndoRedo = false; }
+            _projRedoStack.push(entry);
+            updateProjUndoButtons();
+            if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
+            showToast('Undo: ' + entry.description, 'info', 2500);
+        }
+
+        function projRedo() {
+            if (!_projRedoStack.length) return;
+            const entry = _projRedoStack.pop();
+            _isUndoRedo = true;
+            try { entry.redoFn(); } finally { _isUndoRedo = false; }
+            _projUndoStack.push(entry);
+            updateProjUndoButtons();
+            if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
+            showToast('Redo: ' + entry.description, 'info', 2500);
+        }
+
+        function updateTaskUndoButtons() {
+            const undo = document.getElementById('taskUndoBtn');
+            const redo = document.getElementById('taskRedoBtn');
+            if (undo) undo.disabled = !_taskUndoStack.length;
+            if (redo) redo.disabled = !_taskRedoStack.length;
+        }
+
+        function updateProjUndoButtons() {
+            const undo = document.getElementById('projUndoBtn');
+            const redo = document.getElementById('projRedoBtn');
+            if (undo) undo.disabled = !_projUndoStack.length;
+            if (redo) redo.disabled = !_projRedoStack.length;
+        }
+
+        function switchToTabWithFlash(tab, scope) {
+            if (scope === 'task') {
+                switchDetailTab(tab);
+                const idx = _taskTabNames.indexOf(tab);
+                if (idx >= 0) {
+                    const btn = document.querySelectorAll('.td-tab:not(.proj-tab)')[idx];
+                    if (btn) { btn.classList.add('tab-flash'); setTimeout(() => btn.classList.remove('tab-flash'), 800); }
+                }
+            } else {
+                switchProjectTab(tab);
+                const idx = _projTabNames.indexOf(tab);
+                if (idx >= 0) {
+                    const btn = document.querySelectorAll('.proj-tab')[idx];
+                    if (btn) { btn.classList.add('tab-flash'); setTimeout(() => btn.classList.remove('tab-flash'), 800); }
+                }
+            }
+        }
+
+        function clearTaskUndoStacks() {
+            _taskUndoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _taskRedoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _taskUndoStack = [];
+            _taskRedoStack = [];
+            updateTaskUndoButtons();
+        }
+
+        function clearProjUndoStacks() {
+            _projUndoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _projRedoStack.forEach(e => { if (e.onEvict) e.onEvict(); });
+            _projUndoStack = [];
+            _projRedoStack = [];
+            updateProjUndoButtons();
         }
 
         function switchDetailTab(tabName) {
@@ -4841,6 +4945,42 @@ FEW-SHOT EXAMPLES
             }
             autoLockTask(task);
             const oldValue = task[field];
+
+            // Push undo before mutation
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const capturedField = field;
+                const capturedOld = oldValue;
+                const capturedNew = value;
+                const fieldLabels = { name: 'name', assigned: 'assigned', priority: 'priority', start: 'start date', end: 'end date', progress: 'progress', description: 'description' };
+                pushTaskUndo({
+                    tab: 'details',
+                    description: 'Changed ' + (fieldLabels[capturedField] || capturedField),
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        t[capturedField] = capturedOld;
+                        markTaskDirty(t, capturedField);
+                        renderDetailsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        renderMobileCards();
+                        renderGantt();
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        t[capturedField] = capturedNew;
+                        markTaskDirty(t, capturedField);
+                        renderDetailsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        renderMobileCards();
+                        renderGantt();
+                        saveProject();
+                    }
+                });
+            }
+
             task[field] = value;
             const fieldMap = { start: 'start_date', end: 'end_date', name: 'name', progress: 'progress', priority: 'priority', description: 'description' };
             markTaskDirty(task, fieldMap[field] || field);
@@ -4853,33 +4993,35 @@ FEW-SHOT EXAMPLES
             }
 
             // Auto-log changes
-            if (field === 'progress' && oldValue !== value) {
-                addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
-                markTaskDirty(task, 'activity');
-                const action = parseInt(value) === 100 ? 'completed' : 'updated';
-                const cutoff = Date.now() - 120000;
-                const recentLog = projectLogs.slice().reverse().find(l =>
-                    (l.action === 'updated' || l.action === 'completed') && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
-                );
-                if (recentLog) {
-                    const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
-                    recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldValue || 0}% → ${value}%`;
-                    recentLog.action = action;
-                    recentLog.timestamp = new Date().toISOString();
-                } else {
-                    addProjectLog(action, task.id, task.name, null, `Progress: ${oldValue || 0}% → ${value}%`);
+            if (!_isUndoRedo) {
+                if (field === 'progress' && oldValue !== value) {
+                    addActivityEntry(task, 'system', `Progress updated: ${oldValue || 0}% → ${value}%`);
+                    markTaskDirty(task, 'activity');
+                    const action = parseInt(value) === 100 ? 'completed' : 'updated';
+                    const cutoff = Date.now() - 120000;
+                    const recentLog = projectLogs.slice().reverse().find(l =>
+                        (l.action === 'updated' || l.action === 'completed') && l.taskId === task.id && l.detail.startsWith('Progress:') && new Date(l.timestamp).getTime() > cutoff
+                    );
+                    if (recentLog) {
+                        const origFrom = recentLog.detail.match(/Progress: (\d+)%/);
+                        recentLog.detail = `Progress: ${origFrom ? origFrom[1] : oldValue || 0}% → ${value}%`;
+                        recentLog.action = action;
+                        recentLog.timestamp = new Date().toISOString();
+                    } else {
+                        addProjectLog(action, task.id, task.name, null, `Progress: ${oldValue || 0}% → ${value}%`);
+                    }
+                    markMetadataDirty();
+                } else if (field === 'start' || field === 'end') {
+                    addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
+                    markTaskDirty(task, 'activity');
+                    addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
+                    markMetadataDirty();
+                } else if (field === 'priority' && oldValue !== value) {
+                    addActivityEntry(task, 'system', `Priority changed to ${value}`);
+                    markTaskDirty(task, 'activity');
+                    addProjectLog('priority', task.id, task.name, null, `${oldValue} → ${value}`);
+                    markMetadataDirty();
                 }
-                markMetadataDirty();
-            } else if (field === 'start' || field === 'end') {
-                addActivityEntry(task, 'system', `${field === 'start' ? 'Start' : 'End'} date changed to ${value}`);
-                markTaskDirty(task, 'activity');
-                addProjectLog('dates', task.id, task.name, null, `${field}: ${oldValue || 'none'} → ${value}`);
-                markMetadataDirty();
-            } else if (field === 'priority' && oldValue !== value) {
-                addActivityEntry(task, 'system', `Priority changed to ${value}`);
-                markTaskDirty(task, 'activity');
-                addProjectLog('priority', task.id, task.name, null, `${oldValue} → ${value}`);
-                markMetadataDirty();
             }
 
             renderTaskDetailHeader();
@@ -5234,12 +5376,14 @@ FEW-SHOT EXAMPLES
                 _logsSource = 'gantt';
                 document.getElementById('projectLogsTitle').textContent = (currentProjectName || 'Project') + ' Info';
             }
+            clearProjUndoStacks();
             document.getElementById('projectLogsView').classList.remove('hidden');
             switchProjectTab('details');
             pushNavState('projectLogs');
         }
 
         function closeProjectLogs() {
+            clearProjUndoStacks();
             document.getElementById('projectLogsView').classList.add('hidden');
             if (_logsSource === 'dashboard') {
                 currentProjectId = null;
@@ -5465,8 +5609,31 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function saveProjectDescription() {
+            const oldDesc = projectDescription;
             projectDescription = document.getElementById('projDescriptionInput').value;
             document.getElementById('clearProjDescriptionBtn').style.display = projectDescription ? '' : 'none';
+
+            if (!_isUndoRedo) {
+                const capturedOld = oldDesc;
+                const capturedNew = projectDescription;
+                pushProjUndo({
+                    tab: 'details',
+                    description: 'Changed description',
+                    undoFn() {
+                        projectDescription = capturedOld;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectDetailsTab();
+                    },
+                    redoFn() {
+                        projectDescription = capturedNew;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectDetailsTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
         }
@@ -5555,17 +5722,52 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const notes = document.getElementById('projMtgNotes').value.trim();
             if (!title || !date) { alert('Title and date are required.'); return; }
 
+            const isEdit = editingProjectMeetingIndex !== null;
+            const oldMtgCopy = isEdit ? JSON.parse(JSON.stringify(projectMeetings[editingProjectMeetingIndex])) : null;
             const mtgData = {
-                id: editingProjectMeetingIndex !== null ? projectMeetings[editingProjectMeetingIndex].id : Date.now().toString(36),
+                id: isEdit ? projectMeetings[editingProjectMeetingIndex].id : Date.now().toString(36),
                 title, date, attendees, notes
             };
 
-            if (editingProjectMeetingIndex !== null) {
+            if (isEdit) {
                 projectMeetings[editingProjectMeetingIndex] = mtgData;
-                addProjectLog('meeting', null, 'Project', null, 'updated: ' + title);
+                if (!_isUndoRedo) addProjectLog('meeting', null, 'Project', null, 'updated: ' + title);
             } else {
                 projectMeetings.push(mtgData);
-                addProjectLog('meeting', null, 'Project', null, title);
+                if (!_isUndoRedo) addProjectLog('meeting', null, 'Project', null, title);
+            }
+
+            if (!_isUndoRedo) {
+                const mtgCopy = JSON.parse(JSON.stringify(mtgData));
+                const wasEdit = isEdit;
+                const oldCopy = oldMtgCopy;
+                pushProjUndo({
+                    tab: 'meetings',
+                    description: wasEdit ? 'Edited meeting' : 'Added meeting',
+                    undoFn() {
+                        if (wasEdit) {
+                            const mi = projectMeetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) projectMeetings[mi] = JSON.parse(JSON.stringify(oldCopy));
+                        } else {
+                            const mi = projectMeetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) projectMeetings.splice(mi, 1);
+                        }
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectMeetingsTab();
+                    },
+                    redoFn() {
+                        if (wasEdit) {
+                            const mi = projectMeetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) projectMeetings[mi] = JSON.parse(JSON.stringify(mtgCopy));
+                        } else {
+                            projectMeetings.push(JSON.parse(JSON.stringify(mtgCopy)));
+                        }
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectMeetingsTab();
+                    }
+                });
             }
 
             editingProjectMeetingIndex = null;
@@ -5580,8 +5782,31 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         function deleteProjectMeeting(index) {
             if (!confirm('Delete this meeting?')) return;
+            const mtgCopy = JSON.parse(JSON.stringify(projectMeetings[index]));
+            const capturedIdx = index;
             const removed = projectMeetings.splice(index, 1);
-            addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
+
+            if (!_isUndoRedo) {
+                addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
+                pushProjUndo({
+                    tab: 'meetings',
+                    description: 'Deleted meeting',
+                    undoFn() {
+                        projectMeetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectMeetingsTab();
+                    },
+                    redoFn() {
+                        const ri = projectMeetings.findIndex(m => m.id === mtgCopy.id);
+                        if (ri > -1) projectMeetings.splice(ri, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectMeetingsTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectMeetingsTab();
@@ -5630,13 +5855,36 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const input = document.getElementById('projChecklistInput');
             const val = input.value.trim();
             if (!val) return;
-            projectChecklist.push({
+            const newItem = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                 text: val,
                 checked: false,
                 timestamp: new Date().toISOString()
-            });
+            };
+            projectChecklist.push(newItem);
             input.value = '';
+
+            if (!_isUndoRedo) {
+                const itemCopy = JSON.parse(JSON.stringify(newItem));
+                pushProjUndo({
+                    tab: 'checklist',
+                    description: 'Added checklist item',
+                    undoFn() {
+                        const idx = projectChecklist.findIndex(c => c.id === itemCopy.id);
+                        if (idx > -1) projectChecklist.splice(idx, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    },
+                    redoFn() {
+                        projectChecklist.push(JSON.parse(JSON.stringify(itemCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
@@ -5645,8 +5893,33 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function toggleProjectChecklistItem(id) {
             const item = (projectChecklist || []).find(c => c.id === id);
             if (!item) return;
+            const oldChecked = item.checked;
             item.checked = !item.checked;
-            addProjectLog(item.checked ? 'checked' : 'unchecked', null, 'Project', null, (item.checked ? '✓ ' : '☐ ') + item.text);
+
+            if (!_isUndoRedo) {
+                const capturedId = id;
+                const capturedOld = oldChecked;
+                pushProjUndo({
+                    tab: 'checklist',
+                    description: item.checked ? 'Checked item' : 'Unchecked item',
+                    undoFn() {
+                        const it = (projectChecklist || []).find(c => c.id === capturedId);
+                        if (it) it.checked = capturedOld;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    },
+                    redoFn() {
+                        const it = (projectChecklist || []).find(c => c.id === capturedId);
+                        if (it) it.checked = !capturedOld;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    }
+                });
+                addProjectLog(item.checked ? 'checked' : 'unchecked', null, 'Project', null, (item.checked ? '✓ ' : '☐ ') + item.text);
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
@@ -5665,7 +5938,33 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!item) return;
             const newVal = document.getElementById('projCl-edit-' + id).querySelector('input').value.trim();
             if (!newVal) return;
+            const oldText = item.text;
             item.text = newVal;
+
+            if (!_isUndoRedo) {
+                const capturedId = id;
+                const capturedOld = oldText;
+                const capturedNew = newVal;
+                pushProjUndo({
+                    tab: 'checklist',
+                    description: 'Edited checklist item',
+                    undoFn() {
+                        const it = (projectChecklist || []).find(c => c.id === capturedId);
+                        if (it) it.text = capturedOld;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    },
+                    redoFn() {
+                        const it = (projectChecklist || []).find(c => c.id === capturedId);
+                        if (it) it.text = capturedNew;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
@@ -5680,7 +5979,30 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const idx = (projectChecklist || []).findIndex(c => c.id === id);
             if (idx === -1) return;
             if (!confirm('Delete this checklist item?')) return;
+            const itemCopy = JSON.parse(JSON.stringify(projectChecklist[idx]));
+            const capturedIdx = idx;
             projectChecklist.splice(idx, 1);
+
+            if (!_isUndoRedo) {
+                pushProjUndo({
+                    tab: 'checklist',
+                    description: 'Deleted checklist item',
+                    undoFn() {
+                        projectChecklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    },
+                    redoFn() {
+                        const ri = projectChecklist.findIndex(c => c.id === itemCopy.id);
+                        if (ri > -1) projectChecklist.splice(ri, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectChecklistTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectChecklistTab();
@@ -5736,13 +6058,36 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const input = document.getElementById('projCommentInput');
             const val = input.value.trim();
             if (!val) return;
-            projectActivity.push({
+            const newEntry = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                 type: 'comment',
                 message: val,
                 timestamp: new Date().toISOString()
-            });
+            };
+            projectActivity.push(newEntry);
             input.value = '';
+
+            if (!_isUndoRedo) {
+                const entryCopy = JSON.parse(JSON.stringify(newEntry));
+                pushProjUndo({
+                    tab: 'activitylog',
+                    description: 'Added comment',
+                    undoFn() {
+                        const idx = projectActivity.findIndex(a => a.id === entryCopy.id);
+                        if (idx > -1) projectActivity.splice(idx, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    },
+                    redoFn() {
+                        projectActivity.push(JSON.parse(JSON.stringify(entryCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
@@ -5766,7 +6111,33 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!entry) return;
             const newVal = document.getElementById('projActivity-edit-' + id).querySelector('textarea').value.trim();
             if (!newVal) return;
+            const oldMsg = entry.message;
             entry.message = newVal;
+
+            if (!_isUndoRedo) {
+                const capturedId = id;
+                const capturedOld = oldMsg;
+                const capturedNew = newVal;
+                pushProjUndo({
+                    tab: 'activitylog',
+                    description: 'Edited comment',
+                    undoFn() {
+                        const e = projectActivity.find(a => a.id === capturedId);
+                        if (e) e.message = capturedOld;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    },
+                    redoFn() {
+                        const e = projectActivity.find(a => a.id === capturedId);
+                        if (e) e.message = capturedNew;
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
@@ -5776,7 +6147,30 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const idx = projectActivity.findIndex(a => a.id === id);
             if (idx === -1) return;
             if (!confirm('Delete this activity entry?')) return;
+            const entryCopy = JSON.parse(JSON.stringify(projectActivity[idx]));
+            const capturedIdx = idx;
             projectActivity.splice(idx, 1);
+
+            if (!_isUndoRedo) {
+                pushProjUndo({
+                    tab: 'activitylog',
+                    description: 'Deleted comment',
+                    undoFn() {
+                        projectActivity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    },
+                    redoFn() {
+                        const ri = projectActivity.findIndex(a => a.id === entryCopy.id);
+                        if (ri > -1) projectActivity.splice(ri, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectActivityTab();
+                    }
+                });
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectActivityTab();
@@ -5890,9 +6284,35 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function deleteProjectFile(index) {
             const file = projectFiles[index];
             if (!file || !confirm(`Delete "${file.name}"?`)) return;
-            const removed = projectFiles.splice(index, 1);
-            deleteFileData(removed[0]);
-            addProjectLog('removed', null, 'Project', null, removed[0].name);
+            const fileCopy = JSON.parse(JSON.stringify(file));
+            const capturedIdx = index;
+            projectFiles.splice(index, 1);
+            // Do NOT deleteFileData yet — defer via onEvict
+
+            if (!_isUndoRedo) {
+                addProjectLog('removed', null, 'Project', null, fileCopy.name);
+                pushProjUndo({
+                    tab: 'files',
+                    description: 'Deleted file',
+                    onEvict() { deleteFileData(fileCopy); },
+                    undoFn() {
+                        projectFiles.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectFilesTab();
+                    },
+                    redoFn() {
+                        const ri = projectFiles.findIndex(f => f.id === fileCopy.id);
+                        if (ri > -1) projectFiles.splice(ri, 1);
+                        markMetadataDirty();
+                        saveProjectFromHub();
+                        renderProjectFilesTab();
+                    }
+                });
+            } else {
+                deleteFileData(fileCopy);
+            }
+
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectFilesTab();
@@ -5977,8 +6397,36 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             autoLockTask(task);
             addActivityEntry(task, 'comment', val);
+            const addedEntry = task.activity[task.activity.length - 1];
             markTaskDirty(task, 'activity');
             input.value = '';
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const entryCopy = JSON.parse(JSON.stringify(addedEntry));
+                pushTaskUndo({
+                    tab: 'activitylog',
+                    description: 'Added comment',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        const idx = t.activity.findIndex(a => a.id === entryCopy.id);
+                        if (idx > -1) t.activity.splice(idx, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        t.activity.push(JSON.parse(JSON.stringify(entryCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    }
+                });
+            }
+
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
             saveProject();
@@ -6003,8 +6451,39 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!entry) return;
             const newVal = document.getElementById('activity-edit-' + id).querySelector('textarea').value.trim();
             if (!newVal) return;
+            const oldMsg = entry.message;
             autoLockTask(task);
             entry.message = newVal;
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const capturedId = id;
+                const capturedOld = oldMsg;
+                const capturedNew = newVal;
+                pushTaskUndo({
+                    tab: 'activitylog',
+                    description: 'Edited comment',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        const e = t.activity.find(a => a.id === capturedId);
+                        if (e) e.message = capturedOld;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const e = t.activity.find(a => a.id === capturedId);
+                        if (e) e.message = capturedNew;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'activity');
             renderActivityTab(task);
             saveProject();
@@ -6015,8 +6494,36 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const idx = task.activity.findIndex(a => a.id === id);
             if (idx === -1) return;
             if (!confirm('Delete this activity entry?')) return;
+            const entryCopy = JSON.parse(JSON.stringify(task.activity[idx]));
+            const capturedIdx = idx;
             autoLockTask(task);
             task.activity.splice(idx, 1);
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                pushTaskUndo({
+                    tab: 'activitylog',
+                    description: 'Deleted comment',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        t.activity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const ri = t.activity.findIndex(a => a.id === entryCopy.id);
+                        if (ri > -1) t.activity.splice(ri, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'activity');
+                        renderActivityTab(t);
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'activity');
             renderActivityTab(task);
             updateRowIndicators(currentTaskIndex);
@@ -6067,13 +6574,44 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             autoLockTask(task);
             if (!task.checklist) task.checklist = [];
-            task.checklist.push({
+            const newItem = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                 text: val,
                 checked: false,
                 timestamp: new Date().toISOString()
-            });
+            };
+            task.checklist.push(newItem);
             input.value = '';
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const itemCopy = JSON.parse(JSON.stringify(newItem));
+                pushTaskUndo({
+                    tab: 'checklist',
+                    description: 'Added checklist item',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        const idx = (t.checklist || []).findIndex(c => c.id === itemCopy.id);
+                        if (idx > -1) t.checklist.splice(idx, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        if (!t.checklist) t.checklist = [];
+                        t.checklist.push(JSON.parse(JSON.stringify(itemCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
@@ -6084,11 +6622,43 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const item = (task.checklist || []).find(c => c.id === id);
             if (!item) return;
+            const oldChecked = item.checked;
             autoLockTask(task);
             item.checked = !item.checked;
             markTaskDirty(task, 'checklist');
-            addProjectLog(item.checked ? 'checked' : 'unchecked', task.id, task.name, 'checklist', (item.checked ? '✓ ' : '☐ ') + item.text);
-            markMetadataDirty();
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const capturedId = id;
+                const capturedOld = oldChecked;
+                pushTaskUndo({
+                    tab: 'checklist',
+                    description: item.checked ? 'Checked item' : 'Unchecked item',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        const it = (t.checklist || []).find(c => c.id === capturedId);
+                        if (it) it.checked = capturedOld;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const it = (t.checklist || []).find(c => c.id === capturedId);
+                        if (it) it.checked = !capturedOld;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    }
+                });
+                addProjectLog(item.checked ? 'checked' : 'unchecked', task.id, task.name, 'checklist', (item.checked ? '✓ ' : '☐ ') + item.text);
+                markMetadataDirty();
+            }
+
             renderChecklistTab(task);
             renderTaskDetailHeader();
             saveProject();
@@ -6108,8 +6678,41 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!item) return;
             const newVal = document.getElementById('cl-edit-' + id).querySelector('input').value.trim();
             if (!newVal) return;
+            const oldText = item.text;
             autoLockTask(task);
             item.text = newVal;
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const capturedId = id;
+                const capturedOld = oldText;
+                const capturedNew = newVal;
+                pushTaskUndo({
+                    tab: 'checklist',
+                    description: 'Edited checklist item',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        const it = (t.checklist || []).find(c => c.id === capturedId);
+                        if (it) it.text = capturedOld;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const it = (t.checklist || []).find(c => c.id === capturedId);
+                        if (it) it.text = capturedNew;
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
@@ -6126,8 +6729,39 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const idx = (task.checklist || []).findIndex(c => c.id === id);
             if (idx === -1) return;
             if (!confirm('Delete this checklist item?')) return;
+            const itemCopy = JSON.parse(JSON.stringify(task.checklist[idx]));
+            const capturedIdx = idx;
             autoLockTask(task);
             task.checklist.splice(idx, 1);
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                pushTaskUndo({
+                    tab: 'checklist',
+                    description: 'Deleted checklist item',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        if (!t.checklist) t.checklist = [];
+                        t.checklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const ri = (t.checklist || []).findIndex(c => c.id === itemCopy.id);
+                        if (ri > -1) t.checklist.splice(ri, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'checklist');
+                        renderChecklistTab(t);
+                        renderTaskDetailHeader();
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'checklist');
             renderChecklistTab(task);
             renderTaskDetailHeader();
@@ -6255,6 +6889,23 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (e.key === 'Escape' && !document.getElementById('filePreviewOverlay').classList.contains('hidden')) {
                 closeFilePreview();
             }
+            // Undo/Redo keyboard shortcuts
+            const tag = (document.activeElement || {}).tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            const isCtrl = e.ctrlKey || e.metaKey;
+            if (isCtrl && e.key === 'z') {
+                e.preventDefault();
+                const taskOpen = !document.getElementById('taskDetailView').classList.contains('hidden');
+                const projOpen = !document.getElementById('projectLogsView').classList.contains('hidden');
+                if (taskOpen) taskUndo();
+                else if (projOpen) projUndo();
+            } else if (isCtrl && e.key === 'y') {
+                e.preventDefault();
+                const taskOpen = !document.getElementById('taskDetailView').classList.contains('hidden');
+                const projOpen = !document.getElementById('projectLogsView').classList.contains('hidden');
+                if (taskOpen) taskRedo();
+                else if (projOpen) projRedo();
+            }
         });
 
         async function previewFile(index) {
@@ -6284,11 +6935,46 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
             if (!file || !confirm(`Delete "${file.name}"?`)) return;
+            const fileCopy = JSON.parse(JSON.stringify(file));
+            const capturedIdx = index;
             autoLockTask(task);
-            const removed = task.files.splice(index, 1);
-            deleteFileData(removed[0]);
-            addActivityEntry(task, 'system', `File removed: "${removed[0].name}"`);
-            addProjectLog('removed', task.id, task.name, 'files', removed[0].name);
+            task.files.splice(index, 1);
+            // Do NOT deleteFileData yet — defer via onEvict
+
+            if (!_isUndoRedo) {
+                addActivityEntry(task, 'system', `File removed: "${fileCopy.name}"`);
+                addProjectLog('removed', task.id, task.name, 'files', fileCopy.name);
+                const capturedIndex = currentTaskIndex;
+                pushTaskUndo({
+                    tab: 'files',
+                    description: 'Deleted file',
+                    onEvict() { deleteFileData(fileCopy); },
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        t.files.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'files');
+                        renderFilesTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const ri = t.files.findIndex(f => f.id === fileCopy.id);
+                        if (ri > -1) t.files.splice(ri, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'files');
+                        renderFilesTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    }
+                });
+            } else {
+                deleteFileData(fileCopy);
+            }
+
             markTaskDirty(task, 'files');
             markTaskDirty(task, 'activity');
             markMetadataDirty();
@@ -6418,21 +7104,69 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!title || !date) { alert('Title and date are required.'); return; }
 
             const task = tasks[currentTaskIndex];
+            const isEdit = editingMeetingIndex !== null;
+            const oldMtgCopy = isEdit ? JSON.parse(JSON.stringify(task.meetings[editingMeetingIndex])) : null;
             const mtgData = {
-                id: editingMeetingIndex !== null ? task.meetings[editingMeetingIndex].id : Date.now().toString(36),
+                id: isEdit ? task.meetings[editingMeetingIndex].id : Date.now().toString(36),
                 title, date, attendees, notes
             };
             const savedMeetingId = mtgData.id;
 
             autoLockTask(task);
-            if (editingMeetingIndex !== null) {
+            if (isEdit) {
                 task.meetings[editingMeetingIndex] = mtgData;
-                addActivityEntry(task, 'system', `Meeting updated: "${title}"`);
-                addProjectLog('meeting', task.id, task.name, 'meetings', 'updated: ' + title);
+                if (!_isUndoRedo) {
+                    addActivityEntry(task, 'system', `Meeting updated: "${title}"`);
+                    addProjectLog('meeting', task.id, task.name, 'meetings', 'updated: ' + title);
+                }
             } else {
                 task.meetings.push(mtgData);
-                addActivityEntry(task, 'system', `Meeting logged: "${title}"`);
-                addProjectLog('meeting', task.id, task.name, 'meetings', title);
+                if (!_isUndoRedo) {
+                    addActivityEntry(task, 'system', `Meeting logged: "${title}"`);
+                    addProjectLog('meeting', task.id, task.name, 'meetings', title);
+                }
+            }
+
+            if (!_isUndoRedo) {
+                const capturedIndex = currentTaskIndex;
+                const mtgCopy = JSON.parse(JSON.stringify(mtgData));
+                const wasEdit = isEdit;
+                const oldCopy = oldMtgCopy;
+                pushTaskUndo({
+                    tab: 'meetings',
+                    description: wasEdit ? 'Edited meeting' : 'Added meeting',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        if (wasEdit) {
+                            const mi = t.meetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) t.meetings[mi] = JSON.parse(JSON.stringify(oldCopy));
+                        } else {
+                            const mi = t.meetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) t.meetings.splice(mi, 1);
+                        }
+                        autoLockTask(t);
+                        markTaskDirty(t, 'meetings');
+                        renderMeetingsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        if (wasEdit) {
+                            const mi = t.meetings.findIndex(m => m.id === mtgCopy.id);
+                            if (mi > -1) t.meetings[mi] = JSON.parse(JSON.stringify(mtgCopy));
+                        } else {
+                            t.meetings.push(JSON.parse(JSON.stringify(mtgCopy)));
+                        }
+                        autoLockTask(t);
+                        markTaskDirty(t, 'meetings');
+                        renderMeetingsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    }
+                });
             }
 
             editingMeetingIndex = null;
@@ -6452,10 +7186,42 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function deleteMeeting(index) {
             const task = tasks[currentTaskIndex];
             if (!confirm('Delete this meeting?')) return;
+            const mtgCopy = JSON.parse(JSON.stringify(task.meetings[index]));
+            const capturedIdx = index;
             autoLockTask(task);
             const removed = task.meetings.splice(index, 1);
-            addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
-            addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
+
+            if (!_isUndoRedo) {
+                addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
+                addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
+                const capturedIndex = currentTaskIndex;
+                pushTaskUndo({
+                    tab: 'meetings',
+                    description: 'Deleted meeting',
+                    undoFn() {
+                        const t = tasks[capturedIndex];
+                        t.meetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
+                        autoLockTask(t);
+                        markTaskDirty(t, 'meetings');
+                        renderMeetingsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    },
+                    redoFn() {
+                        const t = tasks[capturedIndex];
+                        const ri = t.meetings.findIndex(m => m.id === mtgCopy.id);
+                        if (ri > -1) t.meetings.splice(ri, 1);
+                        autoLockTask(t);
+                        markTaskDirty(t, 'meetings');
+                        renderMeetingsTab(t);
+                        renderTaskDetailHeader();
+                        updateRowIndicators(capturedIndex);
+                        saveProject();
+                    }
+                });
+            }
+
             markTaskDirty(task, 'meetings');
             markTaskDirty(task, 'activity');
             markMetadataDirty();
