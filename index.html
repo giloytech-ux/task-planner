@@ -6401,13 +6401,11 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 meetings: (task.meetings || []).map(m => ({ title: m.title, date: m.date, notes: m.notes, attendees: m.attendees })),
                 activity: (task.activity || []).filter(a => a.type === 'comment').map(a => ({ message: a.message })),
                 checklist: (task.checklist || []).map(c => ({ text: c.text, checked: c.checked })),
+                files: (task.files || []).map(f => ({ name: f.name, id: f.id })),
                 progress: parseInt(task.progress) || 0,
                 name: task.name,
                 start: task.start,
-                end: task.end,
-                projMeetings: projectMeetings.length,
-                projActivity: projectActivity.filter(a => a.type === 'comment').length,
-                projChecklist: projectChecklist.map(c => ({ text: c.text, checked: c.checked }))
+                end: task.end
             };
             const str = JSON.stringify(data);
             let hash = 0;
@@ -6423,67 +6421,140 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const hasDescription = !!(task.description || '').trim();
             const hasMeetings = (task.meetings || []).length > 0;
             const hasActivityLog = (task.activity || []).some(a => a.type === 'comment');
-            return hasDescription || hasMeetings || hasActivityLog;
+            const hasChecklist = (task.checklist || []).length > 0;
+            const hasFiles = (task.files || []).length > 0;
+            return hasDescription || hasMeetings || hasActivityLog || hasChecklist || hasFiles;
         }
 
         function buildSummaryContext(task) {
             const status = getTaskStatus(task);
             const pct = parseInt(task.progress) || 0;
+            const today = new Date().toISOString().split('T')[0];
 
-            let description = `Task: "${task.name}" | Assigned: ${(task.assigned || '').trim() || 'Unassigned'} | Status: ${status.label} (${pct}% complete) | Dates: ${task.start} to ${task.end}`;
-            if ((task.description || '').trim()) {
-                description += `\n${task.description}`;
+            // Section 1: TASK_METADATA
+            let meta = `=== TASK_METADATA ===\n`;
+            meta += `Name: ${task.name}\n`;
+            meta += `Description: ${(task.description || '').trim() || '(none)'}\n`;
+            meta += `Due Date: ${task.end || '(none)'}\n`;
+            meta += `Assignee: ${(task.assigned || '').trim() || 'Unassigned'}\n`;
+            meta += `Status: ${status.label}\n`;
+            meta += `Progress: ${pct}%\n`;
+            meta += `Today: ${today}`;
+
+            // Section 2: PROGRESS
+            const checklist = task.checklist || [];
+            const done = checklist.filter(c => c.checked).length;
+            const total = checklist.length;
+            let progress = `=== PROGRESS ===\n`;
+            progress += `Progress Bar: ${pct}%\n`;
+            progress += `Checklist: ${done}/${total} complete\n`;
+            if (total > 0) {
+                progress += checklist.map(c => `- [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n');
+            } else {
+                progress += '(no checklist items)';
             }
 
-            let meetingsText = '(none)';
-            if ((task.meetings || []).length > 0) {
-                meetingsText = task.meetings.map(m => {
-                    let line = `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
-                    if (m.notes) line += `\n  Notes: ${m.notes}`;
-                    return line;
-                }).join('\n');
-            }
-
-            let activitiesText = '(none)';
+            // Section 3: ACTIVITY_LOGS (User Comments Only)
             const logEntries = (task.activity || []).filter(a => a.type === 'comment');
+            let activity = `=== ACTIVITY_LOGS ===\n`;
             if (logEntries.length > 0) {
-                activitiesText = logEntries.map(a => {
+                activity += logEntries.map(a => {
                     const d = new Date(a.timestamp).toLocaleDateString();
-                    return `- [${d}] ${a.message}`;
+                    return `[${d}] ${a.message}`;
                 }).join('\n');
+            } else {
+                activity += '(none)';
             }
 
-            // Task checklist
-            let checklistText = '(none)';
-            if ((task.checklist || []).length > 0) {
-                checklistText = task.checklist.map(c => `- [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n');
-            }
-
-            // Project-level context
-            let projMeetingsText = '(none)';
-            if (projectMeetings.length > 0) {
-                projMeetingsText = projectMeetings.map(m => {
-                    let line = `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
-                    if (m.notes) line += `\n  Notes: ${m.notes}`;
+            // Section 4: MEETING_NOTES
+            const meetings = task.meetings || [];
+            let meetingsText = `=== MEETING_NOTES ===\n`;
+            if (meetings.length > 0) {
+                meetingsText += meetings.map(m => {
+                    let line = `[${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
+                    if (m.notes) line += `\nNotes: ${m.notes}`;
                     return line;
                 }).join('\n');
+            } else {
+                meetingsText += '(none)';
             }
 
-            let projActivityText = '(none)';
-            const projLogEntries = projectActivity.filter(a => a.type === 'comment');
-            if (projLogEntries.length > 0) {
-                projActivityText = projLogEntries.map(a => {
-                    const d = new Date(a.timestamp).toLocaleDateString();
-                    return `- [${d}] ${a.message}`;
+            // Section 5: FILES
+            const files = task.files || [];
+            let filesText = `=== FILES ===\n`;
+            if (files.length > 0) {
+                filesText += files.map(f => {
+                    const ts = f.timestamp ? new Date(f.timestamp).toLocaleDateString() : 'unknown';
+                    return `- ${f.name} (type: ${f.type || 'unknown'}, added: ${ts})`;
                 }).join('\n');
+            } else {
+                filesText += '(none)';
             }
 
-            let projChecklistText = '(none)';
-            if (projectChecklist.length > 0) {
-                projChecklistText = projectChecklist.map(c => `- [${c.checked ? 'x' : ' '}] ${c.text}`).join('\n');
-            }
+            return `${meta}\n\n${progress}\n\n${activity}\n\n${meetingsText}\n\n${filesText}`;
+        }
 
-            return `--- CONTEXT START ---\n${description}\nTask Meetings:\n${meetingsText}\nTask Activities:\n${activitiesText}\nTask Checklist:\n${checklistText}\n\nProject-Level Meetings:\n${projMeetingsText}\nProject-Level Activities:\n${projActivityText}\nProject-Level Checklist:\n${projChecklistText}\n--- CONTEXT END ---`;
+        function getTaskSummaryPrompt() {
+            return `**ROLE**
+You are a **Task Execution Assistant**.
+Your scope is strictly limited to **ONE SINGLE TASK**. You do not look at project-level timelines or other tasks.
+Your goal is to help the user **"Context Switch"** instantly into this specific unit of work and audit its status.
+
+**INPUT DATA (SINGLE TASK CONTEXT)**
+- **Meta:** Name, Description, Due Date, Priority, Assignee, Status (Todo/In Progress/Done).
+- **Progress:** % Complete (User Slider) vs. Checklist Items (User Boolean).
+- **The Narrative:** Activity Logs (User Comments/Updates ONLY).
+- **Meetings:** Notes linked specifically to this task.
+- **Evidence:** Attached Files (Names & Dates).
+
+==================================================
+🧠 MICRO-ANALYSIS LOGIC
+==================================================
+
+1.  **Narrative Synthesis:**
+    - Read the last 5 Activity Logs and Meeting Notes.
+    - Summarize the *current conversation* in 1 sentence. (e.g., "Discussion is currently centered on fixing the mobile responsive bug.")
+
+2.  **The "Reality Gap" (Progress vs. Evidence):**
+    - Compare **Status/Progress Bar** against **Checklist Completion**.
+    - If Status is "Done" but Checklist is incomplete -> Flag as **"Premature Completion"**.
+    - If Status is "In Progress" but Checklist is 0/10 -> Flag as **"Slow Start"**.
+
+3.  **Staleness Detector:**
+    - Check the date of the last Activity Log or File Upload.
+    - If Status is "In Progress" but no activity in >5 days -> Flag as **"Stalled"**.
+
+==================================================
+OUTPUT STRUCTURE (TACTICAL VIEW)
+==================================================
+
+### 1. ⚡ Status & Integrity Check
+*Immediate validation of the task state.*
+- **Current State:** [Active | Stalled | Review Needed]
+- **Integrity Alert:** (Only show if a gap is found) "⚠️ **Gap Detected:** Task is marked 90% complete, but only 2/10 checklist items are checked."
+- **Time Check:** "Last active [X] days ago." (Based on latest log/file).
+
+### 2. 🗣️ The Story So Far (Context)
+*Synthesize the logs and meeting notes into a brief status update.*
+- "Latest Update: [User Name] noted on [Date] that [Key Point from log]."
+- "Blockers: [Mention any 'blocked' or 'waiting' keywords found in logs]."
+
+### 3. 📋 Remaining Work
+*Focus on what is LEFT to do.*
+- **Unchecked Items:** List the next 2 unchecked checklist items.
+- **Missing Assets:** (e.g., "No files attached yet" - only if description implies files are needed).
+
+### 4. ⏭️ Suggested Action
+*What should the user do right now?*
+- "Follow up with [Assignee] regarding the comment from [Date]."
+- OR "Complete the checklist item '[Item Name]'."
+
+==================================================
+🚫 CONSTRAINTS
+==================================================
+- **ISOLATION:** Do NOT mention project goals, other tasks, or system-wide stats.
+- **SOURCE OF TRUTH:** Trust the **Checklist** over the Progress Bar.
+- **NO NOISE:** If there are no logs/files, state "No activity recorded yet." Do not hallucinate.`;
         }
 
         function toggleSummaryPanel() {
@@ -6601,22 +6672,12 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (mStatus) mStatus.textContent = '';
 
             const context = buildSummaryContext(task);
-            const summaryPrompt = `You are an expert project management assistant. Your task is to analyze the provided context for a subtask and generate a concise, structured summary that is useful for both the CEO and the Project Manager.
-
-Analyze the following data:
-${context}
-
-Based on the context provided, perform the following actions:
-1. **High-Level Summary:** Provide a brief overview of the subtask's purpose, current status, and its relevance to the overall project goals from a strategic perspective suitable for a CEO.
-2. **Key Decisions:** Highlight any critical decisions made during the meetings that impact project direction or resource allocation. Specify why these decisions are significant.
-3. **Pending Items:** List all key action items, questions, or activities that remain outstanding, indicating their importance to the project's success.
-4. **Operational Insights:** Provide relevant details that would help the Project Manager effectively track progress and manage resources, including any immediate next steps required.
-
-Ensure the output is clear, concise, and structured in a way that addresses the interests of both the CEO and the Project Manager.`;
+            const systemPrompt = getTaskSummaryPrompt();
 
             try {
                 const data = await callGemini({
-                    contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
+                    system_instruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: context }] }],
                     generationConfig: { maxOutputTokens: 2048 }
                 });
                 const parts = data.candidates[0].content.parts;
@@ -6681,22 +6742,12 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             document.getElementById('summaryStatus').textContent = '';
 
             const context = buildSummaryContext(task);
-            const summaryPrompt = `You are an expert project management assistant. Your task is to analyze the provided context for a subtask and generate a concise, structured summary that is useful for both the CEO and the Project Manager.
-
-Analyze the following data:
-${context}
-
-Based on the context provided, perform the following actions:
-1. **High-Level Summary:** Provide a brief overview of the subtask's purpose, current status, and its relevance to the overall project goals from a strategic perspective suitable for a CEO.
-2. **Key Decisions:** Highlight any critical decisions made during the meetings that impact project direction or resource allocation. Specify why these decisions are significant.
-3. **Pending Items:** List all key action items, questions, or activities that remain outstanding, indicating their importance to the project's success.
-4. **Operational Insights:** Provide relevant details that would help the Project Manager effectively track progress and manage resources, including any immediate next steps required.
-
-Ensure the output is clear, concise, and structured in a way that addresses the interests of both the CEO and the Project Manager.`;
+            const systemPrompt = getTaskSummaryPrompt();
 
             try {
                 const data = await callGemini({
-                    contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
+                    system_instruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: context }] }],
                     generationConfig: { maxOutputTokens: 2048 }
                 });
 
