@@ -6785,6 +6785,7 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             const pd = projData || {};
             const today = new Date();
             today.setHours(0, 0, 0, 0);
+            const todayStr = today.toISOString().split('T')[0];
 
             const total = tl.length;
             const completed = tl.filter(t => (parseInt(t.progress) || 0) >= 100).length;
@@ -6792,100 +6793,157 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             const attention = tl.filter(t => getTaskStatus(t).label === 'Attention').length;
             const overdueSoon = tl.filter(t => getTaskStatus(t).label === 'Overdue Soon').length;
 
-            let context = `--- PROJECT CONTEXT ---\n`;
+            // === SECTION 1: PROJECT_METADATA ===
+            let context = `=== PROJECT_METADATA ===\n`;
             context += `Project: ${pn}\n`;
-            context += `Date: ${today.toISOString().split('T')[0]}\n`;
-            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n`;
+            context += `Today's Date: ${todayStr}\n`;
             const desc = (pd.description || '').trim();
-            if (desc) {
-                context += `Description: ${desc.slice(0, 500)}\n`;
-            }
-            context += `\n`;
+            if (desc) context += `Description: ${desc.slice(0, 500)}\n`;
+            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
 
-            // Project-level meetings
-            const pMeetings = pd.meetings || [];
-            if (pMeetings.length > 0) {
-                context += `--- PROJECT MEETINGS ---\n`;
-                pMeetings.forEach(m => {
-                    context += `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}`;
-                    if (m.notes) context += `\n  Notes: ${m.notes.slice(0, 300)}`;
-                    context += `\n`;
-                });
-                context += `\n`;
-            }
+            context += `Task Summary Table:\n`;
+            tl.forEach((t, i) => {
+                const status = getTaskStatus(t);
+                const pct = parseInt(t.progress) || 0;
+                const clItems = t.checklist || [];
+                const clDone = clItems.filter(c => c.checked).length;
+                context += `[${i + 1}] "${t.name}"\n`;
+                context += `    Assigned: ${(t.assigned || '').trim() || 'Unassigned'} | Status: ${status.label} | Progress: ${pct}% | ${t.start || 'No start'} to ${t.end || 'No end'}\n`;
+                if (t.dependencies) context += `    Dependencies: Task ${t.dependencies}\n`;
+                if ((t.description || '').trim()) context += `    Description: ${t.description.trim().slice(0, 300)}\n`;
+                if (clItems.length > 0) context += `    Checklist: ${clDone}/${clItems.length} done\n`;
+            });
 
-            // Project-level activity log
+            // === SECTION 2: USER_ACTIVITY_LOGS (Source of Truth) ===
+            context += `\n=== USER_ACTIVITY_LOGS [Source of Truth] ===\n`;
+            context += `These are manually written entries by the user. Treat as high-reliability data.\n\n`;
+
             const pActivity = (pd.activity || []).filter(a => a.type === 'comment');
             if (pActivity.length > 0) {
-                context += `--- PROJECT ACTIVITY LOG ---\n`;
+                context += `-- Project-Level Activity --\n`;
                 pActivity.forEach(a => {
                     const d = new Date(a.timestamp).toLocaleDateString();
-                    context += `- [${d}] ${a.message.slice(0, 200)}\n`;
+                    context += `- [${d}] ${a.message.slice(0, 300)}\n`;
                 });
                 context += `\n`;
             }
 
-            // Project-level checklist
+            let hasTaskActivity = false;
+            tl.forEach(t => {
+                const entries = (t.activity || []).filter(a => a.type === 'comment');
+                if (entries.length > 0) {
+                    if (!hasTaskActivity) { context += `-- Per-Task Activity --\n`; hasTaskActivity = true; }
+                    context += `Task: "${t.name}"\n`;
+                    entries.forEach(a => {
+                        const d = new Date(a.timestamp).toLocaleDateString();
+                        context += `  - [${d}] ${a.message.slice(0, 300)}\n`;
+                    });
+                }
+            });
+            if (!pActivity.length && !hasTaskActivity) context += `(No user activity logs recorded)\n`;
+
+            // === SECTION 3: CHECKLIST_STATES (Source of Truth) ===
+            context += `\n=== CHECKLIST_STATES [Source of Truth] ===\n`;
+            context += `Compare checklist completion against progress % for integrity checks.\n\n`;
+
             const pChecklist = pd.checklist || [];
             if (pChecklist.length > 0) {
                 const done = pChecklist.filter(c => c.checked).length;
-                context += `--- PROJECT CHECKLIST (${done}/${pChecklist.length} done) ---\n`;
+                context += `-- Project-Level Checklist (${done}/${pChecklist.length} done) --\n`;
                 pChecklist.forEach(c => { context += `- [${c.checked ? 'x' : ' '}] ${c.text}\n`; });
                 context += `\n`;
             }
 
-            context += `--- TASKS ---\n`;
-            tl.forEach((t, i) => {
-                const status = getTaskStatus(t);
-                const pct = parseInt(t.progress) || 0;
-                context += `\n[${i + 1}] "${t.name}"\n`;
-                context += `    Assigned: ${(t.assigned || '').trim() || 'Unassigned'} | Status: ${status.label} (${pct}%) | ${t.start} to ${t.end}\n`;
-                if (t.dependencies) context += `    Dependencies: Task ${t.dependencies}\n`;
-                if ((t.description || '').trim()) context += `    Description: ${t.description.trim().slice(0, 300)}\n`;
-                const meetingCount = (t.meetings || []).length;
-                const activityCount = (t.activity || []).filter(a => a.type === 'comment').length;
+            let hasTaskChecklist = false;
+            tl.forEach(t => {
                 const clItems = t.checklist || [];
-                if (meetingCount > 0) context += `    Meetings: ${meetingCount} recorded\n`;
-                if (activityCount > 0) context += `    Activity entries: ${activityCount}\n`;
-                if (clItems.length > 0) context += `    Checklist: ${clItems.filter(c => c.checked).length}/${clItems.length} done\n`;
-
-                // Include latest meeting notes if available
-                if (meetingCount > 0) {
-                    const latest = t.meetings[t.meetings.length - 1];
-                    context += `    Latest meeting (${latest.date}): "${latest.title}"`;
-                    if (latest.notes) context += ` — ${latest.notes.slice(0, 200)}`;
-                    context += `\n`;
-                }
-
-                // Include latest activity entry if available
-                if (activityCount > 0) {
-                    const entries = t.activity.filter(a => a.type === 'comment');
-                    const latest = entries[entries.length - 1];
-                    const d = new Date(latest.timestamp).toLocaleDateString();
-                    context += `    Latest activity (${d}): ${latest.message.slice(0, 200)}\n`;
-                }
-
-                // Include unchecked checklist items
-                const unchecked = clItems.filter(c => !c.checked);
-                if (unchecked.length > 0) {
-                    context += `    Pending checklist items: ${unchecked.map(c => c.text).join(', ')}\n`;
+                if (clItems.length > 0) {
+                    if (!hasTaskChecklist) { context += `-- Per-Task Checklists --\n`; hasTaskChecklist = true; }
+                    const clDone = clItems.filter(c => c.checked).length;
+                    const pct = parseInt(t.progress) || 0;
+                    context += `Task: "${t.name}" (Checklist: ${clDone}/${clItems.length} done | Progress bar: ${pct}%)\n`;
+                    clItems.forEach(c => { context += `  - [${c.checked ? 'x' : ' '}] ${c.text}\n`; });
                 }
             });
+            if (!pChecklist.length && !hasTaskChecklist) context += `(No checklists recorded)\n`;
 
-            // Today's Focus section
+            // === SECTION 4: MEETING_NOTES (Source of Truth) ===
+            context += `\n=== MEETING_NOTES [Source of Truth] ===\n`;
+            context += `User-recorded meeting data. Treat as high-reliability.\n\n`;
+
+            const pMeetings = pd.meetings || [];
+            if (pMeetings.length > 0) {
+                context += `-- Project-Level Meetings --\n`;
+                pMeetings.forEach(m => {
+                    context += `- [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
+                    if (m.notes) context += `  Notes: ${m.notes.slice(0, 400)}\n`;
+                });
+                context += `\n`;
+            }
+
+            let hasTaskMeetings = false;
+            tl.forEach(t => {
+                const meetings = t.meetings || [];
+                if (meetings.length > 0) {
+                    if (!hasTaskMeetings) { context += `-- Per-Task Meetings --\n`; hasTaskMeetings = true; }
+                    context += `Task: "${t.name}"\n`;
+                    meetings.forEach(m => {
+                        context += `  - [${m.date}] "${m.title}"${m.attendees ? ' | Attendees: ' + m.attendees : ''}\n`;
+                        if (m.notes) context += `    Notes: ${m.notes.slice(0, 400)}\n`;
+                    });
+                }
+            });
+            if (!pMeetings.length && !hasTaskMeetings) context += `(No meetings recorded)\n`;
+
+            // === SECTION 5: SYSTEM_LOGS (Secondary Context) ===
+            context += `\n=== SYSTEM_LOGS [Secondary Context — auto-generated, use with caution] ===\n`;
+            context += `These are auto-generated system entries. Do NOT treat as confirmed user actions.\n\n`;
+
+            let hasSystemLogs = false;
+            tl.forEach(t => {
+                const sysEntries = (t.activity || []).filter(a => a.type === 'system');
+                if (sysEntries.length > 0) {
+                    if (!hasSystemLogs) hasSystemLogs = true;
+                    context += `Task: "${t.name}"\n`;
+                    sysEntries.forEach(a => {
+                        const d = new Date(a.timestamp).toLocaleDateString();
+                        context += `  - [${d}] ${a.message.slice(0, 200)}\n`;
+                    });
+                }
+            });
+            if (!hasSystemLogs) context += `(No system logs)\n`;
+
+            // === SECTION 6: FILES (Source of Truth) ===
+            context += `\n=== FILES [Source of Truth] ===\n`;
+            context += `File attachments metadata (no binary data).\n\n`;
+
+            let hasFiles = false;
+            tl.forEach(t => {
+                const files = t.files || [];
+                if (files.length > 0) {
+                    if (!hasFiles) hasFiles = true;
+                    context += `Task: "${t.name}"\n`;
+                    files.forEach(f => {
+                        context += `  - "${f.name}" (${f.type || 'unknown type'}) — ${f.timestamp ? new Date(f.timestamp).toLocaleDateString() : 'no date'}\n`;
+                    });
+                }
+            });
+            if (!hasFiles) context += `(No files attached)\n`;
+
+            // === TODAY'S FOCUS ===
             const focusTasks = tl.filter(t => {
                 const s = getTaskStatus(t);
                 return s.css === 'status-overdue' || s.label === 'Overdue Soon' || s.label === 'Attention';
             });
             if (focusTasks.length > 0) {
-                context += `\n--- TODAY'S FOCUS ---\n`;
+                context += `\n=== TODAY'S FOCUS ===\n`;
                 focusTasks.forEach(t => {
                     const s = getTaskStatus(t);
                     context += `- [${s.label}] "${t.name}" (${parseInt(t.progress) || 0}%)\n`;
                 });
             }
 
-            context += `\n--- END ---`;
+            context += `\n=== END ===`;
             return context;
         }
 
@@ -6952,22 +7010,68 @@ Ensure the output is clear, concise, and structured in a way that addresses the 
             statusEl.textContent = '';
 
             const context = buildProjectContext(taskList, projName, projData);
-            const prompt = `You are an expert project management assistant. Analyze the following project data and generate a concise, structured project summary for executive review.
+            const systemPrompt = `You are an Expert AI Project Auditor. Your job is to analyze structured project data and produce a concise, honest, and actionable audit report.
 
-${context}
+## DATA SOURCE HIERARCHY
 
-Generate a summary with these sections:
-1. **Executive Overview** — Overall project health, timeline status, and completion trajectory in 2-3 sentences.
-2. **Key Highlights** — Important progress made, milestones reached, or notable achievements (bullet points).
-3. **Risks & Blockers** — Overdue tasks, tasks needing attention, bottlenecks, incomplete checklist items, or dependency issues (bullet points). If none, say so.
-4. **Action Items** — What needs to happen next, prioritized by urgency. Include pending checklist items and insights from meetings/activity logs (bullet points).
-5. **Decision Points** — Any pending decisions surfaced from meetings, activity logs, or task data that need stakeholder input (bullet points). If none, say so.
+You must respect a strict trust hierarchy:
+- **Source of Truth (high reliability):** USER_ACTIVITY_LOGS, CHECKLIST_STATES, MEETING_NOTES, FILES — these are manually created by the user.
+- **Secondary Context (low reliability):** SYSTEM_LOGS — these are auto-generated. Never cite system logs as proof of user action. Never infer progress from system logs alone.
 
-Be concise and actionable. Focus on insights, not just restating data. Leverage project-level meetings, activity logs, and checklists for cross-cutting context.`;
+## INPUT CONTEXT
+
+You will receive structured data with these labeled sections:
+- PROJECT_METADATA — project name, date, task summary table with statuses, progress %, checklist stats, dependencies
+- USER_ACTIVITY_LOGS — manually written user entries (project-level and per-task)
+- CHECKLIST_STATES — checklist items with checked/unchecked status and done/total counts
+- MEETING_NOTES — user-recorded meetings with dates, titles, attendees, notes
+- SYSTEM_LOGS — auto-generated entries (treat with caution)
+- FILES — file attachment metadata per task
+- TODAY'S FOCUS — overdue, overdue-soon, and attention tasks
+
+## AUDIT LOGIC
+
+Perform three checks before writing your report:
+
+### 1. Integrity Check ("Lie Detector")
+Compare each task's progress bar % against its checklist completion ratio. Flag any task where progress % significantly exceeds checklist completion (e.g., progress says 80% but only 2/10 checklist items done). This suggests inflated progress.
+
+### 2. Stagnation Check
+Look for tasks with no recent user activity log entries and no recent checklist changes despite being incomplete. Flag these as potentially stalled. Use dates from activity logs and meeting notes, NOT system logs.
+
+### 3. Sentiment Check
+Scan user activity logs and meeting notes for language indicating blockers, frustration, risk, or scope creep (e.g., "waiting on", "delayed", "stuck", "changed requirements", "unclear"). Surface these signals.
+
+## REPORT STRUCTURE
+
+Output exactly 4 sections in markdown:
+
+### 1. Executive Snapshot
+2-3 sentences on overall project health, timeline status, and completion trajectory. Be honest — if the project is behind, say so.
+
+### 2. Reality Checks
+- **Integrity Flags:** List any tasks where progress % doesn't match checklist completion. If none, say "No integrity issues detected."
+- **Stagnation Alerts:** List tasks that appear stalled. If none, say "No stalled tasks detected."
+- **Sentiment Signals:** Surface any concerning language from user logs/meetings. If none, say "No concerning signals detected."
+
+### 3. Notable Updates
+Bullet points of meaningful progress, decisions made, or milestones from user activity logs and meeting notes. Only cite Source of Truth data.
+
+### 4. Next Steps
+Prioritized action items based on overdue tasks, incomplete checklists, meeting decisions, and today's focus items. Be specific and actionable.
+
+## NEGATIVE CONSTRAINTS
+
+- Do NOT rely on system logs to confirm user actions or progress.
+- Do NOT hallucinate progress — if there's no Source of Truth evidence, say so.
+- Do NOT repeat raw data — synthesize and add insight.
+- Do NOT invent meeting outcomes or activity entries that aren't in the data.
+- Keep the entire report concise — aim for clarity over length.`;
 
             try {
                 const data = await callGemini({
-                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    system_instruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: context }] }],
                     generationConfig: { maxOutputTokens: 4096 }
                 });
                 const parts = data.candidates[0].content.parts;
