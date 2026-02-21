@@ -2046,14 +2046,15 @@ In Extraction Mode, you MUST NOT reply with standard conversational text. You MU
 
 RULES FOR EXTRACTION:
 1. RUTHLESS PRIORITIZATION: The user will often provide text containing fluff. Do not turn every sentence into an item. Only extract significant, actionable work.
-2. TASK CAP (CRITICAL LIMIT): NEVER output more than 15 tasks in a single response. If the text implies more, prioritize the 15 most important.
+2. SMART TASK LIMITS & BULK UPLOADS: For general chat, brainstorming, or vague inputs: consolidate micro-tasks and enforce a MAXIMUM 15-task limit. THE EXCEPTION: If the user uploads structured data (like a CSV/Excel file) or explicitly asks to include "all rows" or "all items", BYPASS the 15-task limit and extract every requested item accurately.
 3. EVERYTHING IS A TASK: Because the user relies on a Gantt chart, all major extracted work, goals, or events must be formatted as Tasks.
 4. DATES: You MUST estimate logical start_date and end_date (Format: YYYY-MM-DD) based on context to populate the Gantt chart. Assume dates are relative to ${today}.
 5. CONSOLIDATE CONTEXT: If the user provides meeting notes, background context, or minor to-dos related to a task, DO NOT create separate project-level items. Instead, write that context into the Task's description, or list them in the nested checklists array for that specific task.
 6. CHECKLISTS IN EXTRACTION: Do NOT invent checklist items that are not in the user's original data. Only include checklists if the user's input explicitly contains sub-steps, or if the user specifically asks for them. Leave the checklists array empty ([]) otherwise.
-7. SPREADSHEETS/CSV: Treat the first row as headers. Map columns logically (e.g., "Due" maps to end_date). Combine rows into logical tasks if they are too granular.
-8. TRUNCATED FILES & OVERFLOW: If you hit your 15-task cap, OR if you see a [SYSTEM NOTE] that the user's file was truncated, clearly state this in your chat_message.
-9. SCHEDULING: ~5-6 productive hours per day. Max 2-3 concurrent tasks. 1 day buffer between dependent tasks. No weekends unless explicitly asked.
+7. EXTRACTING METADATA (PROGRESS & ASSIGNEES): Be smart about capturing status/progress from the user's data. Output "progress" as a string (e.g., "50%", "In Progress", "Done", "Pending"). Output "assignees" as an array of name strings. If none are mentioned, use empty array [].
+8. SPREADSHEETS/CSV: Treat the first row as headers. Map columns logically (e.g., "Due" maps to end_date, "Status" maps to progress, "Assigned" maps to assignees). Combine rows into logical tasks if they are too granular.
+9. TRUNCATED FILES & OVERFLOW: If you see a [SYSTEM NOTE] that the user's file was truncated, clearly state this in your chat_message.
+10. SCHEDULING: ~5-6 productive hours per day. Max 2-3 concurrent tasks. 1 day buffer between dependent tasks. No weekends unless explicitly asked.
 
 JSON SCHEMA FOR EXTRACTION MODE:
 {
@@ -2066,6 +2067,8 @@ JSON SCHEMA FOR EXTRACTION MODE:
         "description": "String (Consolidate all supporting details, meeting context, and background information here)",
         "start_date": "YYYY-MM-DD or null",
         "end_date": "YYYY-MM-DD or null",
+        "progress": "String (e.g., '50%', 'In Progress', 'Done', 'Pending') or null",
+        "assignees": ["String (name/role)"],
         "checklists": [
           {
             "item": "String (Actionable sub-step. MODE 1 planning: REQUIRED 1-5 per task. MODE 2 extraction: only if present in user data)"
@@ -8564,13 +8567,26 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 return;
             }
 
+            // Parse AI progress string to numeric 0-100
+            function parseProgress(val) {
+                if (val == null || val === '') return 0;
+                const str = String(val).trim().toLowerCase();
+                const pctMatch = str.match(/(\d+)\s*%/);
+                if (pctMatch) return Math.min(100, Math.max(0, parseInt(pctMatch[1])));
+                if (str === 'done' || str === 'complete' || str === 'completed' || str === '100') return 100;
+                if (str === 'in progress' || str === 'ongoing' || str === 'started') return 50;
+                if (str === 'needs review' || str === 'review' || str === 'for review') return 75;
+                if (str === 'pending' || str === 'not started' || str === 'todo' || str === 'to do') return 0;
+                return 0;
+            }
+
             // Map proposed tasks to internal format
             const newTasks = pendingPlan.proposedTasks.map(pt => ({
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
                 name: pt.title || 'Untitled Task',
                 start: pt.start_date || new Date().toISOString().slice(0, 10),
                 end: pt.end_date || pt.start_date || new Date().toISOString().slice(0, 10),
-                progress: 0,
+                progress: parseProgress(pt.progress),
                 dependencies: '',
                 custom_class: '',
                 description: pt.description || '',
@@ -8580,7 +8596,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                     checked: false,
                     timestamp: new Date().toISOString()
                 })),
-                assigned: 'Me',
+                assigned: (pt.assignees && pt.assignees.length > 0) ? pt.assignees.join(', ') : 'Me',
                 activity: [],
                 files: [],
                 meetings: []
