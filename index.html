@@ -696,6 +696,7 @@
         }
         .cal-cell:hover { background: rgba(148,163,184,0.05); }
         .cal-cell.cal-today { background: rgba(59,130,246,0.08); }
+        .cal-cell.cal-selected { outline: 2px solid rgba(59,130,246,0.6); outline-offset: -2px; background: rgba(59,130,246,0.12); }
         .cal-cell.cal-other { opacity: 0.35; }
         .cal-marker {
             font-size: 9px;
@@ -735,6 +736,7 @@
         body.light-theme .cal-cell { border-color: rgba(60,60,67,0.1); }
         body.light-theme .cal-cell:hover { background: rgba(60,60,67,0.04); }
         body.light-theme .cal-cell.cal-today { background: rgba(0,122,255,0.06); }
+        body.light-theme .cal-cell.cal-selected { outline-color: rgba(0,122,255,0.5); background: rgba(0,122,255,0.1); }
         body.light-theme .cal-marker { color: #3A3A3C; }
         body.light-theme .cal-overflow { color: #8E8E93; }
 
@@ -840,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v5</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v6</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -2127,6 +2129,7 @@
         let calendarViewActive = false;
         let calendarMonth = new Date().getMonth();
         let calendarYear = new Date().getFullYear();
+        let calendarSelectedDate = null;
         function getArchivedIds(registry) {
             if (currentUser && registry) {
                 return new Set(registry.filter(p => p.archived).map(p => p.id));
@@ -3682,8 +3685,9 @@ FEW-SHOT EXAMPLES
                 const isToday = cellDate.getTime() === today.getTime();
                 const isOther = cellDate.getMonth() !== calendarMonth;
 
+                const isSelected = calendarSelectedDate === dateStr;
                 const cell = document.createElement('div');
-                cell.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (isOther ? ' cal-other' : '');
+                cell.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (isSelected ? ' cal-selected' : '') + (isOther ? ' cal-other' : '');
                 cell.dataset.date = dateStr;
 
                 // Day number
@@ -3715,6 +3719,10 @@ FEW-SHOT EXAMPLES
                 if (dayTasks.length > 0) {
                     cell.onclick = (e) => {
                         e.stopPropagation();
+                        // Update selected highlight
+                        document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+                        cell.classList.add('cal-selected');
+                        calendarSelectedDate = dateStr;
                         showCalendarPopover(dateStr, dayTasks, cell);
                     };
                 } else {
