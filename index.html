@@ -2053,6 +2053,7 @@ RULES FOR EXTRACTION:
 6. CHECKLISTS IN EXTRACTION: Do NOT invent checklist items that are not in the user's original data. Only include checklists if the user's input explicitly contains sub-steps, or if the user specifically asks for them. Leave the checklists array empty ([]) otherwise.
 7. EXTRACTING METADATA (PROGRESS & ASSIGNEES): Be smart about capturing status/progress from the user's data. Output "progress" as a string (e.g., "50%", "In Progress", "Done", "Pending"). Output "assignees" as an array of name strings. If none are mentioned, use empty array [].
 8. SPREADSHEETS/CSV: Treat the first row as headers. Map columns logically (e.g., "Due" maps to end_date, "Status" maps to progress, "Assigned" maps to assignees). Combine rows into logical tasks if they are too granular.
+   CRITICAL: Column headers define meaning. Always take the EXACT cell value from the column the header maps to. Do NOT reinterpret cell values based on what they look like. For example, if a column header is "Assigned" and a cell value is "March", that is a person's name — NOT a date. Never pull values from other columns (like "Reviewer") as a substitute. Trust the headers.
 9. TRUNCATED FILES & OVERFLOW: If you see a [SYSTEM NOTE] that the user's file was truncated, clearly state this in your chat_message.
 10. SCHEDULING: ~5-6 productive hours per day. Max 2-3 concurrent tasks. 1 day buffer between dependent tasks. No weekends unless explicitly asked.
 
