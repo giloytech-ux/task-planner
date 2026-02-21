@@ -1461,7 +1461,6 @@
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">
                 <span class="text-[10px] text-slate-500 w-full">Suggestions</span>
-                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Personal</button>
                 <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Work</button>
                 <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Home</button>
                 <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">School</button>
@@ -3670,6 +3669,12 @@ FEW-SHOT EXAMPLES
         async function confirmNewProject() {
             const name = document.getElementById('newProjectName').value.trim();
             if (!name) { document.getElementById('newProjectName').focus(); return; }
+            const registry = await loadRegistry();
+            if (registry.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+                alert(`A project named "${name}" already exists.`);
+                document.getElementById('newProjectName').focus();
+                return;
+            }
             closeNewProjectModal();
             const id = await createProject(name);
             if (id) await openProject(id);
@@ -3978,6 +3983,10 @@ FEW-SHOT EXAMPLES
             if (!project) return;
             const newName = prompt('Rename project:', project.name);
             if (!newName || !newName.trim()) return;
+            if (registry.some(p => p.id !== currentProjectId && p.name.toLowerCase() === newName.trim().toLowerCase())) {
+                alert(`A project named "${newName.trim()}" already exists.`);
+                return;
+            }
 
             if (currentUser) {
                 await supabase.from('projects').update({
@@ -3996,6 +4005,11 @@ FEW-SHOT EXAMPLES
         async function renameProject(id, currentName) {
             const newName = prompt('Rename project:', currentName);
             if (!newName || !newName.trim() || newName.trim() === currentName) return;
+            const registry = await loadRegistry();
+            if (registry.some(p => p.id !== id && p.name.toLowerCase() === newName.trim().toLowerCase())) {
+                alert(`A project named "${newName.trim()}" already exists.`);
+                return;
+            }
 
             if (currentUser) {
                 await supabase.from('projects').update({
@@ -4900,6 +4914,11 @@ FEW-SHOT EXAMPLES
         function confirmAddTask() {
             const name = document.getElementById('addTaskName').value.trim();
             if (!name) { document.getElementById('addTaskName').focus(); return; }
+            if (tasks.some(t => t.name.toLowerCase() === name.toLowerCase())) {
+                alert(`A task named "${name}" already exists in this project.`);
+                document.getElementById('addTaskName').focus();
+                return;
+            }
 
             let startVal = document.getElementById('addTaskStart').value;
             let endVal = document.getElementById('addTaskEnd').value;
@@ -5231,6 +5250,14 @@ FEW-SHOT EXAMPLES
 
         function updateTaskDetail(field, value) {
             const task = tasks[currentTaskIndex];
+            if (field === 'name' && value.trim()) {
+                const trimmed = value.trim();
+                if (tasks.some((t, i) => i !== currentTaskIndex && t.name.toLowerCase() === trimmed.toLowerCase())) {
+                    alert(`A task named "${trimmed}" already exists in this project.`);
+                    document.getElementById('tdName').value = task.name;
+                    return;
+                }
+            }
             if (field === 'start' && task.end && value > task.end) {
                 task.end = value;
                 document.getElementById('tdEnd').value = value;
