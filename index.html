@@ -8626,7 +8626,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             const ext = file.name.split('.').pop().toLowerCase();
             const allowedExts = ['csv', 'txt', 'xlsx'];
             if (!allowedExts.includes(ext)) {
-                addToChat('model', `Unsupported file type (.${ext}). Please attach a .csv, .txt, or .xlsx file.`);
+                showToast('We currently only support .txt, .csv, and .xlsx files. For Word documents or PDFs, please copy and paste the text directly into the chat box!', 'warning', 6000);
                 return;
             }
 
