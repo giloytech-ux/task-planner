@@ -3413,8 +3413,9 @@ FEW-SHOT EXAMPLES
 
         function sortProjects(projects, sortKey) {
             // Pin Personal project to top, sort the rest
-            const personal = projects.filter(p => p.metadata && p.metadata.isDefault);
-            const rest = projects.filter(p => !(p.metadata && p.metadata.isDefault));
+            const isPersonal = p => (p.metadata && p.metadata.isDefault) || p.name === 'Personal';
+            const personal = projects.filter(isPersonal);
+            const rest = projects.filter(p => !isPersonal(p));
             const sorted = [...rest];
             switch (sortKey) {
                 case 'urgency':
