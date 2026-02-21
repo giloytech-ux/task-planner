@@ -2036,8 +2036,9 @@ Current project tasks: ${projectJson}
 
 YOUR MODES OF OPERATION:
 
-MODE 1: CONVERSATIONAL STRATEGIST
+MODE 1: CONVERSATIONAL STRATEGIST & PLANNER
 If the user is asking for advice, brainstorming, or just chatting, respond naturally and professionally in standard markdown text. Do not output JSON.
+However, if the conversation leads to the user asking you to plan or create tasks (e.g., "plan this out for me", "create tasks for a website launch"), switch to the JSON schema below. When YOU are the one planning tasks (not extracting from user data), you MUST generate 1-5 actionable checklist sub-steps per task. These help the user know exactly what to do. Average 2-3 items per task.
 
 MODE 2: EXTRACTION & DATA ORGANIZER
 If the user provides a "brain dump" OR raw data from a file, you must switch to Extraction Mode.
@@ -2049,9 +2050,10 @@ RULES FOR EXTRACTION:
 3. EVERYTHING IS A TASK: Because the user relies on a Gantt chart, all major extracted work, goals, or events must be formatted as Tasks.
 4. DATES: You MUST estimate logical start_date and end_date (Format: YYYY-MM-DD) based on context to populate the Gantt chart. Assume dates are relative to ${today}.
 5. CONSOLIDATE CONTEXT: If the user provides meeting notes, background context, or minor to-dos related to a task, DO NOT create separate project-level items. Instead, write that context into the Task's description, or list them in the nested checklists array for that specific task.
-6. SPREADSHEETS/CSV: Treat the first row as headers. Map columns logically (e.g., "Due" maps to end_date). Combine rows into logical tasks if they are too granular.
-7. TRUNCATED FILES & OVERFLOW: If you hit your 15-task cap, OR if you see a [SYSTEM NOTE] that the user's file was truncated, clearly state this in your chat_message.
-8. SCHEDULING: ~5-6 productive hours per day. Max 2-3 concurrent tasks. 1 day buffer between dependent tasks. No weekends unless explicitly asked.
+6. CHECKLISTS IN EXTRACTION: Do NOT invent checklist items that are not in the user's original data. Only include checklists if the user's input explicitly contains sub-steps, or if the user specifically asks for them. Leave the checklists array empty ([]) otherwise.
+7. SPREADSHEETS/CSV: Treat the first row as headers. Map columns logically (e.g., "Due" maps to end_date). Combine rows into logical tasks if they are too granular.
+8. TRUNCATED FILES & OVERFLOW: If you hit your 15-task cap, OR if you see a [SYSTEM NOTE] that the user's file was truncated, clearly state this in your chat_message.
+9. SCHEDULING: ~5-6 productive hours per day. Max 2-3 concurrent tasks. 1 day buffer between dependent tasks. No weekends unless explicitly asked.
 
 JSON SCHEMA FOR EXTRACTION MODE:
 {
@@ -2066,7 +2068,7 @@ JSON SCHEMA FOR EXTRACTION MODE:
         "end_date": "YYYY-MM-DD or null",
         "checklists": [
           {
-            "item": "String (Minor sub-steps required to complete this specific task)"
+            "item": "String (Actionable sub-step. MODE 1 planning: REQUIRED 1-5 per task. MODE 2 extraction: only if present in user data)"
           }
         ]
       }
@@ -8572,7 +8574,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 dependencies: '',
                 custom_class: '',
                 description: pt.description || '',
-                checklist: (pt.checklists || []).map(c => ({
+                checklist: (pt.checklists || []).slice(0, 5).map(c => ({
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                     text: typeof c === 'string' ? c : (c.item || c.text || ''),
                     checked: false,
