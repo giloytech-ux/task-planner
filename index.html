@@ -2053,9 +2053,12 @@
             }));
         }
 
-        function buildSystemPrompt(taskContextJson, mode, agreedPlan) {
+        function buildSystemPrompt(taskContextJson, mode, agreedPlan, projectRegistry) {
             const today = new Date().toISOString().slice(0, 10);
             const projectJson = taskContextJson || '[]';
+            const registrySection = (projectRegistry && projectRegistry.length > 0)
+                ? `\nUSER'S OTHER PROJECTS (for copy requests only):\n${JSON.stringify(projectRegistry)}`
+                : '';
 
             if (mode === 'planning') {
                 return `You are an elite AI Project Management Co-pilot integrated into a productivity app. Your goal is to converse naturally with the user, help them plan, and ruthlessly organize their messy thoughts, brain dumps, or provided file data (Text/CSV/Excel) into structured Tasks.
@@ -2064,7 +2067,7 @@ CURRENT CONTEXT:
 The user is currently inside a Project.
 To ensure all generated items are visible on the user's timeline/Gantt chart, you MUST ONLY generate Tasks. Do not modify or add project-level details, project-level meetings, or standalone activity logs.
 Today's date is: ${today}
-Current project tasks: ${projectJson}
+Current project tasks: ${projectJson}${registrySection}
 
 YOUR MODES OF OPERATION:
 
@@ -2110,7 +2113,23 @@ JSON SCHEMA FOR EXTRACTION MODE:
       }
     ]
   }
-}`;
+}
+
+MODE 3: COPY TASKS FROM ANOTHER PROJECT
+If the user asks to copy tasks from one of their other projects, respond with this JSON (do not wrap in markdown):
+{
+  "copy_tasks": true,
+  "source_project_name": "Exact project name from the USER'S OTHER PROJECTS list above",
+  "source_project_id": "The project ID from the list above",
+  "task_names": ["taskA", "taskB"] OR "all",
+  "chat_message": "Friendly confirmation message about what you're about to copy"
+}
+
+RULES FOR COPY:
+- Only copy from projects listed in USER'S OTHER PROJECTS. If no projects are listed, or the requested project name doesn't match any, respond conversationally saying it wasn't found.
+- "task_names" should be "all" if the user wants all tasks, or an array of specific task names if they asked for specific ones.
+- Do NOT invent project names or IDs. Use the exact values from the list.
+- Match project names case-insensitively.`;
             }
 
             // Execution mode (default)
@@ -8492,6 +8511,125 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             addToChat('model', 'Plan dismissed. Feel free to continue the conversation.');
         }
 
+        async function handleCopyTasks(parsed, userPrompt, aiText) {
+            const sourceId = parsed.source_project_id;
+            const sourceName = parsed.source_project_name || 'Unknown';
+            const chatMsg = parsed.chat_message || `Copying tasks from "${sourceName}"...`;
+
+            // Validate source project exists in user's registry
+            let registry;
+            try {
+                registry = await loadRegistry();
+            } catch (e) {
+                addToChat('model', 'Could not load your projects. Please try again.');
+                return;
+            }
+            const sourceProject = (registry || []).find(p => p.id === sourceId);
+            if (!sourceProject) {
+                addToChat('model', `Could not find a project with that ID in your account. Please check the project name and try again.`);
+                history.push({ role: "user", text: userPrompt });
+                history.push({ role: "model", text: 'Project not found in registry.', type: 'chat', displayText: 'Project not found.' });
+                markChatDirty();
+                return;
+            }
+
+            // Load source project tasks
+            let sourceData;
+            try {
+                sourceData = await loadProject(sourceId);
+            } catch (e) {
+                addToChat('model', `Could not load tasks from "${sourceName}". Please try again.`);
+                return;
+            }
+            const sourceTasks = sourceData.tasks || [];
+            if (sourceTasks.length === 0) {
+                addToChat('model', `The project "${sourceName}" has no tasks to copy.`);
+                history.push({ role: "user", text: userPrompt });
+                history.push({ role: "model", text: 'Source project has no tasks.', type: 'chat', displayText: `"${sourceName}" has no tasks.` });
+                markChatDirty();
+                return;
+            }
+
+            // Filter tasks by name if specific ones requested
+            let selectedTasks;
+            if (parsed.task_names === 'all') {
+                selectedTasks = sourceTasks;
+            } else if (Array.isArray(parsed.task_names)) {
+                const requestedNames = parsed.task_names.map(n => n.toLowerCase());
+                selectedTasks = sourceTasks.filter(t => requestedNames.includes((t.name || '').toLowerCase()));
+                if (selectedTasks.length === 0) {
+                    addToChat('model', `Could not find any matching tasks in "${sourceName}". Available tasks: ${sourceTasks.map(t => t.name).join(', ')}`);
+                    history.push({ role: "user", text: userPrompt });
+                    history.push({ role: "model", text: 'No matching tasks found.', type: 'chat', displayText: 'No matching tasks found.' });
+                    markChatDirty();
+                    return;
+                }
+            } else {
+                selectedTasks = sourceTasks;
+            }
+
+            // Build set of existing task names for duplicate detection
+            const existingNames = new Set(tasks.map(t => (t.name || '').toLowerCase()));
+
+            // Map source tasks to new internal-format tasks with fresh IDs
+            const readyTasks = selectedTasks.map(t => {
+                let newName = t.name || 'Untitled Task';
+                if (existingNames.has(newName.toLowerCase())) {
+                    newName = newName + ' (copy)';
+                    // Handle edge case where "(copy)" also exists
+                    let suffix = 2;
+                    while (existingNames.has(newName.toLowerCase())) {
+                        newName = (t.name || 'Untitled Task') + ` (copy ${suffix})`;
+                        suffix++;
+                    }
+                }
+                existingNames.add(newName.toLowerCase()); // prevent duplicates within the batch
+
+                return {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
+                    name: newName,
+                    start: t.start || new Date().toISOString().slice(0, 10),
+                    end: t.end || t.start || new Date().toISOString().slice(0, 10),
+                    progress: typeof t.progress === 'number' ? t.progress : 0,
+                    dependencies: '',
+                    custom_class: t.custom_class || '',
+                    priority: t.priority || 'medium',
+                    description: t.description || '',
+                    assigned: t.assigned || 'Me',
+                    checklist: (t.checklist || []).map(c => ({
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                        text: typeof c === 'string' ? c : (c.text || ''),
+                        checked: typeof c === 'object' ? !!c.checked : false,
+                        timestamp: new Date().toISOString()
+                    })),
+                    activity: (t.activity || []).map(a => ({ ...a })),
+                    files: (t.files || []).map(f => ({ ...f })),
+                    meetings: (t.meetings || []).map(m => ({ ...m }))
+                };
+            });
+
+            // Build summary HTML for confirmation using the proposal format
+            const proposedForDisplay = readyTasks.map(t => ({
+                title: t.name,
+                start_date: t.start,
+                end_date: t.end,
+                checklists: (t.checklist || []).map(c => ({ item: typeof c === 'string' ? c : (c.text || '') }))
+            }));
+            const displayHtml = buildPlanSummaryHTML(chatMsg, proposedForDisplay);
+
+            pendingPlan = {
+                chatMessage: chatMsg,
+                proposedTasks: proposedForDisplay,
+                readyTasks: readyTasks,
+                timestamp: Date.now()
+            };
+
+            addToChat('model', displayHtml);
+            history.push({ role: "user", text: userPrompt });
+            history.push({ role: "model", text: aiText, type: 'plan', displayText: chatMsg, proposedTasks: proposedForDisplay });
+            markChatDirty();
+        }
+
         // Layer 3: Build change summary HTML for the chat
         function buildChangeSummaryHTML(changes) {
             const icons = {
@@ -8644,10 +8782,19 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 conversation.push({ role: "user", parts: [{ text: `Note: ${lockedCount} task(s) are locked and excluded — do not add or reference them.` }] });
             }
 
+            // Build project registry for copy feature (exclude current project)
+            let projectRegistry = [];
+            try {
+                const allProjects = await loadRegistry();
+                projectRegistry = (allProjects || [])
+                    .filter(p => p.id !== currentProjectId)
+                    .map(p => ({ name: p.name, id: p.id }));
+            } catch (e) { /* registry unavailable — copy won't work but chat continues */ }
+
             try {
                 const data = await callGemini({
                     contents: conversation,
-                    system_instruction: { parts: [{ text: buildSystemPrompt(taskContextJson, 'planning') }] }
+                    system_instruction: { parts: [{ text: buildSystemPrompt(taskContextJson, 'planning', null, projectRegistry) }] }
                 });
 
                 const aiText = data.candidates[0].content.parts[0].text;
@@ -8665,7 +8812,10 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                     }
                 }
 
-                if (parsed && parsed.has_data_to_confirm && parsed.proposed_items && parsed.proposed_items.tasks) {
+                if (parsed && parsed.copy_tasks && parsed.source_project_id) {
+                    // Copy tasks mode — load from source project
+                    await handleCopyTasks(parsed, prompt, aiText);
+                } else if (parsed && parsed.has_data_to_confirm && parsed.proposed_items && parsed.proposed_items.tasks) {
                     // Extraction mode — AI proposed structured tasks
                     const chatMessage = parsed.chat_message || 'I extracted some tasks from your input.';
                     const proposedTasks = parsed.proposed_items.tasks;
@@ -8712,6 +8862,38 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
         function handleExecute() {
             if (!pendingPlan || !pendingPlan.proposedTasks || pendingPlan.proposedTasks.length === 0) {
                 addToChat('model', 'No pending tasks to add. Send a message first to create a plan.');
+                return;
+            }
+
+            // Ready tasks bypass — already in internal format (e.g. from copy)
+            if (pendingPlan.readyTasks) {
+                const newTasks = pendingPlan.readyTasks;
+
+                if (tasks.length === 0) {
+                    tasks = newTasks;
+                    renderGantt();
+                    addToChat('model', `Copied ${newTasks.length} task${newTasks.length > 1 ? 's' : ''} to your project. Review the Gantt chart and task table.`);
+                    history.push({ role: "model", text: `[Copied ${newTasks.length} tasks]`, type: 'execution' });
+                    markAllTasksDirty();
+                    markChatDirty();
+                    saveProject();
+                    closeMobileSidebar();
+                } else {
+                    const merged = [...tasks, ...newTasks];
+                    const changes = newTasks.map(t => ({ type: 'added', id: t.id, name: t.name }));
+                    tasks.forEach(t => changes.push({ type: 'unchanged', id: t.id, name: t.name }));
+
+                    pendingMerge = merged;
+                    pendingPrompt = `[Copy ${newTasks.length} tasks from another project]`;
+                    pendingAiText = JSON.stringify({ action: 'update', tasks: newTasks });
+                    pendingAction = 'update';
+
+                    let html = `<div style="margin-bottom:10px">Copying ${newTasks.length} task${newTasks.length > 1 ? 's' : ''} to your project:</div>`;
+                    html += buildChangeSummaryHTML(changes);
+                    addToChat('model', html);
+                }
+
+                pendingPlan = null;
                 return;
             }
 
