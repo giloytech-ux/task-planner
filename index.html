@@ -749,6 +749,10 @@
             <button id="homeBtn" onclick="showDashboard()" class="flex items-center gap-1 text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px] justify-center" title="Back to Dashboard">
                 <span class="material-icons-round">home</span>
             </button>
+            <!-- Calendar Toggle (dashboard only) -->
+            <button id="calendarToggleBtn" onclick="toggleCalendarView()" class="hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="Calendar view">
+                <span class="material-icons-round">calendar_today</span>
+            </button>
             <!-- Mobile sidebar toggle (project view only) -->
             <button id="mobileSidebarToggle" onclick="toggleMobileSidebar()" class="hidden md:!hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="AI Chat">
                 <span class="material-icons-round">smart_toy</span>
@@ -848,11 +852,6 @@
                         <input type="text" id="projectSearch" oninput="handleProjectSearch()" placeholder="Search projects..." class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors min-h-[44px]">
                     </div>
                     <div class="flex items-center gap-3">
-                        <!-- Calendar toggle -->
-                        <button id="calendarToggleBtn" onclick="toggleCalendarView()" class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border transition-colors min-h-[44px] bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200" title="Calendar view">
-                            <span class="material-icons-round text-sm">calendar_month</span>
-                            <span class="hidden sm:inline">Calendar</span>
-                        </button>
                         <!-- Sort -->
                         <div class="flex items-center gap-2">
                             <span class="material-icons-round text-sm text-slate-500">sort</span>
@@ -3332,6 +3331,7 @@ FEW-SHOT EXAMPLES
             noResults.querySelector('.material-icons-round').textContent = 'search_off';
             noResults.querySelector('p').textContent = 'No projects match your search.';
 
+            const calBtn = document.getElementById('calendarToggleBtn');
             if (registry.length === 0) {
                 // Empty state — no projects yet
                 grid.classList.add('hidden');
@@ -3339,12 +3339,16 @@ FEW-SHOT EXAMPLES
                 emptyState.classList.remove('hidden');
                 emptyState.classList.add('flex');
                 document.getElementById('calendarView').classList.add('hidden');
+                calBtn.classList.add('hidden');
+                calBtn.classList.remove('flex');
                 calendarViewActive = false;
                 return;
             }
 
-            // Has projects — show toolbar, hide empty state
+            // Has projects — show toolbar, show calendar btn, hide empty state
             toolbar.classList.remove('hidden');
+            calBtn.classList.remove('hidden');
+            calBtn.classList.add('flex');
             emptyState.classList.add('hidden');
             emptyState.classList.remove('flex');
 
@@ -3604,16 +3608,18 @@ FEW-SHOT EXAMPLES
                 empty.classList.add('hidden');
                 empty.classList.remove('flex');
                 calView.classList.remove('hidden');
-                btn.innerHTML = '<span class="material-icons-round text-sm">view_module</span><span class="hidden sm:inline">Projects</span>';
-                btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-400');
-                btn.classList.add('bg-blue-600/20', 'border-blue-500/50', 'text-blue-400');
+                btn.querySelector('.material-icons-round').textContent = 'view_module';
+                btn.classList.remove('text-slate-400');
+                btn.classList.add('text-blue-400');
+                btn.title = 'Project cards view';
                 renderCalendar();
             } else {
                 calView.classList.add('hidden');
                 closeCalendarPopover();
-                btn.innerHTML = '<span class="material-icons-round text-sm">calendar_month</span><span class="hidden sm:inline">Calendar</span>';
-                btn.classList.remove('bg-blue-600/20', 'border-blue-500/50', 'text-blue-400');
-                btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-400');
+                btn.querySelector('.material-icons-round').textContent = 'calendar_today';
+                btn.classList.remove('text-blue-400');
+                btn.classList.add('text-slate-400');
+                btn.title = 'Calendar view';
                 renderDashboard();
             }
         }
@@ -4205,6 +4211,12 @@ FEW-SHOT EXAMPLES
             // Rebuild chat & render before showing project view
             rebuildChatUI();
             renderGantt();
+
+            // Hide calendar button & popover
+            closeCalendarPopover();
+            const calBtnOpen = document.getElementById('calendarToggleBtn');
+            calBtnOpen.classList.add('hidden');
+            calBtnOpen.classList.remove('flex');
 
             // Now swap views — project is fully rendered
             document.getElementById('authView').classList.add('hidden');
