@@ -840,7 +840,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v1</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v2</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -3790,23 +3790,10 @@ FEW-SHOT EXAMPLES
             document.getElementById('calendarPopover').classList.add('hidden');
         }
 
-        async function openProjectAndFindTask(projectId, taskName) {
-            console.log('[CAL-DEBUG v28] openProjectAndFindTask called', { projectId, taskName });
-            calendarViewActive = false;
-            await openProject(projectId);
-            console.log('[CAL-DEBUG v28] openProject resolved, tasks count:', tasks.length);
-            // Find the task by name in the now-loaded tasks array
-            const idx = tasks.findIndex(t => t.name === taskName);
-            console.log('[CAL-DEBUG v28] findIndex result:', idx, 'searched for:', taskName, 'available:', tasks.map(t => t.name));
-            if (idx !== -1) {
-                // Delay to ensure project view is fully rendered and visible
-                setTimeout(() => {
-                    console.log('[CAL-DEBUG v28] calling openTaskDetail with index:', idx);
-                    openTaskDetail(idx);
-                }, 100);
-            } else {
-                console.warn('[CAL-DEBUG v28] task not found by name!');
-            }
+        let _pendingTaskOpen = null;
+        function openProjectAndFindTask(projectId, taskName) {
+            _pendingTaskOpen = taskName;
+            openProject(projectId);
         }
 
         // --- Dashboard: Search ---
@@ -4227,14 +4214,6 @@ FEW-SHOT EXAMPLES
             const calBtnOpen = document.getElementById('calendarToggleBtn');
             calBtnOpen.classList.add('hidden');
             calBtnOpen.classList.remove('flex');
-            if (calendarViewActive) {
-                calendarViewActive = false;
-                calBtnOpen.querySelector('.material-icons-round').textContent = 'calendar_today';
-                calBtnOpen.classList.remove('text-blue-400');
-                calBtnOpen.classList.add('text-slate-400');
-                calBtnOpen.title = 'Calendar view';
-            }
-
             // Now swap views — project is fully rendered
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('dashboardView').classList.add('hidden');
@@ -4253,6 +4232,14 @@ FEW-SHOT EXAMPLES
             if (currentUser) subscribeToProject(id);
 
             pushNavState('project');
+
+            // Open pending task from calendar click
+            if (_pendingTaskOpen) {
+                const taskName = _pendingTaskOpen;
+                _pendingTaskOpen = null;
+                const idx = tasks.findIndex(t => t.name === taskName);
+                if (idx !== -1) openTaskDetail(idx);
+            }
 
             // Background refresh: if project data was from stale cache, silently re-fetch
             if (currentUser && DataStore.isStale(cacheKey)) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'planory-v29';
+const CACHE_NAME = 'planory-v30';
 const APP_SHELL = [
   './',
   './index.html',
