@@ -1416,7 +1416,7 @@
             <div class="space-y-3">
                 <div>
                     <label class="td-field-label">Task Name <span class="text-red-400">*</span></label>
-                    <input id="addTaskName" type="text" class="td-input" placeholder="Enter task name…">
+                    <input id="addTaskName" type="text" class="td-input" placeholder="e.g. Call my mom tomorrow at 5pm">
                 </div>
                 <div>
                     <label class="td-field-label">Priority</label>
@@ -1430,11 +1430,16 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="td-field-label">Start Date</label>
-                        <input id="addTaskStart" type="date" class="td-input">
+                        <input id="addTaskStart" type="date" class="td-input" onchange="onAddTaskDateChange('start')">
                     </div>
                     <div>
                         <label class="td-field-label">End Date</label>
-                        <input id="addTaskEnd" type="date" class="td-input">
+                        <input id="addTaskEnd" type="date" class="td-input" onchange="onAddTaskDateChange('end')">
+                    </div>
+                    <div class="flex gap-1.5 mt-0.5 col-span-2">
+                        <button type="button" onclick="setAddTaskEndChip('today')" data-chip="today" class="add-task-date-chip px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Today</button>
+                        <button type="button" onclick="setAddTaskEndChip('tomorrow')" data-chip="tomorrow" class="add-task-date-chip px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Tomorrow</button>
+                        <button type="button" onclick="setAddTaskEndChip('week')" data-chip="week" class="add-task-date-chip px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">+1 Week</button>
                     </div>
                 </div>
             </div>
@@ -2950,7 +2955,8 @@ FEW-SHOT EXAMPLES
             }
         }
 
-        async function createProject(name) {
+        async function createProject(name, metadata) {
+            const meta = metadata || {};
             if (currentUser) {
                 const colorIndex = (await loadRegistry()).length % PROJECT_COLORS.length;
                 const { data, error } = await supabase
@@ -2959,7 +2965,7 @@ FEW-SHOT EXAMPLES
                         user_id: currentUser.id,
                         name: name,
                         color: PROJECT_COLORS[colorIndex],
-                        metadata: {}
+                        metadata: meta
                     })
                     .select()
                     .single();
@@ -2976,7 +2982,8 @@ FEW-SHOT EXAMPLES
                     taskCount: 0,
                     completedCount: 0,
                     createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date().toISOString(),
+                    metadata: meta
                 });
                 saveRegistryLocal(registry);
                 localStorage.setItem('planner_proj_' + id, JSON.stringify({ tasks: [], history: [], logs: [], projectDescription: '', projectMeetings: [], projectChecklist: [], projectActivity: [], projectFiles: [] }));
@@ -3175,8 +3182,11 @@ FEW-SHOT EXAMPLES
             noResults.querySelector('.material-icons-round').textContent = 'search_off';
             noResults.querySelector('p').textContent = 'No projects match your search.';
 
-            // No projects at all — show empty state, hide toolbar
+            // No projects at all — auto-create Personal project and open it
             if (registry.length === 0) {
+                const personalId = await createProject('Personal', { isDefault: true });
+                if (personalId) { openProject(personalId); return; }
+                // Fallback to empty state if creation failed
                 grid.classList.add('hidden');
                 toolbar.classList.add('hidden');
                 emptyState.classList.remove('hidden');
@@ -3666,6 +3676,12 @@ FEW-SHOT EXAMPLES
         }
 
         async function confirmDeleteProject(id, name) {
+            const registry = await loadRegistry();
+            const proj = registry.find(p => p.id === id);
+            if (proj && proj.metadata && proj.metadata.isDefault) {
+                alert('The Personal project can\'t be deleted.');
+                return;
+            }
             if (confirm(`Delete project "${name}"? This cannot be undone.`)) {
                 await deleteProject(id);
             }
@@ -4713,14 +4729,12 @@ FEW-SHOT EXAMPLES
         function updateTask(index, field, value) {
             const task = tasks[index];
             if (field === 'start' && task.end && value > task.end) {
-                alert('Start date must be on or before end date.');
-                renderGantt();
-                return;
+                task.end = value;
+                markTaskDirty(task, 'end_date');
             }
             if (field === 'end' && task.start && value < task.start) {
-                alert('End date must be on or after start date.');
-                renderGantt();
-                return;
+                task.start = value;
+                markTaskDirty(task, 'start_date');
             }
             autoLockTask(task);
             task[field] = value;
@@ -4816,7 +4830,7 @@ FEW-SHOT EXAMPLES
             const today = new Date();
             const startStr = today.toISOString().slice(0, 10);
             const end = new Date(today);
-            end.setDate(end.getDate() + 7);
+            end.setDate(end.getDate() + 1);
             const endStr = end.toISOString().slice(0, 10);
 
             document.getElementById('addTaskName').value = '';
@@ -4824,8 +4838,59 @@ FEW-SHOT EXAMPLES
             document.getElementById('addTaskStart').value = startStr;
             document.getElementById('addTaskEnd').value = endStr;
             document.getElementById('addTaskModal').classList.remove('hidden');
+            highlightDateChip('tomorrow');
             document.getElementById('addTaskName').focus();
             pushNavState('modal');
+        }
+
+        function highlightDateChip(preset) {
+            document.querySelectorAll('.add-task-date-chip').forEach(btn => {
+                if (btn.dataset.chip === preset) {
+                    btn.classList.remove('bg-slate-700/60', 'text-slate-300', 'border-slate-600');
+                    btn.classList.add('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                } else {
+                    btn.classList.remove('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                    btn.classList.add('bg-slate-700/60', 'text-slate-300', 'border-slate-600');
+                }
+            });
+        }
+
+        function setAddTaskEndChip(preset) {
+            const today = new Date();
+            let d;
+            if (preset === 'today') { d = today; }
+            else if (preset === 'tomorrow') { d = new Date(today); d.setDate(d.getDate() + 1); }
+            else { d = new Date(today); d.setDate(d.getDate() + 7); }
+            const endStr = d.toISOString().slice(0, 10);
+            document.getElementById('addTaskEnd').value = endStr;
+            highlightDateChip(preset);
+            // Auto-sync: if end < start, push start back
+            const startEl = document.getElementById('addTaskStart');
+            if (startEl.value && startEl.value > endStr) {
+                startEl.value = endStr;
+            }
+        }
+
+        function onAddTaskDateChange(which) {
+            const startEl = document.getElementById('addTaskStart');
+            const endEl = document.getElementById('addTaskEnd');
+            if (which === 'start' && endEl.value && startEl.value > endEl.value) {
+                endEl.value = startEl.value;
+            } else if (which === 'end' && startEl.value && endEl.value < startEl.value) {
+                startEl.value = endEl.value;
+            }
+            // Update chip highlight to match current end date
+            const today = new Date();
+            const todayStr = today.toISOString().slice(0, 10);
+            const tom = new Date(today); tom.setDate(tom.getDate() + 1);
+            const tomStr = tom.toISOString().slice(0, 10);
+            const week = new Date(today); week.setDate(week.getDate() + 7);
+            const weekStr = week.toISOString().slice(0, 10);
+            const endVal = endEl.value;
+            if (endVal === todayStr) highlightDateChip('today');
+            else if (endVal === tomStr) highlightDateChip('tomorrow');
+            else if (endVal === weekStr) highlightDateChip('week');
+            else highlightDateChip(null); // no match, deselect all
         }
 
         function cancelAddTask() {
@@ -4836,11 +4901,10 @@ FEW-SHOT EXAMPLES
             const name = document.getElementById('addTaskName').value.trim();
             if (!name) { document.getElementById('addTaskName').focus(); return; }
 
-            const startVal = document.getElementById('addTaskStart').value;
-            const endVal = document.getElementById('addTaskEnd').value;
+            let startVal = document.getElementById('addTaskStart').value;
+            let endVal = document.getElementById('addTaskEnd').value;
             if (startVal && endVal && startVal > endVal) {
-                alert('Start date must be on or before end date.');
-                return;
+                endVal = startVal;
             }
 
             const maxId = tasks.reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
@@ -5168,14 +5232,14 @@ FEW-SHOT EXAMPLES
         function updateTaskDetail(field, value) {
             const task = tasks[currentTaskIndex];
             if (field === 'start' && task.end && value > task.end) {
-                alert('Start date must be on or before end date.');
-                document.getElementById('tdStart').value = task.start;
-                return;
+                task.end = value;
+                document.getElementById('tdEnd').value = value;
+                markTaskDirty(task, 'end_date');
             }
             if (field === 'end' && task.start && value < task.start) {
-                alert('End date must be on or after start date.');
-                document.getElementById('tdEnd').value = task.end;
-                return;
+                task.start = value;
+                document.getElementById('tdStart').value = value;
+                markTaskDirty(task, 'start_date');
             }
             autoLockTask(task);
             const oldValue = task[field];
