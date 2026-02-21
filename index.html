@@ -2674,6 +2674,7 @@ FEW-SHOT EXAMPLES
                     deadline: taskMap[p.id] ? taskMap[p.id].deadline : null,
                     createdAt: p.created_at,
                     updatedAt: p.updated_at,
+                    metadata: p.metadata || {},
                     _tasks: projectTasksMap[p.id] || []
                 }));
                 DataStore.set('registry', result);
@@ -3185,7 +3186,7 @@ FEW-SHOT EXAMPLES
         // =============================================
 
         async function renderDashboard() {
-            const registry = await loadRegistry();
+            let registry = await loadRegistry();
             const grid = document.getElementById('projectGrid');
             const emptyState = document.getElementById('emptyState');
             const toolbar = document.getElementById('dashboardToolbar');
@@ -3200,11 +3201,23 @@ FEW-SHOT EXAMPLES
             noResults.querySelector('.material-icons-round').textContent = 'search_off';
             noResults.querySelector('p').textContent = 'No projects match your search.';
 
-            // No projects at all — auto-create Personal project and open it
-            if (registry.length === 0) {
+            // Ensure Personal project exists for every user
+            const hasPersonal = registry.some(p => p.metadata && p.metadata.isDefault);
+            if (!hasPersonal) {
                 const personalId = await createProject('Personal', { isDefault: true });
-                if (personalId) { openProject(personalId); return; }
-                // Fallback to empty state if creation failed
+                if (personalId) {
+                    // Reload registry to include the new Personal project
+                    registry = await loadRegistry(true);
+                    if (registry.length === 1) {
+                        // Only project is the new Personal — open it directly
+                        openProject(personalId);
+                        return;
+                    }
+                }
+            }
+
+            if (registry.length === 0) {
+                // Fallback empty state if creation failed
                 grid.classList.add('hidden');
                 toolbar.classList.add('hidden');
                 emptyState.classList.remove('hidden');
