@@ -3412,7 +3412,10 @@ FEW-SHOT EXAMPLES
         }
 
         function sortProjects(projects, sortKey) {
-            const sorted = [...projects];
+            // Pin Personal project to top, sort the rest
+            const personal = projects.filter(p => p.metadata && p.metadata.isDefault);
+            const rest = projects.filter(p => !(p.metadata && p.metadata.isDefault));
+            const sorted = [...rest];
             switch (sortKey) {
                 case 'urgency':
                     sorted.sort((a, b) => {
@@ -3453,7 +3456,7 @@ FEW-SHOT EXAMPLES
                     sorted.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
                     break;
             }
-            return sorted;
+            return [...personal, ...sorted];
         }
 
         function handleProjectSort() {
