@@ -10431,12 +10431,21 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
 
                 if (error) {
                     console.error('Session check failed:', error);
+                    await supabase.auth.signOut();
                     showAuthView();
                     return;
                 }
 
                 if (session && session.user) {
-                    currentUser = session.user;
+                    // Validate the session is still alive by hitting the server
+                    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+                    if (userErr || !user) {
+                        console.warn('Stale session detected, signing out:', userErr?.message);
+                        await supabase.auth.signOut();
+                        showAuthView();
+                        return;
+                    }
+                    currentUser = user;
                     onUserLoggedIn();
                     return;
                 }
