@@ -3336,15 +3336,15 @@ FEW-SHOT EXAMPLES
                         <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
                             <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
                         </button>
-                        <button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
+                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
                             <span class="material-icons-round" style="font-size:18px">edit</span>
-                        </button>
+                        </button>`}
                         <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
                             <span class="material-icons-round" style="font-size:18px">palette</span>
                         </button>
-                        <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
+                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
                             <span class="material-icons-round" style="font-size:18px">content_copy</span>
-                        </button>
+                        </button>`}
                         ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
                             <span class="material-icons-round" style="font-size:18px">${isArchived ? 'unarchive' : 'inventory_2'}</span>
                         </button>`}
@@ -3988,6 +3988,7 @@ FEW-SHOT EXAMPLES
             const registry = await loadRegistry();
             const project = registry.find(p => p.id === currentProjectId);
             if (!project) return;
+            if (project.metadata && project.metadata.isDefault) return;
             const newName = prompt('Rename project:', project.name);
             if (!newName || !newName.trim()) return;
             if (registry.some(p => p.id !== currentProjectId && p.name.toLowerCase() === newName.trim().toLowerCase())) {
