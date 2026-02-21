@@ -2533,6 +2533,10 @@ FEW-SHOT EXAMPLES
 
         window.addEventListener('popstate', function(e) {
             if (!_navReady) return;
+            // Blur active input to trigger onchange/onblur saves before navigating away
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT')) {
+                document.activeElement.blur();
+            }
             if (!document.getElementById('logSummaryModal').classList.contains('hidden')) {
                 closeLogSummary(); return;
             }
@@ -5582,6 +5586,8 @@ FEW-SHOT EXAMPLES
                 projectChecklist = [];
                 projectActivity = [];
                 projectFiles = [];
+            } else {
+                saveProject();
             }
             _logsSource = null;
         }
