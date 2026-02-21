@@ -3791,13 +3791,13 @@ FEW-SHOT EXAMPLES
         }
 
         async function openProjectAndFindTask(projectId, taskName) {
+            calendarViewActive = false;
             await openProject(projectId);
-            // Allow the DOM to settle after project view swap
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
             // Find the task by name in the now-loaded tasks array
             const idx = tasks.findIndex(t => t.name === taskName);
             if (idx !== -1) {
-                openTaskDetail(idx);
+                // Delay to ensure project view is fully rendered and visible
+                setTimeout(() => openTaskDetail(idx), 100);
             }
         }
 
@@ -4214,11 +4214,18 @@ FEW-SHOT EXAMPLES
             rebuildChatUI();
             renderGantt();
 
-            // Hide calendar button & popover
+            // Hide calendar button & popover, reset calendar state
             closeCalendarPopover();
             const calBtnOpen = document.getElementById('calendarToggleBtn');
             calBtnOpen.classList.add('hidden');
             calBtnOpen.classList.remove('flex');
+            if (calendarViewActive) {
+                calendarViewActive = false;
+                calBtnOpen.querySelector('.material-icons-round').textContent = 'calendar_today';
+                calBtnOpen.classList.remove('text-blue-400');
+                calBtnOpen.classList.add('text-slate-400');
+                calBtnOpen.title = 'Calendar view';
+            }
 
             // Now swap views — project is fully rendered
             document.getElementById('authView').classList.add('hidden');
