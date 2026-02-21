@@ -2694,6 +2694,7 @@ FEW-SHOT EXAMPLES
             } catch (err) {
                 console.error('onUserLoggedIn error:', err);
                 // Show dashboard anyway so user isn't stuck on blank screen
+                document.getElementById('projectLoadingOverlay').classList.add('hidden');
                 document.getElementById('dashboardView').classList.remove('hidden');
             }
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
@@ -2913,16 +2914,30 @@ FEW-SHOT EXAMPLES
                     return DataStore.get('registry');
                 }
 
-                const [projectsResult, tasksResult] = await Promise.all([
-                    supabase.from('projects').select('*').order('created_at'),
-                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name')
+                // Timeout wrapper to prevent hanging queries from blocking the UI
+                const withTimeout = (promise, ms = 15000) => Promise.race([
+                    promise,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout')), ms))
                 ]);
-                const { data: projects, error } = projectsResult;
-                const { data: allTasks } = tasksResult;
-                if (error) {
-                    console.error('loadRegistry error:', error);
-                    if (isAuthError(error)) { handleSessionExpired(); return []; }
-                    // Return stale cache on error if available
+
+                let projects = [], allTasks = [];
+                try {
+                    const [projectsResult, tasksResult] = await Promise.all([
+                        withTimeout(supabase.from('projects').select('*').order('created_at')),
+                        withTimeout(supabase.from('tasks').select('project_id, progress, end_date, start_date, name'))
+                    ]);
+                    const pError = projectsResult.error;
+                    const tError = tasksResult.error;
+                    if (pError || tError) {
+                        console.error('loadRegistry query error:', pError || tError);
+                        if (pError && isAuthError(pError)) { handleSessionExpired(); return []; }
+                        if (DataStore.has('registry')) return DataStore.get('registry');
+                        return [];
+                    }
+                    projects = projectsResult.data || [];
+                    allTasks = tasksResult.data || [];
+                } catch (fetchErr) {
+                    console.error('loadRegistry fetch failed:', fetchErr);
                     if (DataStore.has('registry')) return DataStore.get('registry');
                     return [];
                 }
@@ -4610,6 +4625,8 @@ FEW-SHOT EXAMPLES
 
             const overlay = document.getElementById('projectLoadingOverlay');
             overlay.classList.remove('hidden');
+            // Safety net: always hide overlay after 20s even if queries hang
+            const overlayTimeout = setTimeout(() => overlay.classList.add('hidden'), 20000);
 
             currentProjectId = null;
             currentProjectName = '';
@@ -4644,7 +4661,11 @@ FEW-SHOT EXAMPLES
             closeCalendarPopover();
 
             // Render dashboard (uses cache if available — instant)
-            await renderDashboard();
+            try {
+                await renderDashboard();
+            } catch (err) {
+                console.error('renderDashboard error:', err);
+            }
 
             // If calendar was active, re-render it and hide project grid
             if (calendarViewActive) {
@@ -4665,6 +4686,7 @@ FEW-SHOT EXAMPLES
             scrollToProject(savedProjectId);
 
             // Hide loading overlay after browser paints
+            clearTimeout(overlayTimeout);
             requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
 
             // Background refresh: if registry is stale, silently re-fetch and update
@@ -4684,11 +4706,21 @@ FEW-SHOT EXAMPLES
         async function openProject(id) {
             const overlay = document.getElementById('projectLoadingOverlay');
             overlay.classList.remove('hidden');
+            // Safety net: always hide overlay after 20s even if queries hang
+            const overlayTimeout = setTimeout(() => overlay.classList.add('hidden'), 20000);
 
             currentProjectId = id;
 
             // Load data (cache-first via loadProject/loadRegistry SWR)
-            const [data, registry] = await Promise.all([loadProject(id), loadRegistry()]);
+            let data, registry;
+            try {
+                [data, registry] = await Promise.all([loadProject(id), loadRegistry()]);
+            } catch (err) {
+                console.error('openProject fetch error:', err);
+                clearTimeout(overlayTimeout);
+                overlay.classList.add('hidden');
+                return;
+            }
             // Guard: user navigated away during fetch
             if (currentProjectId !== id) return;
 
@@ -4752,6 +4784,7 @@ FEW-SHOT EXAMPLES
             applyPermissionUI();
 
             // Hide loading overlay
+            clearTimeout(overlayTimeout);
             overlay.classList.add('hidden');
 
             // Subscribe to Realtime changes for this project
