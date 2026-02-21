@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v20</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v21</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1687,6 +1687,13 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwcGx5eXBrdmltbnR3eXF1c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzc4MzYsImV4cCI6MjA4Njc1MzgzNn0.17jWZppDbE4q71vCNjkkhL77BZwi7aJ6J3XZFsUkhpE';
         const ADMIN_EMAIL = 'edbayag2001@yahoo.com';
         function isAdmin() { return currentUser && currentUser.email === ADMIN_EMAIL; }
+        function localDateStr(d) {
+            if (!d) d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
         const _supabaseLib = window.supabase; // save CDN reference before overwriting
         var supabase = null;
         try {
@@ -2310,7 +2317,7 @@
         }
 
         function buildSystemPrompt(taskContextJson, mode, agreedPlan, projectRegistry) {
-            const today = new Date().toISOString().slice(0, 10);
+            const today = localDateStr();
             const projectJson = taskContextJson || '[]';
             const registrySection = (projectRegistry && projectRegistry.length > 0)
                 ? `\nUSER'S OTHER PROJECTS (for copy requests only):\n${JSON.stringify(projectRegistry)}`
@@ -2637,23 +2644,24 @@ FEW-SHOT EXAMPLES
         }
 
         async function handleSignOut() {
-            if (!confirm('Are you sure you want to sign out?')) return;
-            clearTimeout(window.detailSaveTimeout);
-            unsubscribeRealtime();
-            if (currentProjectId) {
-                await saveProject();
-            }
-            DataStore.clear();
-            await supabase.auth.signOut();
-            currentUser = null;
-            userProfile = null;
-            currentProjectId = null;
-            tasks = [];
-            history = [];
-            pendingPlan = null;
-            pendingChatFile = null;
-            _pendingDeletes = [];
-            showAuthView();
+            showConfirmModal('Are you sure you want to sign out?', async () => {
+                clearTimeout(window.detailSaveTimeout);
+                unsubscribeRealtime();
+                if (currentProjectId) {
+                    await saveProject();
+                }
+                DataStore.clear();
+                await supabase.auth.signOut();
+                currentUser = null;
+                userProfile = null;
+                currentProjectId = null;
+                tasks = [];
+                history = [];
+                pendingPlan = null;
+                pendingChatFile = null;
+                _pendingDeletes = [];
+                showAuthView();
+            }, {title:'Sign Out', okText:'Sign Out', destructive:false});
         }
 
         async function continueAsGuest() {
@@ -3545,14 +3553,15 @@ FEW-SHOT EXAMPLES
         }
 
         async function removeShare(shareId) {
-            if (!confirm('Remove this person\'s access?')) return;
-            const { data, error } = await supabase.rpc('remove_project_share', { p_share_id: shareId });
-            if (error || (data && data.error)) {
-                alert('Failed to remove share.');
-                return;
-            }
-            DataStore.invalidate('registry');
-            refreshShareList();
+            showConfirmModal('Remove this person\'s access?', async () => {
+                const { data, error } = await supabase.rpc('remove_project_share', { p_share_id: shareId });
+                if (error || (data && data.error)) {
+                    alert('Failed to remove share.');
+                    return;
+                }
+                DataStore.invalidate('registry');
+                refreshShareList();
+            }, {title:'Remove Access', okText:'Remove'});
         }
 
         function updateRegistryMetadataLocal() {
@@ -4397,6 +4406,27 @@ FEW-SHOT EXAMPLES
             }, duration);
         }
 
+        function showConfirmModal(message, onConfirm, opts = {}) {
+            const title = opts.title || 'Confirm';
+            const okText = opts.okText || 'Delete';
+            const destructive = opts.destructive !== false;
+            const modal = document.getElementById('confirmModal');
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalMsg').textContent = message;
+            const okBtn = document.getElementById('confirmModalOk');
+            okBtn.textContent = okText;
+            okBtn.className = `px-4 py-1.5 text-xs text-white rounded transition-colors ${destructive ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`;
+            const cancelBtn = document.getElementById('confirmModalCancel');
+            const newOk = okBtn.cloneNode(true);
+            okBtn.parentNode.replaceChild(newOk, okBtn);
+            const newCancel = cancelBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+            newOk.addEventListener('click', () => { modal.classList.add('hidden'); onConfirm(); });
+            newCancel.addEventListener('click', () => { modal.classList.add('hidden'); });
+            modal.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
+            modal.classList.remove('hidden');
+        }
+
         // =============================================
         // Admin Backup Functions
         // =============================================
@@ -4585,9 +4615,9 @@ FEW-SHOT EXAMPLES
                 alert('The Personal project can\'t be deleted.');
                 return;
             }
-            if (confirm(`Delete project "${name}"? This cannot be undone.`)) {
+            showConfirmModal(`Delete project "${name}"? This cannot be undone.`, async () => {
                 await deleteProject(id);
-            }
+            }, {title:'Delete Project', okText:'Delete'});
         }
 
         // =============================================
@@ -4823,17 +4853,18 @@ FEW-SHOT EXAMPLES
 
         function clearChat() {
             if (history.length === 0) return;
-            if (!confirm('Clear chat history and start a new conversation?')) return;
-            history = [];
-            pendingMerge = null;
-            pendingPrompt = null;
-            pendingAiText = null;
-            pendingPlan = null;
-            pendingChatFile = null;
-            removeChatFile();
-            markChatDirty();
-            rebuildChatUI();
-            scheduleSave();
+            showConfirmModal('Clear chat history and start a new conversation?', () => {
+                history = [];
+                pendingMerge = null;
+                pendingPrompt = null;
+                pendingAiText = null;
+                pendingPlan = null;
+                pendingChatFile = null;
+                removeChatFile();
+                markChatDirty();
+                rebuildChatUI();
+                scheduleSave();
+            }, {title:'Clear Chat', okText:'Clear', destructive:false});
         }
 
         function rebuildChatUI() {
@@ -5787,51 +5818,53 @@ FEW-SHOT EXAMPLES
         function deleteTask(index) {
             if (!isProjectOwner()) return;
             const task = tasks[index];
-            if (!confirm(`Delete "${task.name}"?`)) return;
-            // Capture _rowId for pending DB deletion before removing from array
-            if (task._rowId) _pendingDeletes.push(task._rowId);
-            const deletedId = task.id;
-            const deletedName = task.name;
-            addProjectLog('deleted', null, deletedName, null, '');
-            tasks.splice(index, 1);
-            // Renumber IDs (required by Gantt + dependencies)
-            const oldToNew = {};
-            tasks.forEach((t, i) => {
-                const newId = String(i + 1);
-                oldToNew[t.id] = newId;
-                t.id = newId;
-            });
-            // Remap dependency references and remove references to deleted task
-            tasks.forEach(t => {
-                if (!t.dependencies) return;
-                const deps = t.dependencies.split(',').map(d => d.trim()).filter(Boolean);
-                const remapped = deps
-                    .filter(d => d !== deletedId)
-                    .map(d => oldToNew[d] || d);
-                t.dependencies = remapped.join(',');
-            });
-            // Remap taskId references in project logs
-            projectLogs.forEach(log => {
-                if (log.taskId === deletedId) log.taskId = null;
-                else if (log.taskId && oldToNew[log.taskId]) log.taskId = oldToNew[log.taskId];
-            });
-            // All remaining tasks dirty (sort_order, id, dependencies renumbered)
-            markAllTasksDirty();
-            markMetadataDirty();
-            renderGantt();
-            saveProject();
+            showConfirmModal(`Delete "${task.name}"?`, () => {
+                // Capture _rowId for pending DB deletion before removing from array
+                if (task._rowId) _pendingDeletes.push(task._rowId);
+                const deletedId = task.id;
+                const deletedName = task.name;
+                addProjectLog('deleted', null, deletedName, null, '');
+                tasks.splice(index, 1);
+                // Renumber IDs (required by Gantt + dependencies)
+                const oldToNew = {};
+                tasks.forEach((t, i) => {
+                    const newId = String(i + 1);
+                    oldToNew[t.id] = newId;
+                    t.id = newId;
+                });
+                // Remap dependency references and remove references to deleted task
+                tasks.forEach(t => {
+                    if (!t.dependencies) return;
+                    const deps = t.dependencies.split(',').map(d => d.trim()).filter(Boolean);
+                    const remapped = deps
+                        .filter(d => d !== deletedId)
+                        .map(d => oldToNew[d] || d);
+                    t.dependencies = remapped.join(',');
+                });
+                // Remap taskId references in project logs
+                projectLogs.forEach(log => {
+                    if (log.taskId === deletedId) log.taskId = null;
+                    else if (log.taskId && oldToNew[log.taskId]) log.taskId = oldToNew[log.taskId];
+                });
+                // All remaining tasks dirty (sort_order, id, dependencies renumbered)
+                markAllTasksDirty();
+                markMetadataDirty();
+                renderGantt();
+                saveProject();
+            }, {title:'Delete Task', okText:'Delete'});
         }
 
         function deleteAllTasks() {
             if (tasks.length === 0) return;
-            if (!confirm(`Delete all ${tasks.length} tasks? This cannot be undone.`)) return;
-            tasks.forEach(t => { if (t._rowId) _pendingDeletes.push(t._rowId); });
-            addProjectLog('deleted', null, `All tasks (${tasks.length})`, null, '');
-            tasks = [];
-            markAllTasksDirty();
-            markMetadataDirty();
-            renderGantt();
-            saveProject();
+            showConfirmModal(`Delete all ${tasks.length} tasks? This cannot be undone.`, () => {
+                tasks.forEach(t => { if (t._rowId) _pendingDeletes.push(t._rowId); });
+                addProjectLog('deleted', null, `All tasks (${tasks.length})`, null, '');
+                tasks = [];
+                markAllTasksDirty();
+                markMetadataDirty();
+                renderGantt();
+                saveProject();
+            }, {title:'Delete All Tasks', okText:'Delete All'});
         }
 
         function toggleTaskLock(index) {
@@ -5889,17 +5922,17 @@ FEW-SHOT EXAMPLES
                 dateGrid.classList.remove('grid-cols-1');
                 dateGrid.classList.add('grid-cols-2');
                 endLabel.textContent = 'End Date';
-                document.getElementById('addTaskStart').value = new Date().toISOString().slice(0, 10);
+                document.getElementById('addTaskStart').value = localDateStr();
             }
         }
 
         function showAddTaskModal() {
             if (!isProjectOwner()) return;
             const today = new Date();
-            const startStr = today.toISOString().slice(0, 10);
+            const startStr = localDateStr(today);
             const end = new Date(today);
             end.setDate(end.getDate() + 1);
-            const endStr = end.toISOString().slice(0, 10);
+            const endStr = localDateStr(end);
 
             document.getElementById('addTaskName').value = '';
             document.getElementById('addTaskPriority').value = 'medium';
@@ -5939,7 +5972,7 @@ FEW-SHOT EXAMPLES
             if (preset === 'today') { d = today; }
             else if (preset === 'tomorrow') { d = new Date(today); d.setDate(d.getDate() + 1); }
             else { d = new Date(today); d.setDate(d.getDate() + 7); }
-            const endStr = d.toISOString().slice(0, 10);
+            const endStr = localDateStr(d);
             document.getElementById('addTaskEnd').value = endStr;
             highlightDateChip(preset);
             if (addTaskFixedDateOn) {
@@ -5965,11 +5998,11 @@ FEW-SHOT EXAMPLES
             }
             // Update chip highlight to match current end date
             const today = new Date();
-            const todayStr = today.toISOString().slice(0, 10);
+            const todayStr = localDateStr(today);
             const tom = new Date(today); tom.setDate(tom.getDate() + 1);
-            const tomStr = tom.toISOString().slice(0, 10);
+            const tomStr = localDateStr(tom);
             const week = new Date(today); week.setDate(week.getDate() + 7);
-            const weekStr = week.toISOString().slice(0, 10);
+            const weekStr = localDateStr(week);
             const endVal = endEl.value;
             if (endVal === todayStr) highlightDateChip('today');
             else if (endVal === tomStr) highlightDateChip('tomorrow');
@@ -6911,12 +6944,13 @@ FEW-SHOT EXAMPLES
             const count = projectLogs.length;
             if (count === 0) return;
             const half = Math.ceil(count / 2);
-            if (!confirm(`Clear the ${half} oldest log entries?`)) return;
-            projectLogs = projectLogs.slice(half);
-            markMetadataDirty();
-            saveProjectFromHub();
-            renderProjectLogs();
-            showToast(`Cleared ${half} oldest entries. ${projectLogs.length} remaining.`, 'info');
+            showConfirmModal(`Clear the ${half} oldest log entries?`, () => {
+                projectLogs = projectLogs.slice(half);
+                markMetadataDirty();
+                saveProjectFromHub();
+                renderProjectLogs();
+                showToast(`Cleared ${half} oldest entries. ${projectLogs.length} remaining.`, 'info');
+            }, {title:'Clear Logs', okText:'Clear'});
         }
 
         // ---- WEEKLY LOG SUMMARY (AI) ----
@@ -6976,7 +7010,7 @@ FEW-SHOT EXAMPLES
 
             // Build context
             const projName = currentProjectName || 'Project';
-            const dateRange = `${sevenDaysAgo.toISOString().slice(0, 10)} to ${now.toISOString().slice(0, 10)}`;
+            const dateRange = `${localDateStr(sevenDaysAgo)} to ${localDateStr(now)}`;
 
             // Group logs by action type for summary
             const actionCounts = {};
@@ -7192,7 +7226,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             pushNavState('modal');
             editingProjectMeetingIndex = null;
             document.getElementById('projMtgTitle').value = '';
-            document.getElementById('projMtgDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('projMtgDate').value = localDateStr();
             document.getElementById('projMtgAttendees').value = '';
             document.getElementById('projMtgNotes').value = '';
             document.getElementById('projMeetingForm').classList.remove('hidden');
@@ -7290,35 +7324,36 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function deleteProjectMeeting(index) {
-            if (!confirm('Delete this meeting?')) return;
-            const mtgCopy = JSON.parse(JSON.stringify(projectMeetings[index]));
-            const capturedIdx = index;
-            const removed = projectMeetings.splice(index, 1);
+            showConfirmModal('Delete this meeting?', () => {
+                const mtgCopy = JSON.parse(JSON.stringify(projectMeetings[index]));
+                const capturedIdx = index;
+                const removed = projectMeetings.splice(index, 1);
 
-            if (!_isUndoRedo) {
-                addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
-                pushProjUndo({
-                    tab: 'meetings',
-                    description: 'Deleted meeting',
-                    undoFn() {
-                        projectMeetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectMeetingsTab();
-                    },
-                    redoFn() {
-                        const ri = projectMeetings.findIndex(m => m.id === mtgCopy.id);
-                        if (ri > -1) projectMeetings.splice(ri, 1);
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectMeetingsTab();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    addProjectLog('removed', null, 'Project', null, 'meeting: ' + removed[0].title);
+                    pushProjUndo({
+                        tab: 'meetings',
+                        description: 'Deleted meeting',
+                        undoFn() {
+                            projectMeetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectMeetingsTab();
+                        },
+                        redoFn() {
+                            const ri = projectMeetings.findIndex(m => m.id === mtgCopy.id);
+                            if (ri > -1) projectMeetings.splice(ri, 1);
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectMeetingsTab();
+                        }
+                    });
+                }
 
-            markMetadataDirty();
-            saveProjectFromHub();
-            renderProjectMeetingsTab();
+                markMetadataDirty();
+                saveProjectFromHub();
+                renderProjectMeetingsTab();
+            }, {title:'Delete Meeting', okText:'Delete'});
         }
 
         // ---- PROJECT CHECKLIST TAB ----
@@ -7487,34 +7522,35 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function deleteProjectChecklistItem(id) {
             const idx = (projectChecklist || []).findIndex(c => c.id === id);
             if (idx === -1) return;
-            if (!confirm('Delete this checklist item?')) return;
-            const itemCopy = JSON.parse(JSON.stringify(projectChecklist[idx]));
-            const capturedIdx = idx;
-            projectChecklist.splice(idx, 1);
+            showConfirmModal('Delete this checklist item?', () => {
+                const itemCopy = JSON.parse(JSON.stringify(projectChecklist[idx]));
+                const capturedIdx = idx;
+                projectChecklist.splice(idx, 1);
 
-            if (!_isUndoRedo) {
-                pushProjUndo({
-                    tab: 'checklist',
-                    description: 'Deleted checklist item',
-                    undoFn() {
-                        projectChecklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectChecklistTab();
-                    },
-                    redoFn() {
-                        const ri = projectChecklist.findIndex(c => c.id === itemCopy.id);
-                        if (ri > -1) projectChecklist.splice(ri, 1);
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectChecklistTab();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    pushProjUndo({
+                        tab: 'checklist',
+                        description: 'Deleted checklist item',
+                        undoFn() {
+                            projectChecklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectChecklistTab();
+                        },
+                        redoFn() {
+                            const ri = projectChecklist.findIndex(c => c.id === itemCopy.id);
+                            if (ri > -1) projectChecklist.splice(ri, 1);
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectChecklistTab();
+                        }
+                    });
+                }
 
-            markMetadataDirty();
-            saveProjectFromHub();
-            renderProjectChecklistTab();
+                markMetadataDirty();
+                saveProjectFromHub();
+                renderProjectChecklistTab();
+            }, {title:'Delete Item', okText:'Delete'});
         }
 
         // ---- PROJECT ACTIVITY LOG TAB ----
@@ -7655,34 +7691,35 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function deleteProjectActivityEntry(id) {
             const idx = projectActivity.findIndex(a => a.id === id);
             if (idx === -1) return;
-            if (!confirm('Delete this activity entry?')) return;
-            const entryCopy = JSON.parse(JSON.stringify(projectActivity[idx]));
-            const capturedIdx = idx;
-            projectActivity.splice(idx, 1);
+            showConfirmModal('Delete this activity entry?', () => {
+                const entryCopy = JSON.parse(JSON.stringify(projectActivity[idx]));
+                const capturedIdx = idx;
+                projectActivity.splice(idx, 1);
 
-            if (!_isUndoRedo) {
-                pushProjUndo({
-                    tab: 'activitylog',
-                    description: 'Deleted comment',
-                    undoFn() {
-                        projectActivity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectActivityTab();
-                    },
-                    redoFn() {
-                        const ri = projectActivity.findIndex(a => a.id === entryCopy.id);
-                        if (ri > -1) projectActivity.splice(ri, 1);
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectActivityTab();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    pushProjUndo({
+                        tab: 'activitylog',
+                        description: 'Deleted comment',
+                        undoFn() {
+                            projectActivity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectActivityTab();
+                        },
+                        redoFn() {
+                            const ri = projectActivity.findIndex(a => a.id === entryCopy.id);
+                            if (ri > -1) projectActivity.splice(ri, 1);
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectActivityTab();
+                        }
+                    });
+                }
 
-            markMetadataDirty();
-            saveProjectFromHub();
-            renderProjectActivityTab();
+                markMetadataDirty();
+                saveProjectFromHub();
+                renderProjectActivityTab();
+            }, {title:'Delete Entry', okText:'Delete'});
         }
 
         // ---- PROJECT FILES TAB ----
@@ -7792,39 +7829,41 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         function deleteProjectFile(index) {
             const file = projectFiles[index];
-            if (!file || !confirm(`Delete "${file.name}"?`)) return;
-            const fileCopy = JSON.parse(JSON.stringify(file));
-            const capturedIdx = index;
-            projectFiles.splice(index, 1);
-            // Do NOT deleteFileData yet — defer via onEvict
+            if (!file) return;
+            showConfirmModal(`Delete "${file.name}"?`, () => {
+                const fileCopy = JSON.parse(JSON.stringify(file));
+                const capturedIdx = index;
+                projectFiles.splice(index, 1);
+                // Do NOT deleteFileData yet — defer via onEvict
 
-            if (!_isUndoRedo) {
-                addProjectLog('removed', null, 'Project', null, fileCopy.name);
-                pushProjUndo({
-                    tab: 'files',
-                    description: 'Deleted file',
-                    onEvict() { deleteFileData(fileCopy); },
-                    undoFn() {
-                        projectFiles.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectFilesTab();
-                    },
-                    redoFn() {
-                        const ri = projectFiles.findIndex(f => f.id === fileCopy.id);
-                        if (ri > -1) projectFiles.splice(ri, 1);
-                        markMetadataDirty();
-                        saveProjectFromHub();
-                        renderProjectFilesTab();
-                    }
-                });
-            } else {
-                deleteFileData(fileCopy);
-            }
+                if (!_isUndoRedo) {
+                    addProjectLog('removed', null, 'Project', null, fileCopy.name);
+                    pushProjUndo({
+                        tab: 'files',
+                        description: 'Deleted file',
+                        onEvict() { deleteFileData(fileCopy); },
+                        undoFn() {
+                            projectFiles.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectFilesTab();
+                        },
+                        redoFn() {
+                            const ri = projectFiles.findIndex(f => f.id === fileCopy.id);
+                            if (ri > -1) projectFiles.splice(ri, 1);
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectFilesTab();
+                        }
+                    });
+                } else {
+                    deleteFileData(fileCopy);
+                }
 
-            markMetadataDirty();
-            saveProjectFromHub();
-            renderProjectFilesTab();
+                markMetadataDirty();
+                saveProjectFromHub();
+                renderProjectFilesTab();
+            }, {title:'Delete File', okText:'Delete'});
         }
 
         function navigateToTaskFromLog(taskId, tab) {
@@ -8005,41 +8044,42 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const idx = task.activity.findIndex(a => a.id === id);
             if (idx === -1) return;
-            if (!confirm('Delete this activity entry?')) return;
-            const entryCopy = JSON.parse(JSON.stringify(task.activity[idx]));
-            const capturedIdx = idx;
-            autoLockTask(task);
-            task.activity.splice(idx, 1);
+            showConfirmModal('Delete this activity entry?', () => {
+                const entryCopy = JSON.parse(JSON.stringify(task.activity[idx]));
+                const capturedIdx = idx;
+                autoLockTask(task);
+                task.activity.splice(idx, 1);
 
-            if (!_isUndoRedo) {
-                const capturedIndex = currentTaskIndex;
-                pushTaskUndo({
-                    tab: 'activitylog',
-                    description: 'Deleted comment',
-                    undoFn() {
-                        const t = tasks[capturedIndex];
-                        t.activity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
-                        autoLockTask(t);
-                        markTaskDirty(t, 'activity');
-                        renderActivityTab(t);
-                        saveProject();
-                    },
-                    redoFn() {
-                        const t = tasks[capturedIndex];
-                        const ri = t.activity.findIndex(a => a.id === entryCopy.id);
-                        if (ri > -1) t.activity.splice(ri, 1);
-                        autoLockTask(t);
-                        markTaskDirty(t, 'activity');
-                        renderActivityTab(t);
-                        saveProject();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    const capturedIndex = currentTaskIndex;
+                    pushTaskUndo({
+                        tab: 'activitylog',
+                        description: 'Deleted comment',
+                        undoFn() {
+                            const t = tasks[capturedIndex];
+                            t.activity.splice(capturedIdx, 0, JSON.parse(JSON.stringify(entryCopy)));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'activity');
+                            renderActivityTab(t);
+                            saveProject();
+                        },
+                        redoFn() {
+                            const t = tasks[capturedIndex];
+                            const ri = t.activity.findIndex(a => a.id === entryCopy.id);
+                            if (ri > -1) t.activity.splice(ri, 1);
+                            autoLockTask(t);
+                            markTaskDirty(t, 'activity');
+                            renderActivityTab(t);
+                            saveProject();
+                        }
+                    });
+                }
 
-            markTaskDirty(task, 'activity');
-            renderActivityTab(task);
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
+                markTaskDirty(task, 'activity');
+                renderActivityTab(task);
+                updateRowIndicators(currentTaskIndex);
+                saveProject();
+            }, {title:'Delete Entry', okText:'Delete'});
         }
 
         // ---- CHECKLIST TAB ----
@@ -8244,44 +8284,45 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const idx = (task.checklist || []).findIndex(c => c.id === id);
             if (idx === -1) return;
-            if (!confirm('Delete this checklist item?')) return;
-            const itemCopy = JSON.parse(JSON.stringify(task.checklist[idx]));
-            const capturedIdx = idx;
-            autoLockTask(task);
-            task.checklist.splice(idx, 1);
+            showConfirmModal('Delete this checklist item?', () => {
+                const itemCopy = JSON.parse(JSON.stringify(task.checklist[idx]));
+                const capturedIdx = idx;
+                autoLockTask(task);
+                task.checklist.splice(idx, 1);
 
-            if (!_isUndoRedo) {
-                const capturedIndex = currentTaskIndex;
-                pushTaskUndo({
-                    tab: 'checklist',
-                    description: 'Deleted checklist item',
-                    undoFn() {
-                        const t = tasks[capturedIndex];
-                        if (!t.checklist) t.checklist = [];
-                        t.checklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
-                        autoLockTask(t);
-                        markTaskDirty(t, 'checklist');
-                        renderChecklistTab(t);
-                        renderTaskDetailHeader();
-                        saveProject();
-                    },
-                    redoFn() {
-                        const t = tasks[capturedIndex];
-                        const ri = (t.checklist || []).findIndex(c => c.id === itemCopy.id);
-                        if (ri > -1) t.checklist.splice(ri, 1);
-                        autoLockTask(t);
-                        markTaskDirty(t, 'checklist');
-                        renderChecklistTab(t);
-                        renderTaskDetailHeader();
-                        saveProject();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    const capturedIndex = currentTaskIndex;
+                    pushTaskUndo({
+                        tab: 'checklist',
+                        description: 'Deleted checklist item',
+                        undoFn() {
+                            const t = tasks[capturedIndex];
+                            if (!t.checklist) t.checklist = [];
+                            t.checklist.splice(capturedIdx, 0, JSON.parse(JSON.stringify(itemCopy)));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'checklist');
+                            renderChecklistTab(t);
+                            renderTaskDetailHeader();
+                            saveProject();
+                        },
+                        redoFn() {
+                            const t = tasks[capturedIndex];
+                            const ri = (t.checklist || []).findIndex(c => c.id === itemCopy.id);
+                            if (ri > -1) t.checklist.splice(ri, 1);
+                            autoLockTask(t);
+                            markTaskDirty(t, 'checklist');
+                            renderChecklistTab(t);
+                            renderTaskDetailHeader();
+                            saveProject();
+                        }
+                    });
+                }
 
-            markTaskDirty(task, 'checklist');
-            renderChecklistTab(task);
-            renderTaskDetailHeader();
-            saveProject();
+                markTaskDirty(task, 'checklist');
+                renderChecklistTab(task);
+                renderTaskDetailHeader();
+                saveProject();
+            }, {title:'Delete Item', okText:'Delete'});
         }
 
         // ---- FILES TAB ----
@@ -8453,54 +8494,56 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
-            if (!file || !confirm(`Delete "${file.name}"?`)) return;
-            const fileCopy = JSON.parse(JSON.stringify(file));
-            const capturedIdx = index;
-            autoLockTask(task);
-            task.files.splice(index, 1);
-            // Do NOT deleteFileData yet — defer via onEvict
+            if (!file) return;
+            showConfirmModal(`Delete "${file.name}"?`, () => {
+                const fileCopy = JSON.parse(JSON.stringify(file));
+                const capturedIdx = index;
+                autoLockTask(task);
+                task.files.splice(index, 1);
+                // Do NOT deleteFileData yet — defer via onEvict
 
-            if (!_isUndoRedo) {
-                addActivityEntry(task, 'system', `File removed: "${fileCopy.name}"`);
-                addProjectLog('removed', task.id, task.name, 'files', fileCopy.name);
-                const capturedIndex = currentTaskIndex;
-                pushTaskUndo({
-                    tab: 'files',
-                    description: 'Deleted file',
-                    onEvict() { deleteFileData(fileCopy); },
-                    undoFn() {
-                        const t = tasks[capturedIndex];
-                        t.files.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
-                        autoLockTask(t);
-                        markTaskDirty(t, 'files');
-                        renderFilesTab(t);
-                        renderTaskDetailHeader();
-                        updateRowIndicators(capturedIndex);
-                        saveProject();
-                    },
-                    redoFn() {
-                        const t = tasks[capturedIndex];
-                        const ri = t.files.findIndex(f => f.id === fileCopy.id);
-                        if (ri > -1) t.files.splice(ri, 1);
-                        autoLockTask(t);
-                        markTaskDirty(t, 'files');
-                        renderFilesTab(t);
-                        renderTaskDetailHeader();
-                        updateRowIndicators(capturedIndex);
-                        saveProject();
-                    }
-                });
-            } else {
-                deleteFileData(fileCopy);
-            }
+                if (!_isUndoRedo) {
+                    addActivityEntry(task, 'system', `File removed: "${fileCopy.name}"`);
+                    addProjectLog('removed', task.id, task.name, 'files', fileCopy.name);
+                    const capturedIndex = currentTaskIndex;
+                    pushTaskUndo({
+                        tab: 'files',
+                        description: 'Deleted file',
+                        onEvict() { deleteFileData(fileCopy); },
+                        undoFn() {
+                            const t = tasks[capturedIndex];
+                            t.files.splice(capturedIdx, 0, JSON.parse(JSON.stringify(fileCopy)));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'files');
+                            renderFilesTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        },
+                        redoFn() {
+                            const t = tasks[capturedIndex];
+                            const ri = t.files.findIndex(f => f.id === fileCopy.id);
+                            if (ri > -1) t.files.splice(ri, 1);
+                            autoLockTask(t);
+                            markTaskDirty(t, 'files');
+                            renderFilesTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        }
+                    });
+                } else {
+                    deleteFileData(fileCopy);
+                }
 
-            markTaskDirty(task, 'files');
-            markTaskDirty(task, 'activity');
-            markMetadataDirty();
-            renderFilesTab(task);
-            renderTaskDetailHeader();
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
+                markTaskDirty(task, 'files');
+                markTaskDirty(task, 'activity');
+                markMetadataDirty();
+                renderFilesTab(task);
+                renderTaskDetailHeader();
+                updateRowIndicators(currentTaskIndex);
+                saveProject();
+            }, {title:'Delete File', okText:'Delete'});
         }
 
         // Drag and drop support
@@ -8582,7 +8625,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             pushNavState('modal');
             editingMeetingIndex = null;
             document.getElementById('mtgTitle').value = '';
-            document.getElementById('mtgDate').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('mtgDate').value = localDateStr();
             document.getElementById('mtgAttendees').value = '';
             document.getElementById('mtgNotes').value = '';
             document.getElementById('meetingForm').classList.remove('hidden');
@@ -8709,49 +8752,50 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function deleteMeeting(index) {
             if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
-            if (!confirm('Delete this meeting?')) return;
-            const mtgCopy = JSON.parse(JSON.stringify(task.meetings[index]));
-            const capturedIdx = index;
-            autoLockTask(task);
-            const removed = task.meetings.splice(index, 1);
+            showConfirmModal('Delete this meeting?', () => {
+                const mtgCopy = JSON.parse(JSON.stringify(task.meetings[index]));
+                const capturedIdx = index;
+                autoLockTask(task);
+                const removed = task.meetings.splice(index, 1);
 
-            if (!_isUndoRedo) {
-                addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
-                addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
-                const capturedIndex = currentTaskIndex;
-                pushTaskUndo({
-                    tab: 'meetings',
-                    description: 'Deleted meeting',
-                    undoFn() {
-                        const t = tasks[capturedIndex];
-                        t.meetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
-                        autoLockTask(t);
-                        markTaskDirty(t, 'meetings');
-                        renderMeetingsTab(t);
-                        renderTaskDetailHeader();
-                        updateRowIndicators(capturedIndex);
-                        saveProject();
-                    },
-                    redoFn() {
-                        const t = tasks[capturedIndex];
-                        const ri = t.meetings.findIndex(m => m.id === mtgCopy.id);
-                        if (ri > -1) t.meetings.splice(ri, 1);
-                        autoLockTask(t);
-                        markTaskDirty(t, 'meetings');
-                        renderMeetingsTab(t);
-                        renderTaskDetailHeader();
-                        updateRowIndicators(capturedIndex);
-                        saveProject();
-                    }
-                });
-            }
+                if (!_isUndoRedo) {
+                    addActivityEntry(task, 'system', `Meeting removed: "${removed[0].title}"`);
+                    addProjectLog('removed', task.id, task.name, 'meetings', 'meeting: ' + removed[0].title);
+                    const capturedIndex = currentTaskIndex;
+                    pushTaskUndo({
+                        tab: 'meetings',
+                        description: 'Deleted meeting',
+                        undoFn() {
+                            const t = tasks[capturedIndex];
+                            t.meetings.splice(capturedIdx, 0, JSON.parse(JSON.stringify(mtgCopy)));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'meetings');
+                            renderMeetingsTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        },
+                        redoFn() {
+                            const t = tasks[capturedIndex];
+                            const ri = t.meetings.findIndex(m => m.id === mtgCopy.id);
+                            if (ri > -1) t.meetings.splice(ri, 1);
+                            autoLockTask(t);
+                            markTaskDirty(t, 'meetings');
+                            renderMeetingsTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        }
+                    });
+                }
 
-            markTaskDirty(task, 'meetings');
-            markTaskDirty(task, 'activity');
-            markMetadataDirty();
-            renderMeetingsTab(task);
-            updateRowIndicators(currentTaskIndex);
-            saveProject();
+                markTaskDirty(task, 'meetings');
+                markTaskDirty(task, 'activity');
+                markMetadataDirty();
+                renderMeetingsTab(task);
+                updateRowIndicators(currentTaskIndex);
+                saveProject();
+            }, {title:'Delete Meeting', okText:'Delete'});
         }
 
         // =============================================
@@ -9760,8 +9804,8 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 return {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
                     name: newName,
-                    start: t.start || new Date().toISOString().slice(0, 10),
-                    end: t.end || t.start || new Date().toISOString().slice(0, 10),
+                    start: t.start || localDateStr(),
+                    end: t.end || t.start || localDateStr(),
                     progress: typeof t.progress === 'number' ? t.progress : 0,
                     dependencies: '',
                     custom_class: t.custom_class || '',
@@ -10087,8 +10131,8 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             const newTasks = pendingPlan.proposedTasks.map(pt => ({
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
                 name: pt.title || 'Untitled Task',
-                start: pt.start_date || new Date().toISOString().slice(0, 10),
-                end: pt.end_date || pt.start_date || new Date().toISOString().slice(0, 10),
+                start: pt.start_date || localDateStr(),
+                end: pt.end_date || pt.start_date || localDateStr(),
                 progress: parseProgress(pt.progress),
                 dependencies: '',
                 custom_class: '',
@@ -10240,7 +10284,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
 
-            const date = new Date().toISOString().slice(0, 10);
+            const date = localDateStr();
             const filename = `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_${date}.csv`;
 
             const a = document.createElement('a');
@@ -10326,7 +10370,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
 
-            const date = new Date().toISOString().slice(0, 10);
+            const date = localDateStr();
             const filename = `${projectName.replace(/[^a-zA-Z0-9]/g, '_')}_Gantt_${date}.csv`;
 
             const a = document.createElement('a');
@@ -10347,7 +10391,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             }
 
             const projectName = await getProjectName();
-            const date = new Date().toISOString().slice(0, 10);
+            const date = localDateStr();
 
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -10711,6 +10755,16 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
 </div>
 
 <div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+<div id="confirmModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-6 shadow-2xl max-w-sm w-full">
+        <h3 id="confirmModalTitle" class="text-sm font-semibold text-white mb-2"></h3>
+        <p id="confirmModalMsg" class="text-xs text-slate-400 mb-5"></p>
+        <div class="flex justify-end gap-2">
+            <button id="confirmModalCancel" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Cancel</button>
+            <button id="confirmModalOk" class="px-4 py-1.5 text-xs text-white rounded transition-colors"></button>
+        </div>
+    </div>
+</div>
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });</script>
 </body>
 </html>
