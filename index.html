@@ -3257,6 +3257,7 @@ FEW-SHOT EXAMPLES
 
             filtered.forEach(project => {
                 const isArchived = archivedIds.has(project.id);
+                const isDefaultProject = project.metadata && project.metadata.isDefault;
                 const progress = project.taskCount > 0
                     ? Math.round((project.completedCount / project.taskCount) * 100)
                     : 0;
@@ -3344,13 +3345,13 @@ FEW-SHOT EXAMPLES
                         <button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
                             <span class="material-icons-round" style="font-size:18px">content_copy</span>
                         </button>
-                        <button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
+                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
                             <span class="material-icons-round" style="font-size:18px">${isArchived ? 'unarchive' : 'inventory_2'}</span>
-                        </button>
+                        </button>`}
                         <div class="flex-1"></div>
-                        <button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
+                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
                             <span class="material-icons-round" style="font-size:18px">delete</span>
-                        </button>
+                        </button>`}
                     </div>
                 `;
                 grid.appendChild(card);
@@ -3435,7 +3436,13 @@ FEW-SHOT EXAMPLES
         }
 
         // --- Dashboard: Archive ---
-        function toggleArchiveProject(id) {
+        async function toggleArchiveProject(id) {
+            const registry = await loadRegistry();
+            const proj = registry.find(p => p.id === id);
+            if (proj && proj.metadata && proj.metadata.isDefault) {
+                alert('The Personal project can\'t be archived.');
+                return;
+            }
             const ids = getArchivedIds();
             if (ids.has(id)) {
                 ids.delete(id);
