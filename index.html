@@ -3791,13 +3791,21 @@ FEW-SHOT EXAMPLES
         }
 
         async function openProjectAndFindTask(projectId, taskName) {
+            console.log('[CAL-DEBUG v28] openProjectAndFindTask called', { projectId, taskName });
             calendarViewActive = false;
             await openProject(projectId);
+            console.log('[CAL-DEBUG v28] openProject resolved, tasks count:', tasks.length);
             // Find the task by name in the now-loaded tasks array
             const idx = tasks.findIndex(t => t.name === taskName);
+            console.log('[CAL-DEBUG v28] findIndex result:', idx, 'searched for:', taskName, 'available:', tasks.map(t => t.name));
             if (idx !== -1) {
                 // Delay to ensure project view is fully rendered and visible
-                setTimeout(() => openTaskDetail(idx), 100);
+                setTimeout(() => {
+                    console.log('[CAL-DEBUG v28] calling openTaskDetail with index:', idx);
+                    openTaskDetail(idx);
+                }, 100);
+            } else {
+                console.warn('[CAL-DEBUG v28] task not found by name!');
             }
         }
 
