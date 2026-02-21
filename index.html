@@ -3681,13 +3681,13 @@ FEW-SHOT EXAMPLES
             // Update archive toggle button appearance
             updateArchiveToggleBtn();
 
-            // Determine archived set
-            const archivedIds = getArchivedIds(registry);
-            const archivedCount = ownedProjects.filter(p => archivedIds.has(p.id)).length;
-
             // Separate owned and shared projects
             const ownedProjects = registry.filter(p => !p._isShared);
             const sharedProjects = registry.filter(p => p._isShared);
+
+            // Determine archived set
+            const archivedIds = getArchivedIds(registry);
+            const archivedCount = ownedProjects.filter(p => archivedIds.has(p.id)).length;
 
             // Filter: archived (only applies to owned projects)
             let filtered = ownedProjects.filter(p => {
