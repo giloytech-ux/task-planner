@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v12</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v13</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -5311,7 +5311,7 @@ FEW-SHOT EXAMPLES
                         <span class="status-badge ${status.css} flex-shrink-0"><span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}</span>
                     </div>
                     <div class="flex items-center gap-3 text-[11px] text-slate-400 mb-1.5 cursor-pointer" onclick="openTaskDetail(${index})">
-                        <span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">${task.start === task.end ? 'event' : 'date_range'}</span>${task.start === task.end ? task.start : task.start + ' → ' + task.end}</span>
+                        <span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">${task.start === task.end ? 'today' : 'calendar_month'}</span>${task.start === task.end ? task.start : task.start + ' → ' + task.end}</span>
                         ${task.assigned ? '<span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">person</span>' + escapeHtml(task.assigned) + '</span>' : ''}
                     </div>
                     <div class="card-progress-area flex items-center gap-2 mb-1.5" data-task-index="${index}">
@@ -5923,7 +5923,7 @@ FEW-SHOT EXAMPLES
             const pct = parseInt(task.progress) || 0;
 
             document.getElementById('tdTaskName').textContent = task.name;
-            const dateIcon = task.start === task.end ? 'event' : 'date_range';
+            const dateIcon = task.start === task.end ? 'today' : 'calendar_month';
             const dateText = task.start === task.end ? task.start : `${task.start} → ${task.end}`;
             document.getElementById('tdTaskDates').innerHTML = `<span class="material-icons-round text-sm">${dateIcon}</span> ${dateText}`;
 
