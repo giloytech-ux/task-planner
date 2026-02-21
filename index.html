@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v8</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v9</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -940,7 +940,7 @@
             <div id="calendarPopover" class="hidden fixed z-50 w-72 max-h-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden" style="pointer-events:auto">
                 <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
                     <span id="calendarPopoverDate" class="text-xs font-semibold text-white"></span>
-                    <div class="flex items-center gap-1">
+                    <div class="flex items-center gap-3">
                         <button onclick="openCalendarAddModal()" class="flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-slate-700 text-blue-400 hover:text-blue-300 transition-colors text-xs font-medium">
                             <span class="material-icons-round text-sm">add</span>Add
                         </button>
@@ -4275,6 +4275,7 @@ FEW-SHOT EXAMPLES
             document.getElementById('breadcrumbSep').classList.add('hidden');
             document.getElementById('breadcrumbName').classList.add('hidden');
             document.getElementById('exportButtons').classList.add('hidden');
+            document.getElementById('homeBtn').classList.add('hidden');
 
             localStorage.removeItem('planner_lastProject');
 
@@ -4367,6 +4368,7 @@ FEW-SHOT EXAMPLES
             document.getElementById('projectView').classList.remove('hidden');
             document.getElementById('projectView').classList.add('flex');
             document.getElementById('exportButtons').classList.remove('hidden');
+            document.getElementById('homeBtn').classList.remove('hidden');
             // Show mobile sidebar toggle
             const mobileToggle = document.getElementById('mobileSidebarToggle');
             mobileToggle.classList.remove('hidden');
