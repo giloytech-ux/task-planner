@@ -2687,9 +2687,15 @@ FEW-SHOT EXAMPLES
             document.getElementById('homeBtn').classList.remove('hidden');
             document.getElementById('headerDivider').classList.remove('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
-            await loadUserProfile();
-            await migrateArchivedToSupabase();
-            await showDashboard();
+            try {
+                await loadUserProfile();
+                await migrateArchivedToSupabase();
+                await showDashboard();
+            } catch (err) {
+                console.error('onUserLoggedIn error:', err);
+                // Show dashboard anyway so user isn't stuck on blank screen
+                document.getElementById('dashboardView').classList.remove('hidden');
+            }
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
             pushNavState('dashboard');
             _navReady = true;
@@ -2907,14 +2913,12 @@ FEW-SHOT EXAMPLES
                     return DataStore.get('registry');
                 }
 
-                const [projectsResult, tasksResult, sharesResult] = await Promise.all([
+                const [projectsResult, tasksResult] = await Promise.all([
                     supabase.from('projects').select('*').order('created_at'),
-                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name'),
-                    supabase.from('project_shares').select('project_id, role, owner_id').eq('shared_with_id', currentUser.id)
+                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name')
                 ]);
                 const { data: projects, error } = projectsResult;
                 const { data: allTasks } = tasksResult;
-                const { data: sharesData } = sharesResult;
                 if (error) {
                     console.error('loadRegistry error:', error);
                     if (isAuthError(error)) { handleSessionExpired(); return []; }
@@ -2923,9 +2927,18 @@ FEW-SHOT EXAMPLES
                     return [];
                 }
 
+                // Fetch shares separately (graceful fallback if table doesn't exist yet)
+                let sharesData = [];
+                try {
+                    const sharesResult = await supabase.from('project_shares')
+                        .select('project_id, role, owner_id')
+                        .eq('shared_with_id', currentUser.id);
+                    sharesData = sharesResult.data || [];
+                } catch (e) { console.warn('project_shares query failed:', e.message); }
+
                 // Build shares map keyed by project_id
                 const sharesMap = {};
-                (sharesData || []).forEach(s => {
+                sharesData.forEach(s => {
                     sharesMap[s.project_id] = { role: s.role, ownerId: s.owner_id };
                 });
 
@@ -2943,10 +2956,13 @@ FEW-SHOT EXAMPLES
                 });
 
                 // Count how many distinct projects the current user has shared (as owner)
-                const ownedShareCountResult = await supabase.from('project_shares')
-                    .select('project_id')
-                    .eq('owner_id', currentUser.id);
-                const ownedShareCount = new Set((ownedShareCountResult.data || []).map(s => s.project_id)).size;
+                let ownedShareCount = 0;
+                try {
+                    const ownedShareCountResult = await supabase.from('project_shares')
+                        .select('project_id')
+                        .eq('owner_id', currentUser.id);
+                    ownedShareCount = new Set((ownedShareCountResult.data || []).map(s => s.project_id)).size;
+                } catch (e) { console.warn('ownedShareCount query failed:', e.message); }
 
                 const result = (projects || []).map(p => {
                     const isShared = p.user_id !== currentUser.id;
