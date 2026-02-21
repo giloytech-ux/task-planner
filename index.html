@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v18</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v19</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -5762,9 +5762,9 @@ FEW-SHOT EXAMPLES
         function updateTask(index, field, value) {
             // Permission: owner-only fields
             const ownerFields = ['start', 'end', 'name', 'priority', 'description', 'dependencies', 'assigned'];
-            if (ownerFields.includes(field) && !isProjectOwner()) return;
+            if (ownerFields.includes(field) && !isProjectOwner()) { showToast('Only the project owner can edit this field', 'warning'); return; }
             // Editors can update progress; viewers cannot
-            if (field === 'progress' && !canEditTaskDetails()) return;
+            if (field === 'progress' && !canEditTaskDetails()) { showToast('View-only access — you cannot edit this field', 'warning'); return; }
             const task = tasks[index];
             if (field === 'start' && task.end && value > task.end) {
                 task.end = value;
@@ -6369,6 +6369,47 @@ FEW-SHOT EXAMPLES
             // Progress: editable by editors too
             const progEl = document.getElementById('tdProgress');
             if (progEl) { progEl.disabled = !_edit; if (!_edit) progEl.classList.add('opacity-60'); else progEl.classList.remove('opacity-60'); }
+            // Dependencies select: disable for non-owners
+            const depsSelect = document.getElementById('tdDepsSelect');
+            if (depsSelect) { depsSelect.disabled = !_own; if (!_own) depsSelect.classList.add('opacity-60'); else depsSelect.classList.remove('opacity-60'); }
+            // Lock icons on owner-only labels
+            const lockIcon = '<span class="material-icons-round text-slate-500 align-middle mr-0.5" style="font-size:12px">lock</span>';
+            const labelMap = { tdName: 'Task Name', tdAssigned: 'Assigned To', tdPriority: 'Priority' };
+            Object.entries(labelMap).forEach(([id, label]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const labelEl = el.closest('div')?.querySelector('.td-field-label');
+                if (labelEl) labelEl.innerHTML = (!_own ? lockIcon : '') + label;
+            });
+            // Start/End date labels (nested in flex wrapper)
+            const startLabel = document.getElementById('tdStart')?.closest('div')?.querySelector('.td-field-label');
+            if (startLabel) startLabel.innerHTML = (!_own ? lockIcon : '') + 'Start Date';
+            const endLabel = document.getElementById('tdEndLabel');
+            if (endLabel) endLabel.innerHTML = (!_own ? lockIcon : '') + 'End Date';
+            // Description label
+            const descLabel = document.getElementById('tdDescription')?.closest('div')?.querySelector('.td-field-label');
+            if (descLabel) descLabel.innerHTML = (!_own ? lockIcon : '') + 'Description';
+            // Dependencies label
+            const depsLabel = document.getElementById('tdDepsSelect')?.closest('div')?.querySelector('.td-field-label');
+            if (depsLabel) depsLabel.innerHTML = (!_own ? lockIcon : '') + 'Dependencies';
+            // Toast on disabled field interaction
+            if (!_own) {
+                ['tdName', 'tdAssigned', 'tdPriority', 'tdStart', 'tdEnd', 'tdDescription', 'tdDepsSelect'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const wrap = el.closest('div');
+                    if (wrap) wrap.onclick = (e) => {
+                        if (el.disabled) showToast('Only the project owner can edit this field', 'warning');
+                    };
+                });
+            } else {
+                ['tdName', 'tdAssigned', 'tdPriority', 'tdStart', 'tdEnd', 'tdDescription', 'tdDepsSelect'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const wrap = el.closest('div');
+                    if (wrap) wrap.onclick = null;
+                });
+            }
             // Clear description button
             const clearBtn = document.getElementById('clearDescriptionBtn');
             if (clearBtn && !_own) clearBtn.style.display = 'none';
@@ -6386,9 +6427,9 @@ FEW-SHOT EXAMPLES
             const task = tasks[currentTaskIndex];
             // Permission guard: only owner can change structural fields
             const ownerOnlyFields = ['name', 'assigned', 'priority', 'start', 'end', 'description', 'dependencies'];
-            if (ownerOnlyFields.includes(field) && !isProjectOwner()) return;
+            if (ownerOnlyFields.includes(field) && !isProjectOwner()) { showToast('Only the project owner can edit this field', 'warning'); return; }
             // Editors can update progress; viewers cannot update anything
-            if (field === 'progress' && !canEditTaskDetails()) return;
+            if (field === 'progress' && !canEditTaskDetails()) { showToast('View-only access — you cannot edit this field', 'warning'); return; }
             if (field === 'name' && value.trim()) {
                 const trimmed = value.trim();
                 if (tasks.some((t, i) => i !== currentTaskIndex && t.name.toLowerCase() === trimmed.toLowerCase())) {
