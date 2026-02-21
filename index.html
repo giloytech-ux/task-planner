@@ -4768,6 +4768,17 @@ FEW-SHOT EXAMPLES
 
             currentProjectId = id;
 
+            // Pre-set sharing context from cached registry so loadProject() can
+            // construct correct storage paths for shared project files
+            const _cachedRegistry = DataStore.get('registry');
+            if (_cachedRegistry) {
+                const _proj = _cachedRegistry.find(p => p.id === id);
+                if (_proj) {
+                    currentProjectRole = _proj._isShared ? (_proj._shareRole || 'viewer') : 'owner';
+                    currentProjectOwnerId = _proj._isShared ? _proj._ownerId : (currentUser ? currentUser.id : null);
+                }
+            }
+
             // Load data (cache-first via loadProject/loadRegistry SWR)
             let data, registry;
             try {
