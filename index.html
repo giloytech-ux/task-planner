@@ -3346,7 +3346,7 @@ FEW-SHOT EXAMPLES
                 card.setAttribute('data-project-id', project.id);
                 card.className = `project-card rounded-xl p-5 relative ${isArchived ? 'opacity-60' : ''}`;
                 card.onclick = (e) => {
-                    if (e.target.closest('.card-actions')) return;
+                    if (e.target.closest('.card-actions button')) return;
                     openProject(project.id);
                 };
                 card.innerHTML = `
@@ -3386,9 +3386,6 @@ FEW-SHOT EXAMPLES
                         </button>`}
                     </div>
                 `;
-                // Make empty space in card-actions row open the project
-                const spacer = card.querySelector('.card-actions .flex-1');
-                if (spacer) spacer.addEventListener('click', (e) => { e.stopPropagation(); openProject(project.id); });
                 grid.appendChild(card);
             });
 
