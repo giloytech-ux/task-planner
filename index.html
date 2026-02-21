@@ -2018,7 +2018,10 @@
         // Dashboard state
         let dashboardSort = localStorage.getItem('planner_sort') || 'urgency';
         let showArchived = false;
-        function getArchivedIds() {
+        function getArchivedIds(registry) {
+            if (currentUser && registry) {
+                return new Set(registry.filter(p => p.archived).map(p => p.id));
+            }
             try { return new Set(JSON.parse(localStorage.getItem('planner_archived') || '[]')); }
             catch { return new Set(); }
         }
@@ -2414,6 +2417,18 @@ FEW-SHOT EXAMPLES
             _navReady = true;
         }
 
+        async function migrateArchivedToSupabase() {
+            const raw = localStorage.getItem('planner_archived');
+            if (!raw || !currentUser) return;
+            const ids = JSON.parse(raw);
+            if (ids.length === 0) return;
+            for (const id of ids) {
+                await supabase.from('projects').update({ archived: true }).eq('id', id);
+            }
+            localStorage.removeItem('planner_archived');
+            DataStore.invalidate('registry');
+        }
+
         async function onUserLoggedIn() {
             document.getElementById('authView').classList.add('hidden');
             document.getElementById('userMenu').classList.remove('hidden');
@@ -2422,6 +2437,7 @@ FEW-SHOT EXAMPLES
             document.getElementById('headerDivider').classList.remove('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
             await loadUserProfile();
+            await migrateArchivedToSupabase();
             await showDashboard();
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
             pushNavState('dashboard');
@@ -2675,6 +2691,7 @@ FEW-SHOT EXAMPLES
                     createdAt: p.created_at,
                     updatedAt: p.updated_at,
                     metadata: p.metadata || {},
+                    archived: !!p.archived,
                     _tasks: projectTasksMap[p.id] || []
                 }));
                 DataStore.set('registry', result);
@@ -3021,9 +3038,11 @@ FEW-SHOT EXAMPLES
                 saveRegistryLocal(registry);
                 localStorage.removeItem('planner_proj_' + id);
             }
-            // Clean up archived set
-            const archived = getArchivedIds();
-            if (archived.has(id)) { archived.delete(id); saveArchivedIds(archived); }
+            // Clean up archived set (guest mode only; Supabase handles via row deletion)
+            if (!currentUser) {
+                const archived = getArchivedIds();
+                if (archived.has(id)) { archived.delete(id); saveArchivedIds(archived); }
+            }
 
             if (currentProjectId === id) {
                 currentProjectId = null;
@@ -3238,7 +3257,7 @@ FEW-SHOT EXAMPLES
             updateArchiveToggleBtn();
 
             // Determine archived set
-            const archivedIds = getArchivedIds();
+            const archivedIds = getArchivedIds(registry);
             const archivedCount = registry.filter(p => archivedIds.has(p.id)).length;
 
             // Filter: archived
@@ -3479,13 +3498,15 @@ FEW-SHOT EXAMPLES
                 alert('The Personal project can\'t be archived.');
                 return;
             }
-            const ids = getArchivedIds();
-            if (ids.has(id)) {
-                ids.delete(id);
+            if (currentUser) {
+                const newVal = !(proj && proj.archived);
+                await supabase.from('projects').update({ archived: newVal }).eq('id', id);
+                DataStore.invalidate('registry');
             } else {
-                ids.add(id);
+                const ids = getArchivedIds();
+                if (ids.has(id)) ids.delete(id); else ids.add(id);
+                saveArchivedIds(ids);
             }
-            saveArchivedIds(ids);
             renderDashboard();
         }
 
