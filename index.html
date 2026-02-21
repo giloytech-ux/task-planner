@@ -2206,10 +2206,10 @@
                     const activeTab = document.querySelector('.detail-tab.active');
                     if (activeTab) {
                         const tabName = activeTab.textContent.trim().toLowerCase().replace(/\s+/g, '');
-                        if (tabName === 'checklist') renderChecklistTab(task);
-                        else if (tabName === 'activitylog') renderActivityTab(task);
-                        else if (tabName === 'meetings') renderMeetingsTab(task);
-                        else if (tabName === 'files') renderFilesTab(task);
+                        if (tabName.startsWith('checklist')) renderChecklistTab(task);
+                        else if (tabName.startsWith('activitylog')) renderActivityTab(task);
+                        else if (tabName.startsWith('meetings')) renderMeetingsTab(task);
+                        else if (tabName.startsWith('files')) renderFilesTab(task);
                     }
                     if (summaryChanged) {
                         const panel = document.getElementById('summaryPanel');
@@ -2278,11 +2278,11 @@
             const activeProjTab = document.querySelector('.proj-tab.active');
             if (activeProjTab) {
                 const tn = activeProjTab.textContent.trim().toLowerCase().replace(/\s+/g, '');
-                if (tn === 'meetings') renderProjectMeetingsTab();
-                else if (tn === 'checklist') renderProjectChecklistTab();
-                else if (tn === 'activitylog') renderProjectActivityTab();
-                else if (tn === 'files') renderProjectFilesTab();
-                else if (tn === 'details') renderProjectDetailsTab();
+                if (tn.startsWith('meetings')) renderProjectMeetingsTab();
+                else if (tn.startsWith('checklist')) renderProjectChecklistTab();
+                else if (tn.startsWith('activitylog')) renderProjectActivityTab();
+                else if (tn.startsWith('files')) renderProjectFilesTab();
+                else if (tn.startsWith('details')) renderProjectDetailsTab();
             }
         }
 
