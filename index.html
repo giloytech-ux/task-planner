@@ -3792,6 +3792,8 @@ FEW-SHOT EXAMPLES
 
         async function openProjectAndFindTask(projectId, taskName) {
             await openProject(projectId);
+            // Allow the DOM to settle after project view swap
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
             // Find the task by name in the now-loaded tasks array
             const idx = tasks.findIndex(t => t.name === taskName);
             if (idx !== -1) {
