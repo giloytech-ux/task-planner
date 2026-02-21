@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v13</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v14</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1311,7 +1311,7 @@
                     <!-- ACTIVITY LOG TAB -->
                     <div id="tabActivityLog" class="hidden flex-1 flex flex-col min-h-0">
                         <div id="activityTimeline" class="flex-1 overflow-y-auto mb-3"></div>
-                        <div class="flex-shrink-0">
+                        <div id="activityInputArea" class="flex-shrink-0">
                             <textarea id="commentInput" class="td-textarea w-full" rows="3" placeholder="Write an activity log entry..."></textarea>
                             <div class="flex justify-end mt-2">
                                 <button onclick="addComment()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Post</button>
@@ -1322,7 +1322,7 @@
                     <!-- CHECKLIST TAB -->
                     <div id="tabChecklist" class="hidden flex-1 flex flex-col min-h-0">
                         <div id="checklistItems" class="flex-1 overflow-y-auto mb-3"></div>
-                        <div class="flex-shrink-0">
+                        <div id="checklistInputArea" class="flex-shrink-0">
                             <div class="flex gap-2">
                                 <input type="text" id="checklistInput" class="td-input flex-1" placeholder="Add a checklist item..." onkeydown="if(event.key==='Enter')addChecklistItem()">
                                 <button onclick="addChecklistItem()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Add</button>
@@ -1343,7 +1343,7 @@
 
                     <!-- MEETINGS TAB -->
                     <div id="tabMeetings" class="hidden flex-1 overflow-y-auto min-h-0">
-                        <button onclick="showAddMeeting()" class="mb-4 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1 min-h-[44px]">
+                        <button id="addMeetingBtn" onclick="showAddMeeting()" class="mb-4 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-1 min-h-[44px]">
                             <span class="material-icons-round text-sm">add</span> Add Meeting
                         </button>
                         <div id="meetingForm" class="hidden glass-panel rounded-xl p-4 mb-4 space-y-3">
@@ -1615,6 +1615,31 @@
         </div>
     </div>
 
+    <!-- Share Project Modal -->
+    <div id="shareProjectModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this)closeShareModal()">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 md:p-6 shadow-2xl max-w-md w-full">
+            <h3 class="text-sm font-semibold text-white mb-1">Share "<span id="shareModalProjectName"></span>"</h3>
+            <p class="text-xs text-slate-400 mb-4">Invite someone by email to view or edit this project.</p>
+            <div id="shareModalError" class="hidden text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3"></div>
+            <div id="shareModalSuccess" class="hidden text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 mb-3"></div>
+            <div class="flex gap-2 mb-4">
+                <input id="shareEmailInput" type="email" class="td-input flex-1" placeholder="user@example.com" onkeydown="if(event.key==='Enter')submitShare()">
+                <select id="shareRoleSelect" class="td-input w-24">
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                </select>
+                <button onclick="submitShare()" class="px-4 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors whitespace-nowrap">Share</button>
+            </div>
+            <div id="shareListSection" class="hidden">
+                <h4 class="text-xs font-medium text-slate-400 mb-2">Shared with:</h4>
+                <div id="shareList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button onclick="closeShareModal()" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global error catcher — shows errors on page
         window.onerror = function(msg, url, line) {
@@ -1680,7 +1705,7 @@
                     const byteArray = new Uint8Array(byteChars.length);
                     for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
                     const blob = new Blob([byteArray], { type: mimeType });
-                    const path = `${currentUser.id}/${currentProjectId}/${fileId}`;
+                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${fileId}`;
                     const { error } = await supabase.storage.from('task-files').upload(path, blob, { upsert: true });
                     if (!error) return 'supabase';
                     console.warn('Supabase Storage upload:', error.message);
@@ -1701,7 +1726,7 @@
             if (file.data) return file.data;
             if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
                 try {
-                    const path = `${currentUser.id}/${currentProjectId}/${file.id}`;
+                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
                     const { data, error } = await supabase.storage.from('task-files').download(path);
                     if (data && !error) {
                         return new Promise(resolve => {
@@ -1719,7 +1744,7 @@
         async function deleteFileData(file) {
             if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
                 try {
-                    const path = `${currentUser.id}/${currentProjectId}/${file.id}`;
+                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
                     await supabase.storage.from('task-files').remove([path]);
                 } catch (e) {}
             }
@@ -1824,15 +1849,95 @@
         const SUMMARY_COOLDOWN_MS = 5000;
         const MAX_PROMPT_LENGTH = 2000;
         const TIER_CONFIG = {
-            free:     { monthlyTokens: 100000,  maxProjects: 3,        label: 'Free' },
-            pro:      { monthlyTokens: 500000,  maxProjects: Infinity, label: 'Pro' },
-            pro_plus: { monthlyTokens: 2000000, maxProjects: Infinity, label: 'Pro+' }
+            free:     { monthlyTokens: 100000,  maxProjects: 3,        maxSharedProjects: 1, label: 'Free' },
+            pro:      { monthlyTokens: 500000,  maxProjects: Infinity, maxSharedProjects: Infinity, label: 'Pro' },
+            pro_plus: { monthlyTokens: 2000000, maxProjects: Infinity, maxSharedProjects: Infinity, label: 'Pro+' }
         };
         let userProfile = null;
         let currentProjectId = null;
         let currentUser = null;     // null = guest mode
         let isAuthSignUp = false;   // toggle between sign-in / sign-up
         let currentProjectName = ''; // cached for export functions in guest mode
+        let currentProjectRole = 'owner';   // 'owner' | 'editor' | 'viewer'
+        let currentProjectOwnerId = null;   // UUID of project owner (for file paths)
+
+        // Permission helpers for shared projects
+        function isProjectOwner() { return currentProjectRole === 'owner'; }
+        function canEditTaskFields() { return currentProjectRole === 'owner'; }
+        function canEditTaskDetails() { return currentProjectRole !== 'viewer'; }
+        function canUseAI() { return currentProjectRole === 'owner'; }
+
+        function applyPermissionUI() {
+            const view = document.getElementById('projectView');
+            if (!view) return;
+            const owner = isProjectOwner();
+            const editor = canEditTaskDetails();
+            const ai = canUseAI();
+
+            // Shared role indicator in breadcrumb area
+            const existingBadge = document.getElementById('sharedRoleBadge');
+            if (existingBadge) existingBadge.remove();
+            if (!owner) {
+                const badge = document.createElement('span');
+                badge.id = 'sharedRoleBadge';
+                badge.className = currentProjectRole === 'editor'
+                    ? 'text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full ml-2'
+                    : 'text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full ml-2';
+                badge.textContent = currentProjectRole === 'editor' ? 'Editor' : 'Viewer';
+                const breadcrumb = document.getElementById('breadcrumbName');
+                if (breadcrumb) breadcrumb.parentElement.appendChild(badge);
+            }
+
+            // --- Sidebar: AI chat area ---
+            const chatInput = document.getElementById('userPrompt');
+            if (chatInput) {
+                if (!ai) {
+                    chatInput.disabled = true;
+                    chatInput.placeholder = 'AI features are only available to the project owner.';
+                    chatInput.classList.add('opacity-50');
+                } else {
+                    chatInput.disabled = false;
+                    chatInput.placeholder = "e.g., 'Project: Annual Statement. Due Apr 24, 2026. Needs 50 exhibits.'";
+                    chatInput.classList.remove('opacity-50');
+                }
+            }
+            // Hide send/voice/attach buttons for non-owners
+            document.querySelectorAll('#projectView button[onclick*="handleSend"], #projectView button[onclick*="toggleVoiceInput"], #projectView button[onclick*="chatFileInput"]').forEach(btn => {
+                btn.style.display = ai ? '' : 'none';
+            });
+
+            // --- Sidebar: Add Task buttons ---
+            document.querySelectorAll('#projectView button[onclick*="showAddTaskModal"]').forEach(btn => {
+                btn.style.display = owner ? '' : 'none';
+            });
+
+            // --- Gantt toolbar: AI Summary button ---
+            document.querySelectorAll('#projectView button[onclick*="showProjectSummary"]').forEach(btn => {
+                btn.style.display = ai ? '' : 'none';
+            });
+
+            // --- Meetings tab: Add Meeting button ---
+            const addMtgBtn = document.getElementById('addMeetingBtn');
+            if (addMtgBtn) addMtgBtn.style.display = editor ? '' : 'none';
+
+            // --- Activity log tab: input area ---
+            const actInput = document.getElementById('activityInputArea');
+            if (actInput) actInput.style.display = editor ? '' : 'none';
+
+            // --- Checklist tab: input area ---
+            const clInput = document.getElementById('checklistInputArea');
+            if (clInput) clInput.style.display = editor ? '' : 'none';
+
+            // --- Files tab: upload drop zone ---
+            const fileZone = document.getElementById('fileDropZone');
+            if (fileZone) fileZone.style.display = editor ? '' : 'none';
+
+            // --- Gantt: disable drag/resize for non-owners ---
+            if (!owner) {
+                document.querySelectorAll('.gantt .handle-group').forEach(h => h.style.display = 'none');
+                document.querySelectorAll('.gantt .bar-wrapper').forEach(b => b.style.pointerEvents = 'auto');
+            }
+        }
 
         // --- DataStore: In-Memory SWR Cache ---
         const DataStore = {
@@ -2802,12 +2907,14 @@ FEW-SHOT EXAMPLES
                     return DataStore.get('registry');
                 }
 
-                const [projectsResult, tasksResult] = await Promise.all([
+                const [projectsResult, tasksResult, sharesResult] = await Promise.all([
                     supabase.from('projects').select('*').order('created_at'),
-                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name')
+                    supabase.from('tasks').select('project_id, progress, end_date, start_date, name'),
+                    supabase.from('project_shares').select('project_id, role, owner_id').eq('shared_with_id', currentUser.id)
                 ]);
                 const { data: projects, error } = projectsResult;
                 const { data: allTasks } = tasksResult;
+                const { data: sharesData } = sharesResult;
                 if (error) {
                     console.error('loadRegistry error:', error);
                     if (isAuthError(error)) { handleSessionExpired(); return []; }
@@ -2815,6 +2922,12 @@ FEW-SHOT EXAMPLES
                     if (DataStore.has('registry')) return DataStore.get('registry');
                     return [];
                 }
+
+                // Build shares map keyed by project_id
+                const sharesMap = {};
+                (sharesData || []).forEach(s => {
+                    sharesMap[s.project_id] = { role: s.role, ownerId: s.owner_id };
+                });
 
                 const taskMap = {};
                 const projectTasksMap = {};
@@ -2829,19 +2942,33 @@ FEW-SHOT EXAMPLES
                     projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress });
                 });
 
-                const result = (projects || []).map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    color: p.color || '#3b82f6',
-                    taskCount: taskMap[p.id] ? taskMap[p.id].total : 0,
-                    completedCount: taskMap[p.id] ? taskMap[p.id].completed : 0,
-                    deadline: taskMap[p.id] ? taskMap[p.id].deadline : null,
-                    createdAt: p.created_at,
-                    updatedAt: p.updated_at,
-                    metadata: p.metadata || {},
-                    archived: !!p.archived,
-                    _tasks: projectTasksMap[p.id] || []
-                }));
+                // Count how many distinct projects the current user has shared (as owner)
+                const ownedShareCountResult = await supabase.from('project_shares')
+                    .select('project_id')
+                    .eq('owner_id', currentUser.id);
+                const ownedShareCount = new Set((ownedShareCountResult.data || []).map(s => s.project_id)).size;
+
+                const result = (projects || []).map(p => {
+                    const isShared = p.user_id !== currentUser.id;
+                    const shareInfo = sharesMap[p.id];
+                    return {
+                        id: p.id,
+                        name: p.name,
+                        color: p.color || '#3b82f6',
+                        taskCount: taskMap[p.id] ? taskMap[p.id].total : 0,
+                        completedCount: taskMap[p.id] ? taskMap[p.id].completed : 0,
+                        deadline: taskMap[p.id] ? taskMap[p.id].deadline : null,
+                        createdAt: p.created_at,
+                        updatedAt: p.updated_at,
+                        metadata: p.metadata || {},
+                        archived: !!p.archived,
+                        _tasks: projectTasksMap[p.id] || [],
+                        _isShared: isShared,
+                        _shareRole: isShared && shareInfo ? shareInfo.role : null,
+                        _ownerId: isShared && shareInfo ? shareInfo.ownerId : p.user_id,
+                        _ownedShareCount: ownedShareCount
+                    };
+                });
                 DataStore.set('registry', result);
                 return result;
             } else {
@@ -2942,6 +3069,8 @@ FEW-SHOT EXAMPLES
 
         async function saveProject() {
             if (!currentProjectId) return;
+            // Viewers should never save
+            if (currentProjectRole === 'viewer') return;
 
             // Concurrency guard: prevent overlapping delete+insert causing duplicates
             if (_saveInFlight) { _saveQueued = true; return; }
@@ -3277,6 +3406,125 @@ FEW-SHOT EXAMPLES
             await renderDashboard();
         }
 
+        // === Project Sharing Functions ===
+        let _shareModalProjectId = null;
+
+        function openShareModal(projectId, projectName) {
+            _shareModalProjectId = projectId;
+            document.getElementById('shareModalProjectName').textContent = projectName;
+            document.getElementById('shareEmailInput').value = '';
+            document.getElementById('shareRoleSelect').value = 'viewer';
+            document.getElementById('shareModalError').classList.add('hidden');
+            document.getElementById('shareModalSuccess').classList.add('hidden');
+            document.getElementById('shareProjectModal').classList.remove('hidden');
+            refreshShareList();
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareProjectModal').classList.add('hidden');
+            _shareModalProjectId = null;
+        }
+
+        async function refreshShareList() {
+            if (!_shareModalProjectId || !currentUser) return;
+            const { data, error } = await supabase.rpc('get_project_shares', { p_project_id: _shareModalProjectId });
+            const listEl = document.getElementById('shareList');
+            const sectionEl = document.getElementById('shareListSection');
+            const shares = data || [];
+            if (shares.length === 0) {
+                sectionEl.classList.add('hidden');
+                return;
+            }
+            sectionEl.classList.remove('hidden');
+            listEl.innerHTML = '';
+            shares.forEach(s => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between gap-2 p-2 bg-slate-700/30 rounded-lg';
+                const roleBadge = s.role === 'editor'
+                    ? '<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Editor</span>'
+                    : '<span class="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">Viewer</span>';
+                div.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <span class="material-icons-round text-slate-500" style="font-size:16px">person</span>
+                        <span class="text-xs text-slate-300 truncate">${escapeHtml(s.email)}</span>
+                        ${roleBadge}
+                    </div>
+                    <button onclick="removeShare('${s.id}')" class="p-1 text-slate-500 hover:text-red-400 transition-colors flex-shrink-0" title="Remove">
+                        <span class="material-icons-round" style="font-size:16px">close</span>
+                    </button>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        async function submitShare() {
+            if (!_shareModalProjectId || !currentUser) return;
+            const email = document.getElementById('shareEmailInput').value.trim();
+            const role = document.getElementById('shareRoleSelect').value;
+            const errEl = document.getElementById('shareModalError');
+            const succEl = document.getElementById('shareModalSuccess');
+            errEl.classList.add('hidden');
+            succEl.classList.add('hidden');
+
+            if (!email) { errEl.textContent = 'Please enter an email address.'; errEl.classList.remove('hidden'); return; }
+
+            // Tier limit check
+            if (userProfile) {
+                const maxShared = TIER_CONFIG[userProfile.tier]?.maxSharedProjects ?? 1;
+                if (maxShared < Infinity) {
+                    const registry = await loadRegistry();
+                    const ownedShareCount = registry[0]?._ownedShareCount ?? 0;
+                    if (ownedShareCount >= maxShared) {
+                        errEl.textContent = `Free plan allows sharing ${maxShared} project. Upgrade to Pro for unlimited sharing.`;
+                        errEl.classList.remove('hidden');
+                        return;
+                    }
+                }
+            }
+
+            const { data, error } = await supabase.rpc('share_project', {
+                p_project_id: _shareModalProjectId,
+                p_email: email,
+                p_role: role
+            });
+
+            if (error) {
+                errEl.textContent = 'Failed to share project. Please try again.';
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            if (data && data.error) {
+                const messages = {
+                    user_not_found: 'No account found with that email.',
+                    not_owner: 'Only the project owner can share.',
+                    cannot_share_self: "You can't share a project with yourself.",
+                    already_shared: 'This project is already shared with that user.',
+                    invalid_role: 'Invalid role selected.'
+                };
+                errEl.textContent = messages[data.error] || data.error;
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            succEl.textContent = `Shared with ${email} as ${role}.`;
+            succEl.classList.remove('hidden');
+            document.getElementById('shareEmailInput').value = '';
+            DataStore.invalidate('registry');
+            refreshShareList();
+        }
+
+        async function removeShare(shareId) {
+            if (!confirm('Remove this person\'s access?')) return;
+            const { data, error } = await supabase.rpc('remove_project_share', { p_share_id: shareId });
+            if (error || (data && data.error)) {
+                alert('Failed to remove share.');
+                return;
+            }
+            DataStore.invalidate('registry');
+            refreshShareList();
+        }
+
         function updateRegistryMetadataLocal() {
             if (!currentProjectId) return;
             updateRegistryMetadataLocalForProject(currentProjectId);
@@ -3404,10 +3652,14 @@ FEW-SHOT EXAMPLES
 
             // Determine archived set
             const archivedIds = getArchivedIds(registry);
-            const archivedCount = registry.filter(p => archivedIds.has(p.id)).length;
+            const archivedCount = ownedProjects.filter(p => archivedIds.has(p.id)).length;
 
-            // Filter: archived
-            let filtered = registry.filter(p => {
+            // Separate owned and shared projects
+            const ownedProjects = registry.filter(p => !p._isShared);
+            const sharedProjects = registry.filter(p => p._isShared);
+
+            // Filter: archived (only applies to owned projects)
+            let filtered = ownedProjects.filter(p => {
                 const isArchived = archivedIds.has(p.id);
                 return showArchived ? isArchived : !isArchived;
             });
@@ -3432,8 +3684,15 @@ FEW-SHOT EXAMPLES
             // Sort
             filtered = sortProjects(filtered, dashboardSort);
 
+            // Check if shared projects will be shown
+            const filteredSharedPreview = sharedProjects.filter(p => {
+                if (searchTerm) return p.name.toLowerCase().includes(searchTerm);
+                return true;
+            });
+            const hasSharedToShow = currentUser && filteredSharedPreview.length > 0 && !showArchived;
+
             // No results after filtering
-            if (filtered.length === 0) {
+            if (filtered.length === 0 && !hasSharedToShow) {
                 grid.classList.add('hidden');
                 document.getElementById('calendarView').classList.add('hidden');
                 if (searchTerm) {
@@ -3442,8 +3701,8 @@ FEW-SHOT EXAMPLES
                     noResults.querySelector('p').textContent = 'No archived projects.';
                     noResults.querySelector('.material-icons-round').textContent = 'inventory_2';
                     noResults.classList.remove('hidden');
-                } else if (!showArchived && registry.length === archivedCount) {
-                    // All projects archived
+                } else if (!showArchived && ownedProjects.length === archivedCount) {
+                    // All owned projects archived
                     noResults.querySelector('p').textContent = 'All projects are archived.';
                     noResults.querySelector('.material-icons-round').textContent = 'inventory_2';
                     noResults.classList.remove('hidden');
@@ -3540,6 +3799,9 @@ FEW-SHOT EXAMPLES
                         <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
                             <span class="material-icons-round" style="font-size:18px">palette</span>
                         </button>
+                        ${currentUser && !isDefaultProject ? `<button onclick="event.stopPropagation(); openShareModal('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-green-400 rounded transition-colors" title="Share">
+                            <span class="material-icons-round" style="font-size:18px">group_add</span>
+                        </button>` : ''}
                         ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
                             <span class="material-icons-round" style="font-size:18px">content_copy</span>
                         </button>`}
@@ -3565,6 +3827,50 @@ FEW-SHOT EXAMPLES
                     <span class="text-sm font-medium text-slate-400">New Project</span>
                 `;
                 grid.appendChild(newCard);
+            }
+
+            // === Shared with me section ===
+            const filteredShared = sharedProjects.filter(p => {
+                if (searchTerm) return p.name.toLowerCase().includes(searchTerm);
+                return true;
+            });
+            if (currentUser && filteredShared.length > 0 && !showArchived) {
+                const sharedHeader = document.createElement('div');
+                sharedHeader.className = 'col-span-full flex items-center gap-2 mt-6 mb-2';
+                sharedHeader.innerHTML = `
+                    <span class="material-icons-round text-slate-500" style="font-size:18px">people</span>
+                    <h3 class="text-sm font-semibold text-slate-400">Shared with me</h3>
+                `;
+                grid.appendChild(sharedHeader);
+
+                filteredShared.forEach(project => {
+                    const progress = project.taskCount > 0
+                        ? Math.round((project.completedCount / project.taskCount) * 100) : 0;
+                    const updatedStr = timeAgo(project.updatedAt);
+                    const roleBadge = project._shareRole === 'editor'
+                        ? '<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Editor</span>'
+                        : '<span class="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">Viewer</span>';
+
+                    const card = document.createElement('div');
+                    card.setAttribute('data-project-id', project.id);
+                    card.className = 'project-card rounded-xl p-5 relative';
+                    card.onclick = () => openProject(project.id);
+                    card.innerHTML = `
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="color-dot" style="background: ${project.color}"></span>
+                            <h3 class="font-semibold text-white text-sm truncate flex-1">${escapeHtml(project.name)}</h3>
+                            ${roleBadge}
+                        </div>
+                        <div class="progress-bar-bg mb-2">
+                            <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-xs text-slate-500 mb-1">
+                            <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
+                            <span>${updatedStr}</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
             }
 
             // If calendar view is active, keep grid hidden and show calendar
@@ -4291,6 +4597,8 @@ FEW-SHOT EXAMPLES
 
             currentProjectId = null;
             currentProjectName = '';
+            currentProjectRole = 'owner';
+            currentProjectOwnerId = null;
             currentTaskIndex = null;
             tasks = [];
             history = [];
@@ -4311,6 +4619,8 @@ FEW-SHOT EXAMPLES
             document.getElementById('breadcrumbName').classList.add('hidden');
             document.getElementById('exportButtons').classList.add('hidden');
             document.getElementById('homeBtn').classList.add('hidden');
+            const roleBadge = document.getElementById('sharedRoleBadge');
+            if (roleBadge) roleBadge.remove();
 
             localStorage.removeItem('planner_lastProject');
 
@@ -4390,6 +4700,12 @@ FEW-SHOT EXAMPLES
                 document.getElementById('breadcrumbSep').classList.remove('hidden');
                 document.getElementById('breadcrumbName').classList.remove('hidden');
                 document.getElementById('breadcrumbName').textContent = project.name;
+                // Set sharing role
+                currentProjectRole = project._isShared ? (project._shareRole || 'viewer') : 'owner';
+                currentProjectOwnerId = project._isShared ? project._ownerId : (currentUser ? currentUser.id : null);
+            } else {
+                currentProjectRole = 'owner';
+                currentProjectOwnerId = currentUser ? currentUser.id : null;
             }
 
             // Remember last project
@@ -4415,6 +4731,9 @@ FEW-SHOT EXAMPLES
             const mobileToggle = document.getElementById('mobileSidebarToggle');
             mobileToggle.classList.remove('hidden');
             mobileToggle.classList.add('flex');
+
+            // Apply permission-based UI visibility
+            applyPermissionUI();
 
             // Hide loading overlay
             overlay.classList.add('hidden');
@@ -4591,6 +4910,7 @@ FEW-SHOT EXAMPLES
         }
 
         async function renameProject(id, currentName) {
+            if (!isProjectOwner()) return;
             const newName = prompt('Rename project:', currentName);
             if (!newName || !newName.trim() || newName.trim() === currentName) return;
             const registry = await loadRegistry();
@@ -4708,6 +5028,10 @@ FEW-SHOT EXAMPLES
             const taskMap = new Map(tasks.map(t => [t.id, t]));
             document.querySelectorAll('.gantt .grid-header').forEach(el => el.style.fill = '#0f172a');
             document.querySelectorAll('.gantt .grid-row').forEach(el => el.style.fill = 'transparent');
+            // Hide drag handles for non-owners
+            if (!isProjectOwner()) {
+                document.querySelectorAll('.gantt .handle-group').forEach(h => h.style.display = 'none');
+            }
             document.querySelectorAll('.gantt .bar-wrapper').forEach((wrapper) => {
                 const taskId = wrapper.getAttribute('data-id');
                 const task = taskMap.get(taskId);
@@ -5206,36 +5530,39 @@ FEW-SHOT EXAMPLES
                 const isLocked = !!task.locked;
                 const priMeta = getPriorityMeta(task.priority);
 
+                const _owner = isProjectOwner();
+                const _editor = canEditTaskDetails();
+                const _ai = canUseAI();
                 const tr = document.createElement('tr');
                 tr.setAttribute('data-task-id', task.id);
                 tr.className = `hover:bg-slate-800/50 transition-colors ${isLocked ? 'opacity-80' : ''}`;
                 tr.innerHTML = `
                     <td class="p-2 text-center">
-                        <button id="lockBtn-${index}" onclick="toggleTaskLock(${index})" class="p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}" title="${isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI'}">
+                        ${_owner ? `<button id="lockBtn-${index}" onclick="toggleTaskLock(${index})" class="p-1 rounded transition-colors ${isLocked ? 'text-amber-400' : 'text-slate-700 hover:text-slate-400'}" title="${isLocked ? 'Locked — AI cannot modify' : 'Unlocked — click to lock from AI'}">
                             <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
-                        </button>
+                        </button>` : ''}
                     </td>
                     <td class="p-3"><span class="material-icons-round ${priMeta.color} align-middle mr-1" style="font-size:14px" title="${priMeta.label} priority">flag</span>${task.start === task.end ? '<span class="material-icons-round text-blue-400 align-middle mr-0.5" style="font-size:13px" title="Fixed date">event</span>' : ''}<a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
                     <td class="p-3">
                         <input type="text" value="${escapeHtml(task.assigned || '')}"
                                onchange="updateTask(${index}, 'assigned', this.value)"
                                class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 w-full"
-                               placeholder="Unassigned">
+                               placeholder="Unassigned" ${!_owner ? 'disabled' : ''}>
                     </td>
                     <td class="p-2 text-center">
-                        <button id="summaryBtn-${index}" onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors flex items-center gap-1 mx-auto ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
+                        ${_ai ? `<button id="summaryBtn-${index}" onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors flex items-center gap-1 mx-auto ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700 cursor-default'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
                             <span class="material-icons-round" style="font-size:16px">auto_awesome</span>
                             <span class="text-[10px]">Summary</span>
-                        </button>
+                        </button>` : ''}
                     </td>
-                    <td class="p-3"><input type="date" value="${task.start}" onchange="updateTask(${index}, 'start', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300"></td>
-                    <td class="p-3"><input type="date" value="${task.end}" onchange="updateTask(${index}, 'end', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300"></td>
-                    <td class="p-3"><input type="number" value="${task.progress}" min="0" max="100" onchange="updateTask(${index}, 'progress', this.value)" class="bg-transparent border-none text-slate-200 focus:outline-none w-12 text-right"> %</td>
+                    <td class="p-3"><input type="date" value="${task.start}" onchange="updateTask(${index}, 'start', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300" ${!_owner ? 'disabled' : ''}></td>
+                    <td class="p-3"><input type="date" value="${task.end}" onchange="updateTask(${index}, 'end', this.value)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300" ${!_owner ? 'disabled' : ''}></td>
+                    <td class="p-3"><input type="number" value="${task.progress}" min="0" max="100" onchange="updateTask(${index}, 'progress', this.value)" class="bg-transparent border-none text-slate-200 focus:outline-none w-12 text-right" ${!_editor ? 'disabled' : ''}> %</td>
                     <td class="p-3"><span class="status-badge ${status.css}"><span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}</span></td>
                     <td class="p-3 text-center">
-                        <button onclick="deleteTask(${index})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete task">
+                        ${_owner ? `<button onclick="deleteTask(${index})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete task">
                             <span class="material-icons-round text-sm">close</span>
-                        </button>
+                        </button>` : ''}
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -5250,9 +5577,9 @@ FEW-SHOT EXAMPLES
                             <div class="flex items-center gap-2 mb-2">
                                 <span class="material-icons-round text-purple-400" style="font-size:14px">auto_awesome</span>
                                 <span class="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">AI Summary</span>
-                                <button onclick="regenerateRowSummary(${index})" class="ml-auto p-1 rounded text-slate-600 hover:text-purple-400 hover:bg-purple-500/10 transition-colors" title="Regenerate summary">
+                                ${_ai ? `<button onclick="regenerateRowSummary(${index})" class="ml-auto p-1 rounded text-slate-600 hover:text-purple-400 hover:bg-purple-500/10 transition-colors" title="Regenerate summary">
                                     <span class="material-icons-round" style="font-size:14px">refresh</span>
-                                </button>
+                                </button>` : ''}
                                 <span id="summaryRowStatus-${index}" class="text-[10px] text-slate-600"></span>
                             </div>
                             <div id="summaryRowContent-${index}" class="text-xs text-slate-300 leading-relaxed"></div>
@@ -5269,13 +5596,16 @@ FEW-SHOT EXAMPLES
             container.innerHTML = '';
 
             if (tasks.length === 0) {
-                container.innerHTML = `<div class="flex flex-col items-center justify-center py-10 text-slate-600">
+                container.innerHTML = isProjectOwner() ? `<div class="flex flex-col items-center justify-center py-10 text-slate-600">
                     <span class="material-icons-round text-3xl mb-2">assignment</span>
                     <p class="text-sm mb-4">No tasks yet</p>
                     <button onclick="showAddTaskModal()" class="flex items-center gap-1.5 px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px] mb-3">
                         <span class="material-icons-round text-sm">add</span> Add Task Manually
                     </button>
                     <p class="text-xs text-slate-500">or tap <span class="material-icons-round align-middle" style="font-size:14px">smart_toy</span> top-left to generate tasks with AI</p>
+                </div>` : `<div class="flex flex-col items-center justify-center py-10 text-slate-600">
+                    <span class="material-icons-round text-3xl mb-2">assignment</span>
+                    <p class="text-sm">No tasks yet</p>
                 </div>`;
                 return;
             }
@@ -5321,28 +5651,30 @@ FEW-SHOT EXAMPLES
                         <span class="card-progress-pct text-[11px] font-medium text-slate-400 w-8 text-right">${pct}%</span>
                     </div>
                     <div class="flex items-center gap-1 pt-1.5 border-t border-slate-700/50">
-                        <button onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
+                        ${canUseAI() ? `<button onclick="toggleRowSummary(${index})" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center ${hasContent ? 'text-purple-400 hover:bg-purple-500/10' : 'text-slate-700'}" title="${hasContent ? 'AI Summary' : 'No content to summarize'}" ${!hasContent ? 'disabled' : ''}>
                             <span class="material-icons-round" style="font-size:14px">auto_awesome</span>
-                        </button>
-                        <button onclick="toggleTaskLock(${index}); renderMobileCards();" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center ${isLocked ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}" title="${isLocked ? 'Locked from AI' : 'Lock from AI'}">
+                        </button>` : ''}
+                        ${isProjectOwner() ? `<button onclick="toggleTaskLock(${index}); renderMobileCards();" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center ${isLocked ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}" title="${isLocked ? 'Locked from AI' : 'Lock from AI'}">
                             <span class="material-icons-round" style="font-size:14px">${isLocked ? 'lock' : 'lock_open'}</span>
-                        </button>
+                        </button>` : ''}
                         ${indicatorHtml}
                         <div class="flex-1"></div>
-                        <button onclick="deleteTask(${index})" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center text-slate-600 hover:text-red-400" title="Delete task">
+                        ${isProjectOwner() ? `<button onclick="deleteTask(${index})" class="p-1 rounded transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center text-slate-600 hover:text-red-400" title="Delete task">
                             <span class="material-icons-round" style="font-size:14px">close</span>
-                        </button>
+                        </button>` : ''}
                     </div>
                 `;
                 container.appendChild(card);
             });
 
-            // Add task button for mobile
-            const addBtn = document.createElement('button');
-            addBtn.className = 'w-full flex items-center justify-center gap-1 py-3 text-xs text-slate-400 hover:text-blue-400 bg-slate-800/30 border border-dashed border-slate-700 rounded-lg transition-colors min-h-[44px]';
-            addBtn.innerHTML = '<span class="material-icons-round text-sm">add</span> Add Task';
-            addBtn.onclick = () => showAddTaskModal();
-            container.appendChild(addBtn);
+            // Add task button for mobile (only for owner)
+            if (isProjectOwner()) {
+                const addBtn = document.createElement('button');
+                addBtn.className = 'w-full flex items-center justify-center gap-1 py-3 text-xs text-slate-400 hover:text-blue-400 bg-slate-800/30 border border-dashed border-slate-700 rounded-lg transition-colors min-h-[44px]';
+                addBtn.innerHTML = '<span class="material-icons-round text-sm">add</span> Add Task';
+                addBtn.onclick = () => showAddTaskModal();
+                container.appendChild(addBtn);
+            }
         }
 
         function updateRowIndicators(index) {
@@ -5380,6 +5712,11 @@ FEW-SHOT EXAMPLES
         }
 
         function updateTask(index, field, value) {
+            // Permission: owner-only fields
+            const ownerFields = ['start', 'end', 'name', 'priority', 'description', 'dependencies', 'assigned'];
+            if (ownerFields.includes(field) && !isProjectOwner()) return;
+            // Editors can update progress; viewers cannot
+            if (field === 'progress' && !canEditTaskDetails()) return;
             const task = tasks[index];
             if (field === 'start' && task.end && value > task.end) {
                 task.end = value;
@@ -5401,6 +5738,7 @@ FEW-SHOT EXAMPLES
         }
 
         function deleteTask(index) {
+            if (!isProjectOwner()) return;
             const task = tasks[index];
             if (!confirm(`Delete "${task.name}"?`)) return;
             // Capture _rowId for pending DB deletion before removing from array
@@ -5509,6 +5847,7 @@ FEW-SHOT EXAMPLES
         }
 
         function showAddTaskModal() {
+            if (!isProjectOwner()) return;
             const today = new Date();
             const startStr = today.toISOString().slice(0, 10);
             const end = new Date(today);
@@ -5970,6 +6309,21 @@ FEW-SHOT EXAMPLES
             document.getElementById('clearDescriptionBtn').style.display = task.description ? '' : 'none';
             applyDetailFixedDateState(task);
             renderDependencies(task);
+
+            // Permission enforcement on detail fields
+            const _own = isProjectOwner();
+            const _edit = canEditTaskDetails();
+            // Owner-only fields: name, assigned, priority, start, end, description, dependencies
+            ['tdName', 'tdAssigned', 'tdPriority', 'tdStart', 'tdEnd', 'tdDescription'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.disabled = !_own; if (!_own) el.classList.add('opacity-60'); else el.classList.remove('opacity-60'); }
+            });
+            // Progress: editable by editors too
+            const progEl = document.getElementById('tdProgress');
+            if (progEl) { progEl.disabled = !_edit; if (!_edit) progEl.classList.add('opacity-60'); else progEl.classList.remove('opacity-60'); }
+            // Clear description button
+            const clearBtn = document.getElementById('clearDescriptionBtn');
+            if (clearBtn && !_own) clearBtn.style.display = 'none';
         }
 
         function clearTaskDescription() {
@@ -5982,6 +6336,11 @@ FEW-SHOT EXAMPLES
 
         function updateTaskDetail(field, value) {
             const task = tasks[currentTaskIndex];
+            // Permission guard: only owner can change structural fields
+            const ownerOnlyFields = ['name', 'assigned', 'priority', 'start', 'end', 'description', 'dependencies'];
+            if (ownerOnlyFields.includes(field) && !isProjectOwner()) return;
+            // Editors can update progress; viewers cannot update anything
+            if (field === 'progress' && !canEditTaskDetails()) return;
             if (field === 'name' && value.trim()) {
                 const trimmed = value.trim();
                 if (tasks.some((t, i) => i !== currentTaskIndex && t.name.toLowerCase() === trimmed.toLowerCase())) {
@@ -7420,10 +7779,11 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 return;
             }
 
+            const _actEdit = canEditTaskDetails();
             items.forEach(item => {
                 const div = document.createElement('div');
-                div.className = 'activity-item cursor-pointer';
-                div.onclick = (e) => { if (!e.target.closest('.activity-delete-btn') && !e.target.closest('.activity-edit-area')) editActivityEntry(item.id); };
+                div.className = 'activity-item' + (_actEdit ? ' cursor-pointer' : '');
+                div.onclick = (e) => { if (_actEdit && !e.target.closest('.activity-delete-btn') && !e.target.closest('.activity-edit-area')) editActivityEntry(item.id); };
                 const time = new Date(item.timestamp);
                 const timeStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                 div.innerHTML = `
@@ -7431,20 +7791,20 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     <div>
                         <div class="flex items-center justify-between gap-2 mb-1">
                             <span class="text-[10px] text-slate-500">${timeStr}</span>
-                            <div class="flex items-center gap-1">
+                            ${_actEdit ? `<div class="flex items-center gap-1">
                                 <button onclick="event.stopPropagation(); deleteActivityEntry('${item.id}')" class="activity-delete-btn text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
                                     <span class="material-icons-round" style="font-size:14px">delete</span>
                                 </button>
-                            </div>
+                            </div>` : ''}
                         </div>
                         <div id="activity-display-${item.id}" class="text-sm text-slate-300" style="white-space:pre-wrap">${escapeHtml(item.message)}</div>
-                        <div id="activity-edit-${item.id}" class="activity-edit-area hidden">
+                        ${_actEdit ? `<div id="activity-edit-${item.id}" class="activity-edit-area hidden">
                             <textarea class="td-textarea w-full text-sm" rows="3">${escapeHtml(item.message)}</textarea>
                             <div class="flex justify-end gap-2 mt-1">
                                 <button onclick="event.stopPropagation(); cancelActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
                                 <button onclick="event.stopPropagation(); saveActivityEdit('${item.id}')" class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
                             </div>
-                        </div>
+                        </div>` : ''}
                     </div>
                 `;
                 container.appendChild(div);
@@ -7453,6 +7813,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function addComment() {
+            if (!canEditTaskDetails()) return;
             const input = document.getElementById('commentInput');
             const val = input.value.trim();
             if (!val) return;
@@ -7552,6 +7913,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function deleteActivityEntry(id) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const idx = task.activity.findIndex(a => a.id === id);
             if (idx === -1) return;
@@ -7609,20 +7971,21 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 return;
             }
 
+            const _clEdit = canEditTaskDetails();
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'checklist-item' + (item.checked ? ' checked' : '');
                 div.innerHTML = `
-                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleChecklistItem('${item.id}')">
-                    <label id="cl-display-${item.id}" class="flex-1 text-sm text-slate-300 cursor-pointer" onclick="editChecklistItem('${item.id}')">${escapeHtml(item.text)}</label>
-                    <div id="cl-edit-${item.id}" class="hidden flex-1 flex gap-2">
+                    <input type="checkbox" class="checklist-cb" ${item.checked ? 'checked' : ''} onchange="toggleChecklistItem('${item.id}')" ${!_clEdit ? 'disabled' : ''}>
+                    <label id="cl-display-${item.id}" class="flex-1 text-sm text-slate-300 ${_clEdit ? 'cursor-pointer' : ''}" ${_clEdit ? `onclick="editChecklistItem('${item.id}')"` : ''}>${escapeHtml(item.text)}</label>
+                    ${_clEdit ? `<div id="cl-edit-${item.id}" class="hidden flex-1 flex gap-2">
                         <input type="text" class="td-input flex-1 text-sm" value="${escapeHtml(item.text)}" onkeydown="if(event.key==='Enter')saveChecklistEdit('${item.id}');if(event.key==='Escape')cancelChecklistEdit('${item.id}')">
                         <button onclick="saveChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">Save</button>
                         <button onclick="cancelChecklistEdit('${item.id}')" class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">Cancel</button>
                     </div>
                     <button onclick="deleteChecklistItem('${item.id}')" class="text-slate-600 hover:text-red-400 transition-colors p-0.5" title="Delete">
                         <span class="material-icons-round" style="font-size:14px">delete</span>
-                    </button>
+                    </button>` : ''}
                 `;
                 container.appendChild(div);
             });
@@ -7630,6 +7993,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function addChecklistItem() {
+            if (!canEditTaskDetails()) return;
             const input = document.getElementById('checklistInput');
             const val = input.value.trim();
             if (!val) return;
@@ -7681,6 +8045,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function toggleChecklistItem(id) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const item = (task.checklist || []).find(c => c.id === id);
             if (!item) return;
@@ -7787,6 +8152,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function deleteChecklistItem(id) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const idx = (task.checklist || []).findIndex(c => c.id === id);
             if (idx === -1) return;
@@ -7854,6 +8220,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     preview = `<div class="file-thumb flex items-center justify-center bg-slate-800 rounded"><span class="material-icons-round text-2xl text-slate-500">${icon}</span></div>`;
                 }
 
+                const _fEdit = canEditTaskDetails();
                 card.innerHTML = `
                     ${preview}
                     <div class="text-xs text-slate-200 font-medium truncate" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
@@ -7862,7 +8229,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                         <div class="flex gap-1">
                             ${isImage ? `<button onclick="previewFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Preview"><span class="material-icons-round text-sm">visibility</span></button>` : ''}
                             <button onclick="downloadFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Download"><span class="material-icons-round text-sm">download</span></button>
-                            <button onclick="deleteFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>
+                            ${_fEdit ? `<button onclick="deleteFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>` : ''}
                         </div>
                     </div>
                 `;
@@ -7871,6 +8238,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         async function handleFileUpload(fileList) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const maxSize = 5 * 1024 * 1024; // 5MB
             const validFiles = Array.from(fileList).filter(file => {
@@ -7994,6 +8362,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function deleteFile(index) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             const file = task.files[index];
             if (!file || !confirm(`Delete "${file.name}"?`)) return;
@@ -8095,7 +8464,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 const card = document.createElement('div');
                 card.setAttribute('data-meeting-id', mtg.id);
                 card.className = 'meeting-card cursor-pointer hover:border-slate-600';
-                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editMeeting(i); };
+                const _canEdit = canEditTaskDetails();
+                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn') && _canEdit) editMeeting(i); };
+                if (!_canEdit) card.classList.remove('cursor-pointer');
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-3">
@@ -8108,9 +8479,9 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                             ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
                             ${mtg.notes ? `<p class="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed overflow-hidden" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical">${escapeHtml(mtg.notes)}</p>` : ''}
                         </div>
-                        <div class="flex gap-1 flex-shrink-0">
+                        ${_canEdit ? `<div class="flex gap-1 flex-shrink-0">
                             <button onclick="event.stopPropagation(); deleteMeeting(${i})" class="meeting-delete-btn p-1 text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">delete</span></button>
-                        </div>
+                        </div>` : ''}
                     </div>
                 `;
                 container.appendChild(card);
@@ -8119,6 +8490,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function showAddMeeting() {
+            if (!canEditTaskDetails()) return;
             pushNavState('modal');
             editingMeetingIndex = null;
             document.getElementById('mtgTitle').value = '';
@@ -8159,6 +8531,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function saveMeeting() {
+            if (!canEditTaskDetails()) return;
             const title = document.getElementById('mtgTitle').value.trim();
             const date = document.getElementById('mtgDate').value;
             const attendees = document.getElementById('mtgAttendees').value.trim();
@@ -8246,6 +8619,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function deleteMeeting(index) {
+            if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             if (!confirm('Delete this meeting?')) return;
             const mtgCopy = JSON.parse(JSON.stringify(task.meetings[index]));
@@ -8532,6 +8906,7 @@ OUTPUT STRUCTURE (TACTICAL VIEW)
         }
 
         async function toggleRowSummary(index, forceOpen = false) {
+            if (!canUseAI()) return;
             const isMobile = window.innerWidth < 768;
 
             // Desktop elements (table row)
@@ -8912,6 +9287,7 @@ OUTPUT STRUCTURE (TACTICAL VIEW)
         }
 
         async function showProjectSummary(projectId, projectName) {
+            if (!canUseAI()) return;
             pushNavState('modal');
             const modal = document.getElementById('projectSummaryModal');
             const content = document.getElementById('projectSummaryContent');
@@ -9435,6 +9811,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
         }
 
         async function handleSend() {
+            if (!canUseAI()) return;
             const input = document.getElementById('userPrompt');
             const prompt = input.value.trim();
             const statusEl = document.getElementById('statusIndicator');
