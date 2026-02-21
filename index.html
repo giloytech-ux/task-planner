@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v9</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v10</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -913,6 +913,11 @@
             </div>
             <!-- Calendar View -->
             <div id="calendarView" class="hidden">
+                <div class="mb-4">
+                    <select id="calendarProjectFilter" onchange="renderCalendar()" class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[180px]">
+                        <option value="all">All Projects</option>
+                    </select>
+                </div>
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-2">
                         <button onclick="navigateCalendarMonth(-1)" class="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
@@ -3646,6 +3651,7 @@ FEW-SHOT EXAMPLES
                 btn.title = 'Project cards view';
                 document.getElementById('dashboardToolbar').classList.add('hidden');
                 document.getElementById('dashboardHeader').classList.add('hidden');
+                document.getElementById('calendarProjectFilter').value = 'all';
                 renderCalendar();
             } else {
                 calView.classList.add('hidden');
@@ -3697,7 +3703,24 @@ FEW-SHOT EXAMPLES
                     }
                 });
             }
-            const taskMap = buildCalendarTaskMap(registry);
+            // Populate project filter dropdown
+            const filterSel = document.getElementById('calendarProjectFilter');
+            const prevFilter = filterSel.value;
+            const archivedIds = getArchivedIds(registry);
+            const activeProjects = registry.filter(p => !archivedIds.has(p.id));
+            filterSel.innerHTML = '<option value="all">All Projects</option>';
+            activeProjects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                filterSel.appendChild(opt);
+            });
+            filterSel.value = prevFilter || 'all';
+            // If previously selected project no longer exists, reset
+            if (!filterSel.value) filterSel.value = 'all';
+
+            const filteredRegistry = filterSel.value === 'all' ? registry : registry.filter(p => p.id === filterSel.value);
+            const taskMap = buildCalendarTaskMap(filteredRegistry);
             const grid = document.getElementById('calendarGrid');
             const label = document.getElementById('calendarMonthLabel');
             const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
