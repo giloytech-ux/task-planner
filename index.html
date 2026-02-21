@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v19</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v20</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -4688,13 +4688,12 @@ FEW-SHOT EXAMPLES
             clearTimeout(overlayTimeout);
             requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('hidden')));
 
-            // Background refresh: if registry is stale, silently re-fetch and update
-            if (currentUser && DataStore.isStale('registry')) {
+            // Background refresh: always verify registry after initial render
+            if (currentUser) {
+                const prevJson = JSON.stringify(DataStore.get('registry'));
                 loadRegistry(true).then(freshRegistry => {
-                    // Only re-render if we're still on dashboard and data actually changed
                     if (!currentProjectId && freshRegistry) {
-                        const cached = DataStore.get('registry');
-                        if (JSON.stringify(cached) !== JSON.stringify(freshRegistry)) {
+                        if (prevJson !== JSON.stringify(freshRegistry)) {
                             renderDashboard();
                         }
                     }
