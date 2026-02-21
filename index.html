@@ -940,11 +940,40 @@
             <div id="calendarPopover" class="hidden fixed z-50 w-72 max-h-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden" style="pointer-events:auto">
                 <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
                     <span id="calendarPopoverDate" class="text-xs font-semibold text-white"></span>
-                    <button onclick="closeCalendarPopover()" class="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
-                        <span class="material-icons-round text-sm">close</span>
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button onclick="openCalendarAddModal()" class="flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-slate-700 text-blue-400 hover:text-blue-300 transition-colors text-xs font-medium">
+                            <span class="material-icons-round text-sm">add</span>Add
+                        </button>
+                        <button onclick="closeCalendarPopover()" class="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                            <span class="material-icons-round text-sm">close</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="calendarPopoverList" class="overflow-y-auto max-h-64 p-2 space-y-1"></div>
+            </div>
+            <!-- Calendar Add Task Modal -->
+            <div id="calendarAddModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+                    <div class="px-5 py-4 border-b border-slate-700">
+                        <h3 class="text-base font-semibold text-white">Add Event</h3>
+                        <p id="calAddDateLabel" class="text-xs text-slate-400 mt-0.5"></p>
+                    </div>
+                    <div class="px-5 py-4 space-y-3">
+                        <input type="hidden" id="calAddDate">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Project</label>
+                            <select id="calAddProject" class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Task name</label>
+                            <input type="text" id="calAddTaskName" placeholder="Enter task name..." class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCalendarAdd();}">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-700">
+                        <button onclick="cancelCalendarAdd()" class="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
+                        <button onclick="confirmCalendarAdd()" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Create</button>
+                    </div>
+                </div>
             </div>
             <!-- Empty State -->
             <div id="emptyState" class="hidden flex-col items-center justify-center py-20 text-center">
@@ -3726,7 +3755,14 @@ FEW-SHOT EXAMPLES
                         showCalendarPopover(dateStr, dayTasks, cell);
                     };
                 } else {
-                    cell.onclick = () => closeCalendarPopover();
+                    cell.onclick = (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
+                        cell.classList.add('cal-selected');
+                        calendarSelectedDate = dateStr;
+                        closeCalendarPopover();
+                        openCalendarAddModal(dateStr);
+                    };
                 }
 
                 grid.appendChild(cell);
@@ -3798,6 +3834,103 @@ FEW-SHOT EXAMPLES
 
         function closeCalendarPopover() {
             document.getElementById('calendarPopover').classList.add('hidden');
+        }
+
+        async function openCalendarAddModal(dateStr) {
+            dateStr = dateStr || calendarSelectedDate;
+            if (!dateStr) return;
+            closeCalendarPopover();
+            const registry = await loadRegistry();
+            const archivedIds = getArchivedIds(registry);
+            const projects = (registry || []).filter(p => !archivedIds.has(p.id));
+            const sel = document.getElementById('calAddProject');
+            sel.innerHTML = '';
+            // Put Personal (default) project first
+            const sorted = [...projects].sort((a, b) => {
+                if (a.metadata && a.metadata.isDefault) return -1;
+                if (b.metadata && b.metadata.isDefault) return 1;
+                return 0;
+            });
+            sorted.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                if (p.metadata && p.metadata.isDefault) opt.selected = true;
+                sel.appendChild(opt);
+            });
+            const d = new Date(dateStr + 'T00:00:00');
+            document.getElementById('calAddDateLabel').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+            document.getElementById('calAddDate').value = dateStr;
+            document.getElementById('calAddTaskName').value = '';
+            document.getElementById('calendarAddModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('calAddTaskName').focus(), 50);
+        }
+
+        async function confirmCalendarAdd() {
+            const name = document.getElementById('calAddTaskName').value.trim();
+            if (!name) { document.getElementById('calAddTaskName').focus(); return; }
+            const projectId = document.getElementById('calAddProject').value;
+            const dateStr = document.getElementById('calAddDate').value;
+            if (!projectId || !dateStr) return;
+
+            if (currentUser) {
+                // Supabase mode
+                const { data: existing } = await supabase.from('tasks')
+                    .select('task_number, sort_order')
+                    .eq('project_id', projectId);
+                const maxTaskNum = (existing || []).reduce((max, t) => Math.max(max, parseInt(t.task_number) || 0), 0);
+                const maxSort = (existing || []).reduce((max, t) => Math.max(max, t.sort_order ?? 0), 0);
+                const { error } = await supabase.from('tasks').insert({
+                    project_id: projectId,
+                    task_number: String(maxTaskNum + 1),
+                    name: name,
+                    start_date: dateStr,
+                    end_date: dateStr,
+                    progress: 0,
+                    sort_order: maxSort + 1,
+                    priority: 'medium',
+                    assigned: 'Me',
+                    description: '',
+                    dependencies: '',
+                    checklist: [],
+                    activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
+                    files: [],
+                    meetings: []
+                });
+                if (error) { console.error('Calendar add task error:', error); return; }
+                DataStore.invalidate('registry');
+                DataStore.invalidate('project:' + projectId);
+            } else {
+                // Guest / localStorage mode
+                const projRaw = localStorage.getItem('planner_proj_' + projectId);
+                const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
+                const maxId = (data.tasks || []).reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
+                data.tasks.push({
+                    id: String(maxId + 1),
+                    name: name,
+                    start: dateStr,
+                    end: dateStr,
+                    progress: 0,
+                    dependencies: '',
+                    priority: 'medium',
+                    assigned: 'Me',
+                    description: '',
+                    checklist: [],
+                    activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
+                    files: [],
+                    meetings: []
+                });
+                localStorage.setItem('planner_proj_' + projectId, JSON.stringify(data));
+                updateRegistryMetadataLocalForProject(projectId);
+            }
+
+            cancelCalendarAdd();
+            renderCalendar();
+        }
+
+        function cancelCalendarAdd() {
+            document.getElementById('calendarAddModal').classList.add('hidden');
+            document.getElementById('calAddTaskName').value = '';
         }
 
         let _pendingTaskOpen = null;
