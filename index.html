@@ -23,6 +23,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS for XLSX parsing -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
     <style>
         /* Custom Dark Mode Tweaks */
@@ -891,11 +893,22 @@
 
             <!-- Input Area -->
             <div class="p-4 border-t border-slate-700 bg-slate-900">
+                <input type="file" id="chatFileInput" accept=".csv,.txt,.xlsx" class="hidden" onchange="handleChatFileSelect(this.files)">
+                <div id="chatFilePreview" class="hidden mb-2 flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-600 text-xs text-slate-300">
+                    <span class="material-icons-round text-sm text-blue-400">attach_file</span>
+                    <span id="chatFileName" class="truncate flex-1"></span>
+                    <button onclick="removeChatFile()" class="text-slate-400 hover:text-red-400 transition-colors flex-shrink-0" title="Remove file">
+                        <span class="material-icons-round text-sm">close</span>
+                    </button>
+                </div>
                 <div class="relative">
                     <textarea id="userPrompt" rows="3"
-                        class="w-full bg-slate-800 text-white rounded-lg p-3 pr-24 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                        class="w-full bg-slate-800 text-white rounded-lg p-3 pr-32 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
                         placeholder="e.g., 'Project: Annual Statement. Due Apr 24, 2026. Needs 50 exhibits.'"></textarea>
                     <div class="absolute bottom-2 right-2 flex items-center gap-1">
+                        <button onclick="document.getElementById('chatFileInput').click()" class="p-2 md:p-2 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300 transition-colors flex items-center justify-center shadow-lg" title="Attach file (.csv, .txt, .xlsx)">
+                            <span class="material-icons-round text-sm">attach_file</span>
+                        </button>
                         <button id="voiceBtn" onclick="toggleVoiceInput()" class="p-2 md:p-2 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300 transition-colors flex items-center justify-center shadow-lg" title="Voice input">
                             <span class="material-icons-round text-sm">mic</span>
                         </button>
@@ -2325,6 +2338,7 @@ FEW-SHOT EXAMPLES
             tasks = [];
             history = [];
             pendingPlan = null;
+            pendingChatFile = null;
             _pendingDeletes = [];
             showAuthView();
         }
@@ -2950,6 +2964,7 @@ FEW-SHOT EXAMPLES
                 tasks = [];
                 history = [];
                 pendingPlan = null;
+                pendingChatFile = null;
                 _pendingDeletes = [];
                 showDashboard();
             } else {
@@ -3645,6 +3660,7 @@ FEW-SHOT EXAMPLES
             tasks = [];
             history = [];
             pendingPlan = null;
+            pendingChatFile = null;
             projectLogs = [];
             projectDescription = '';
             projectMeetings = [];
@@ -3787,6 +3803,8 @@ FEW-SHOT EXAMPLES
             pendingPrompt = null;
             pendingAiText = null;
             pendingPlan = null;
+            pendingChatFile = null;
+            removeChatFile();
             markChatDirty();
             rebuildChatUI();
             scheduleSave();
@@ -8216,6 +8234,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
         let pendingAiText = null;
         let pendingAction = null;
         let pendingPlan = null;
+        let pendingChatFile = null;
 
         // Layer 1: Smart Merge — only update scheduling fields, preserve rich data
         function mergeTasks(existing, aiTasks) {
@@ -8439,7 +8458,18 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             // --- Passed all checks, commit to sending ---
             lastSendTime = now;
 
-            addToChat('user', escapeHtml(prompt));
+            // Build file injection if a file is attached
+            let aiPrompt = prompt;
+            let displayPrompt = prompt;
+            const attachedFile = pendingChatFile;
+            if (attachedFile) {
+                const fileNote = `\n\n[SYSTEM NOTE: The user uploaded a .${attachedFile.ext} file "${attachedFile.name}". ${attachedFile.truncated ? 'It was truncated to the first 50 rows to save space. ' : ''}Here is the raw data:]\n${attachedFile.content}`;
+                aiPrompt = prompt + fileNote;
+                displayPrompt = prompt + ` \ud83d\udcce ${attachedFile.name}`;
+                removeChatFile();
+            }
+
+            addToChat('user', escapeHtml(displayPrompt));
             input.value = '';
             document.getElementById('charCount').textContent = `0 / ${MAX_PROMPT_LENGTH}`;
             document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -8451,7 +8481,7 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 parts: [{ text: h.role === 'model' ? (h.displayText || '[AI response]') : h.text }]
             }));
 
-            conversation.push({ role: "user", parts: [{ text: prompt }] });
+            conversation.push({ role: "user", parts: [{ text: aiPrompt }] });
 
             // Build slim task context for planning mode
             const optimized = getOptimizedContext(tasks, 'planning');
@@ -8568,6 +8598,86 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
             }
 
             pendingPlan = null;
+        }
+
+        // =============================================
+        // Chat File Attachment
+        // =============================================
+
+        function handleChatFileSelect(files) {
+            const fileInput = document.getElementById('chatFileInput');
+            if (!files || files.length === 0) return;
+            const file = files[0];
+            fileInput.value = '';
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            const allowedExts = ['csv', 'txt', 'xlsx'];
+            if (!allowedExts.includes(ext)) {
+                addToChat('model', `Unsupported file type (.${ext}). Please attach a .csv, .txt, or .xlsx file.`);
+                return;
+            }
+
+            const MAX_FILE_SIZE = 500 * 1024;
+            if (file.size > MAX_FILE_SIZE) {
+                addToChat('model', `File too large (${(file.size / 1024).toFixed(0)}KB). Maximum size is 500KB.`);
+                return;
+            }
+
+            if (ext === 'xlsx') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const wb = XLSX.read(e.target.result, { type: 'array' });
+                        const firstSheet = wb.Sheets[wb.SheetNames[0]];
+                        const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+                        applyFileContent(file.name, ext, csvText);
+                    } catch (err) {
+                        addToChat('model', `Error reading .xlsx file: ${err.message}`);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    applyFileContent(file.name, ext, e.target.result);
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function applyFileContent(name, ext, rawText) {
+            const MAX_ROWS = 50;
+            const MAX_CHARS = 6000;
+            let truncated = false;
+
+            let lines = rawText.split('\n');
+            if (lines.length > MAX_ROWS) {
+                lines = lines.slice(0, MAX_ROWS);
+                truncated = true;
+            }
+            let content = lines.join('\n');
+            if (content.length > MAX_CHARS) {
+                content = content.substring(0, MAX_CHARS);
+                truncated = true;
+            }
+
+            pendingChatFile = { name, ext, content, truncated };
+
+            document.getElementById('chatFileName').textContent = name;
+            document.getElementById('chatFilePreview').classList.remove('hidden');
+            document.getElementById('chatFilePreview').classList.add('flex');
+
+            const textarea = document.getElementById('userPrompt');
+            if (!textarea.value.trim()) textarea.focus();
+        }
+
+        function removeChatFile() {
+            pendingChatFile = null;
+            const preview = document.getElementById('chatFilePreview');
+            if (preview) {
+                preview.classList.add('hidden');
+                preview.classList.remove('flex');
+            }
         }
 
         // =============================================
