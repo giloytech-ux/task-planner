@@ -8499,9 +8499,18 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
 
                 const aiText = data.candidates[0].content.parts[0].text;
 
-                // Try to parse as JSON (extraction mode) — if it fails, treat as conversational text
+                // Try to parse as JSON (extraction mode) — if it fails, try to extract embedded JSON
                 let parsed = null;
-                try { parsed = JSON.parse(aiText); } catch (e) { /* not JSON — conversational */ }
+                try {
+                    parsed = JSON.parse(aiText);
+                } catch (e) {
+                    // AI may have wrapped JSON with conversational text — extract the JSON object
+                    const firstBrace = aiText.indexOf('{');
+                    const lastBrace = aiText.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace > firstBrace) {
+                        try { parsed = JSON.parse(aiText.substring(firstBrace, lastBrace + 1)); } catch (e2) { /* genuinely not JSON */ }
+                    }
+                }
 
                 if (parsed && parsed.has_data_to_confirm && parsed.proposed_items && parsed.proposed_items.tasks) {
                     // Extraction mode — AI proposed structured tasks
@@ -8520,10 +8529,14 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                     history.push({ role: "model", text: aiText, type: 'plan', displayText: chatMessage, proposedTasks: proposedTasks });
                     markChatDirty();
                 } else {
-                    // Conversational mode — show plain text response
-                    const displayText = (parsed && (parsed.message || parsed.chat_message))
-                        ? (parsed.message || parsed.chat_message)
-                        : aiText;
+                    // Conversational mode — use chat_message from JSON, or strip any raw JSON from display
+                    let displayText;
+                    if (parsed && (parsed.message || parsed.chat_message)) {
+                        displayText = parsed.message || parsed.chat_message;
+                    } else {
+                        // Strip any embedded JSON block so raw data never shows in chat
+                        displayText = aiText.replace(/\{[\s\S]*"has_data_to_confirm"[\s\S]*\}/, '').trim() || aiText;
+                    }
                     addToChat('model', escapeHtml(displayText));
                     history.push({ role: "user", text: prompt });
                     history.push({ role: "model", text: aiText, type: 'chat', displayText: displayText });
