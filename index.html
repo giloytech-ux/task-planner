@@ -178,6 +178,7 @@
         .status-attention { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
         .status-overdue { background: rgba(239, 68, 68, 0.15); color: #f87171; }
         .status-overdue-soon { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+        .status-scheduled { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
 
         /* Task Detail Page */
         .td-header { border-bottom: 1px solid rgba(255,255,255,0.08); }
@@ -616,6 +617,7 @@
         body.light-theme .status-attention { background: rgba(154,103,0,0.1) !important; color: #9A6700 !important; }
         body.light-theme .status-overdue { background: rgba(215,0,21,0.1) !important; color: #D70015 !important; }
         body.light-theme .status-overdue-soon { background: rgba(201,52,0,0.1) !important; color: #C93400 !important; }
+        body.light-theme .status-scheduled { background: rgba(0,122,255,0.1) !important; color: #007AFF !important; }
         body.light-theme .td-tab:hover { color: #3A3A3C; }
         body.light-theme .td-tab.active { color: #007AFF !important; border-bottom-color: #007AFF !important; }
         body.light-theme .td-header { border-bottom-color: rgba(60,60,67,0.12) !important; }
@@ -682,6 +684,59 @@
         body.light-theme textarea::placeholder,
         body.light-theme select { color: #AEAEB2 !important; }
         body.light-theme select { background-color: #E5E5EA !important; color: #1C1C1E !important; }
+
+        /* 4: Calendar View */
+        .cal-cell {
+            min-height: 80px;
+            border: 1px solid rgba(148,163,184,0.1);
+            padding: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+        }
+        .cal-cell:hover { background: rgba(148,163,184,0.05); }
+        .cal-cell.cal-today { background: rgba(59,130,246,0.08); }
+        .cal-cell.cal-other { opacity: 0.35; }
+        .cal-marker {
+            font-size: 9px;
+            line-height: 1.4;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-bottom: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-left: 3px solid var(--marker-color);
+            background: color-mix(in srgb, var(--marker-color) 12%, transparent);
+            color: #cbd5e1;
+        }
+        .cal-overflow {
+            font-size: 9px;
+            color: #64748b;
+            padding: 0 4px;
+            cursor: pointer;
+        }
+        @media (max-width: 639px) {
+            .cal-cell { min-height: 48px; padding: 2px; }
+            .cal-marker {
+                width: 6px; height: 6px;
+                border-radius: 50%;
+                font-size: 0;
+                padding: 0;
+                border-left: none;
+                background: var(--marker-color);
+                display: inline-block;
+                margin: 1px;
+            }
+            .cal-overflow { font-size: 0; }
+            .cal-overflow::after { content: '…'; font-size: 9px; }
+        }
+        /* Light theme overrides for calendar */
+        body.light-theme .cal-cell { border-color: rgba(60,60,67,0.1); }
+        body.light-theme .cal-cell:hover { background: rgba(60,60,67,0.04); }
+        body.light-theme .cal-cell.cal-today { background: rgba(0,122,255,0.06); }
+        body.light-theme .cal-marker { color: #3A3A3C; }
+        body.light-theme .cal-overflow { color: #8E8E93; }
 
     </style>
 </head>
@@ -793,6 +848,11 @@
                         <input type="text" id="projectSearch" oninput="handleProjectSearch()" placeholder="Search projects..." class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors min-h-[44px]">
                     </div>
                     <div class="flex items-center gap-3">
+                        <!-- Calendar toggle -->
+                        <button id="calendarToggleBtn" onclick="toggleCalendarView()" class="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg border transition-colors min-h-[44px] bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200" title="Calendar view">
+                            <span class="material-icons-round text-sm">calendar_month</span>
+                            <span class="hidden sm:inline">Calendar</span>
+                        </button>
                         <!-- Sort -->
                         <div class="flex items-center gap-2">
                             <span class="material-icons-round text-sm text-slate-500">sort</span>
@@ -849,6 +909,41 @@
             </div>
             <div id="projectGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 <!-- Project cards injected here -->
+            </div>
+            <!-- Calendar View -->
+            <div id="calendarView" class="hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <button onclick="navigateCalendarMonth(-1)" class="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                            <span class="material-icons-round text-lg">chevron_left</span>
+                        </button>
+                        <span id="calendarMonthLabel" class="text-sm font-semibold text-white min-w-[140px] text-center"></span>
+                        <button onclick="navigateCalendarMonth(1)" class="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                            <span class="material-icons-round text-lg">chevron_right</span>
+                        </button>
+                    </div>
+                    <button onclick="calendarGoToToday()" class="px-3 py-1.5 text-xs rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 transition-colors">Today</button>
+                </div>
+                <div class="grid grid-cols-7 mb-1">
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Sun</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Mon</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Tue</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Wed</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Thu</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Fri</div>
+                    <div class="text-[11px] uppercase text-slate-500 text-center py-1">Sat</div>
+                </div>
+                <div id="calendarGrid" class="grid grid-cols-7"></div>
+            </div>
+            <!-- Calendar Day Popover -->
+            <div id="calendarPopover" class="hidden fixed z-50 w-72 max-h-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden" style="pointer-events:auto">
+                <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700">
+                    <span id="calendarPopoverDate" class="text-xs font-semibold text-white"></span>
+                    <button onclick="closeCalendarPopover()" class="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors">
+                        <span class="material-icons-round text-sm">close</span>
+                    </button>
+                </div>
+                <div id="calendarPopoverList" class="overflow-y-auto max-h-64 p-2 space-y-1"></div>
             </div>
             <!-- Empty State -->
             <div id="emptyState" class="hidden flex-col items-center justify-center py-20 text-center">
@@ -937,7 +1032,6 @@
                 <div class="h-12 border-b border-slate-800 flex items-center px-2 md:px-4 bg-slate-900/80 gap-2 md:gap-4">
                     <button class="hidden md:flex text-xs font-semibold uppercase tracking-wider text-blue-400 border-b-2 border-blue-400 h-full px-2 items-center">Gantt Chart</button>
                     <div class="flex items-center gap-1 text-xs text-slate-400">
-                        <span class="material-icons-round text-sm">today</span>
                         <span id="todayDate"></span>
                     </div>
                     <div class="flex-1"></div>
@@ -1138,12 +1232,19 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                            <div>
-                                <div class="td-field-label">Start Date</div>
+                            <div id="tdStartWrap">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="td-field-label mb-0">Start Date</div>
+                                </div>
                                 <input type="date" id="tdStart" class="td-input" onchange="updateTaskDetail('start', this.value)">
                             </div>
                             <div>
-                                <div class="td-field-label">End Date</div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div id="tdEndLabel" class="td-field-label mb-0">End Date</div>
+                                    <button type="button" id="detailFixedDateBtn" onclick="toggleDetailFixedDate()" class="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border transition-colors bg-slate-700/60 text-slate-400 border-slate-600 hover:border-slate-500" title="Fixed date — single-day event">
+                                        <span class="material-icons-round" style="font-size:14px">event</span>
+                                    </button>
+                                </div>
                                 <input type="date" id="tdEnd" class="td-input" onchange="updateTaskDetail('end', this.value)">
                             </div>
                             <div>
@@ -1427,13 +1528,19 @@
                         <option value="critical">Critical</option>
                     </select>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="td-field-label">Start Date</label>
+                <div class="flex items-center gap-2">
+                    <label class="td-field-label mb-0">Fixed Date</label>
+                    <button type="button" id="addTaskFixedDate" onclick="toggleAddTaskFixedDate()" class="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border transition-colors bg-slate-700/60 text-slate-400 border-slate-600 hover:border-slate-500" title="Single-day event — sets start and end to same date">
+                        <span class="material-icons-round" style="font-size:14px">event</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-3" id="addTaskDateGrid">
+                    <div id="addTaskStartWrap">
+                        <label id="addTaskStartLabel" class="td-field-label">Start Date</label>
                         <input id="addTaskStart" type="date" class="td-input" onchange="onAddTaskDateChange('start')">
                     </div>
                     <div>
-                        <label class="td-field-label">End Date</label>
+                        <label id="addTaskEndLabel" class="td-field-label">End Date</label>
                         <input id="addTaskEnd" type="date" class="td-input" onchange="onAddTaskDateChange('end')">
                     </div>
                     <div class="flex gap-1.5 mt-0.5 col-span-2">
@@ -2018,6 +2125,9 @@
         // Dashboard state
         let dashboardSort = localStorage.getItem('planner_sort') || 'urgency';
         let showArchived = false;
+        let calendarViewActive = false;
+        let calendarMonth = new Date().getMonth();
+        let calendarYear = new Date().getFullYear();
         function getArchivedIds(registry) {
             if (currentUser && registry) {
                 return new Set(registry.filter(p => p.archived).map(p => p.id));
@@ -3228,6 +3338,8 @@ FEW-SHOT EXAMPLES
                 toolbar.classList.add('hidden');
                 emptyState.classList.remove('hidden');
                 emptyState.classList.add('flex');
+                document.getElementById('calendarView').classList.add('hidden');
+                calendarViewActive = false;
                 return;
             }
 
@@ -3276,6 +3388,7 @@ FEW-SHOT EXAMPLES
             // No results after filtering
             if (filtered.length === 0) {
                 grid.classList.add('hidden');
+                document.getElementById('calendarView').classList.add('hidden');
                 if (searchTerm) {
                     noResults.classList.remove('hidden');
                 } else if (showArchived && archivedCount === 0) {
@@ -3406,6 +3519,13 @@ FEW-SHOT EXAMPLES
                 `;
                 grid.appendChild(newCard);
             }
+
+            // If calendar view is active, keep grid hidden and show calendar
+            if (calendarViewActive) {
+                grid.classList.add('hidden');
+                document.getElementById('calendarView').classList.remove('hidden');
+                renderCalendar();
+            }
         }
 
         // --- Dashboard: Sort ---
@@ -3470,6 +3590,207 @@ FEW-SHOT EXAMPLES
             dashboardSort = document.getElementById('projectSort').value;
             localStorage.setItem('planner_sort', dashboardSort);
             renderDashboard();
+        }
+
+        // --- Dashboard: Calendar View ---
+        function toggleCalendarView() {
+            calendarViewActive = !calendarViewActive;
+            const btn = document.getElementById('calendarToggleBtn');
+            const grid = document.getElementById('projectGrid');
+            const empty = document.getElementById('emptyState');
+            const calView = document.getElementById('calendarView');
+            if (calendarViewActive) {
+                grid.classList.add('hidden');
+                empty.classList.add('hidden');
+                empty.classList.remove('flex');
+                calView.classList.remove('hidden');
+                btn.innerHTML = '<span class="material-icons-round text-sm">view_module</span><span class="hidden sm:inline">Projects</span>';
+                btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-400');
+                btn.classList.add('bg-blue-600/20', 'border-blue-500/50', 'text-blue-400');
+                renderCalendar();
+            } else {
+                calView.classList.add('hidden');
+                closeCalendarPopover();
+                btn.innerHTML = '<span class="material-icons-round text-sm">calendar_month</span><span class="hidden sm:inline">Calendar</span>';
+                btn.classList.remove('bg-blue-600/20', 'border-blue-500/50', 'text-blue-400');
+                btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-400');
+                renderDashboard();
+            }
+        }
+
+        function buildCalendarTaskMap(registry) {
+            const archivedIds = getArchivedIds(registry);
+            const map = {};
+            registry.forEach(p => {
+                if (archivedIds.has(p.id)) return;
+                const tList = p._tasks || [];
+                tList.forEach(t => {
+                    if (!t.end) return;
+                    const key = t.end;
+                    if (!map[key]) map[key] = [];
+                    map[key].push({
+                        taskName: t.name,
+                        taskStart: t.start,
+                        taskEnd: t.end,
+                        taskProgress: parseInt(t.progress) || 0,
+                        projectId: p.id,
+                        projectName: p.name,
+                        projectColor: p.color || '#3b82f6',
+                        isSingleDay: t.start === t.end
+                    });
+                });
+            });
+            return map;
+        }
+
+        async function renderCalendar() {
+            let registry = await loadRegistry();
+            // Hydrate _tasks for guest mode
+            if (!currentUser) {
+                registry.forEach(p => {
+                    if (!p._tasks) {
+                        const raw = localStorage.getItem('planner_proj_' + p.id);
+                        const parsed = raw ? JSON.parse(raw) : { tasks: [] };
+                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+                    }
+                });
+            }
+            const taskMap = buildCalendarTaskMap(registry);
+            const grid = document.getElementById('calendarGrid');
+            const label = document.getElementById('calendarMonthLabel');
+            const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            label.textContent = monthNames[calendarMonth] + ' ' + calendarYear;
+
+            // Build 42 cells (6 weeks)
+            const firstDay = new Date(calendarYear, calendarMonth, 1);
+            const startOffset = firstDay.getDay(); // 0=Sun
+            const startDate = new Date(calendarYear, calendarMonth, 1 - startOffset);
+            const today = new Date(); today.setHours(0,0,0,0);
+
+            grid.innerHTML = '';
+            for (let i = 0; i < 42; i++) {
+                const cellDate = new Date(startDate);
+                cellDate.setDate(startDate.getDate() + i);
+                const dateStr = cellDate.getFullYear() + '-' + String(cellDate.getMonth()+1).padStart(2,'0') + '-' + String(cellDate.getDate()).padStart(2,'0');
+                const isToday = cellDate.getTime() === today.getTime();
+                const isOther = cellDate.getMonth() !== calendarMonth;
+
+                const cell = document.createElement('div');
+                cell.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (isOther ? ' cal-other' : '');
+                cell.dataset.date = dateStr;
+
+                // Day number
+                const dayNum = document.createElement('div');
+                dayNum.className = 'text-[11px] font-medium mb-0.5 ' + (isToday ? 'text-blue-400' : 'text-slate-400');
+                dayNum.textContent = cellDate.getDate();
+                cell.appendChild(dayNum);
+
+                // Task markers
+                const dayTasks = taskMap[dateStr] || [];
+                const maxShow = 3;
+                dayTasks.slice(0, maxShow).forEach(t => {
+                    const marker = document.createElement('div');
+                    marker.className = 'cal-marker';
+                    marker.style.setProperty('--marker-color', t.projectColor);
+                    const symbol = t.isSingleDay ? '◆ ' : '● ';
+                    marker.textContent = symbol + t.taskName;
+                    cell.appendChild(marker);
+                });
+                if (dayTasks.length > maxShow) {
+                    const overflow = document.createElement('div');
+                    overflow.className = 'cal-overflow';
+                    overflow.textContent = '+' + (dayTasks.length - maxShow) + ' more';
+                    cell.appendChild(overflow);
+                }
+
+                // Click handler
+                if (dayTasks.length > 0) {
+                    cell.onclick = (e) => {
+                        e.stopPropagation();
+                        showCalendarPopover(dateStr, dayTasks, cell);
+                    };
+                } else {
+                    cell.onclick = () => closeCalendarPopover();
+                }
+
+                grid.appendChild(cell);
+            }
+        }
+
+        function navigateCalendarMonth(delta) {
+            calendarMonth += delta;
+            if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+            if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+            closeCalendarPopover();
+            renderCalendar();
+        }
+
+        function calendarGoToToday() {
+            const now = new Date();
+            calendarMonth = now.getMonth();
+            calendarYear = now.getFullYear();
+            closeCalendarPopover();
+            renderCalendar();
+        }
+
+        function showCalendarPopover(dateStr, dayTasks, anchorEl) {
+            const popover = document.getElementById('calendarPopover');
+            const dateLabel = document.getElementById('calendarPopoverDate');
+            const list = document.getElementById('calendarPopoverList');
+
+            const d = new Date(dateStr + 'T00:00:00');
+            dateLabel.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+            list.innerHTML = '';
+            dayTasks.forEach(t => {
+                const status = getTaskStatus({ start: t.taskStart, end: t.taskEnd, progress: t.taskProgress });
+                const pct = t.taskProgress;
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-700/50 cursor-pointer transition-colors';
+                row.onclick = () => { closeCalendarPopover(); openProjectAndFindTask(t.projectId, t.taskName); };
+                row.innerHTML = `
+                    <span style="color:${t.projectColor}" class="text-xs">${t.isSingleDay ? '◆' : '●'}</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs text-white truncate">${escapeHtml(t.taskName)}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${escapeHtml(t.projectName)}</div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb, ${status.color} 15%, transparent); color:${status.color}">${status.label}</span>
+                        <div class="w-8 h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                            <div class="h-full rounded-full" style="width:${pct}%; background:${t.projectColor}"></div>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+
+            // Position near anchor
+            popover.classList.remove('hidden');
+            const rect = anchorEl.getBoundingClientRect();
+            const pw = popover.offsetWidth;
+            const ph = popover.offsetHeight;
+            let left = rect.right + 8;
+            let top = rect.top;
+            // Clamp to viewport
+            if (left + pw > window.innerWidth - 8) left = rect.left - pw - 8;
+            if (left < 8) left = 8;
+            if (top + ph > window.innerHeight - 8) top = window.innerHeight - ph - 8;
+            if (top < 8) top = 8;
+            popover.style.left = left + 'px';
+            popover.style.top = top + 'px';
+        }
+
+        function closeCalendarPopover() {
+            document.getElementById('calendarPopover').classList.add('hidden');
+        }
+
+        async function openProjectAndFindTask(projectId, taskName) {
+            await openProject(projectId);
+            // Find the task by name in the now-loaded tasks array
+            const idx = tasks.findIndex(t => t.name === taskName);
+            if (idx !== -1) {
+                openTaskDetail(idx);
+            }
         }
 
         // --- Dashboard: Search ---
@@ -3604,6 +3925,11 @@ FEW-SHOT EXAMPLES
         document.addEventListener('click', e => {
             const w = document.getElementById('adminBackupWrapper');
             if (w && !w.contains(e.target)) closeAdminBackupMenu();
+            // Close calendar popover when clicking outside
+            const pop = document.getElementById('calendarPopover');
+            if (pop && !pop.classList.contains('hidden') && !pop.contains(e.target) && !e.target.closest('.cal-cell')) {
+                closeCalendarPopover();
+            }
         });
 
         function setBackupStatus(msg, isError) {
@@ -3801,6 +4127,9 @@ FEW-SHOT EXAMPLES
             document.getElementById('exportButtons').classList.add('hidden');
 
             localStorage.removeItem('planner_lastProject');
+
+            // Close calendar popover if open
+            closeCalendarPopover();
 
             // Render dashboard (uses cache if available — instant)
             await renderDashboard();
@@ -4134,6 +4463,16 @@ FEW-SHOT EXAMPLES
             const end = new Date(task.end + 'T00:00:00');
             const pct = parseInt(task.progress) || 0;
 
+            // Single-day (fixed date) tasks — distinct status logic
+            if (task.start === task.end) {
+                if (pct >= 100) return { label: 'Completed', color: '#22c55e', css: 'status-completed', icon: 'check_circle' };
+                const taskDate = new Date(task.start + 'T00:00:00');
+                const realToday = new Date(); realToday.setHours(0,0,0,0);
+                if (realToday.getTime() === taskDate.getTime()) return { label: 'Due Today', color: '#ef4444', css: 'status-overdue', icon: 'event' };
+                if (realToday > taskDate) return { label: 'Overdue', color: '#ef4444', css: 'status-overdue', icon: 'error' };
+                return { label: 'Scheduled', color: '#3b82f6', css: 'status-scheduled', icon: 'event' };
+            }
+
             // Complete
             if (pct >= 100) return { label: 'Completed', color: '#22c55e', css: 'status-completed', icon: 'check_circle' };
 
@@ -4177,6 +4516,47 @@ FEW-SHOT EXAMPLES
 
                 const barGroup = wrapper.querySelector('.bar-group');
                 const bgRect = wrapper.querySelector('rect.bar');
+
+                // Milestone marker for single-day tasks
+                if (task.start === task.end && bgRect) {
+                    // Remove any existing milestone from previous render
+                    wrapper.querySelectorAll('.gantt-milestone').forEach(el => el.remove());
+                    // Hide bars
+                    bgRect.setAttribute('fill', 'transparent');
+                    bgRect.style.fill = 'transparent';
+                    const progressRect = wrapper.querySelector('.bar-progress');
+                    if (progressRect) { progressRect.setAttribute('fill', 'transparent'); progressRect.style.fill = 'transparent'; }
+                    const remainRect = barGroup?.querySelector('.bar-remaining');
+                    if (remainRect) remainRect.remove();
+
+                    const barX = parseFloat(bgRect.getAttribute('x'));
+                    const barY = parseFloat(bgRect.getAttribute('y'));
+                    const barW = parseFloat(bgRect.getAttribute('width'));
+                    const barH = parseFloat(bgRect.getAttribute('height'));
+                    const cx = barX + barW / 2;
+                    const cy = barY + barH / 2;
+                    const r = barH / 2 + 2;
+                    const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    diamond.setAttribute('points', `${cx},${cy-r} ${cx+r},${cy} ${cx},${cy+r} ${cx-r},${cy}`);
+                    diamond.setAttribute('fill', pct >= 100 ? '#22c55e' : status.color);
+                    diamond.classList.add('gantt-milestone');
+                    const label = wrapper.querySelector('.bar-label');
+                    const group = barGroup || wrapper;
+                    if (label) {
+                        group.insertBefore(diamond, label);
+                        label.setAttribute('x', cx + r + 6);
+                    } else {
+                        group.appendChild(diamond);
+                    }
+                    if (label) {
+                        label.setAttribute('fill', '#ffffff');
+                        label.style.fill = '#ffffff';
+                        label.textContent = `${task.name}  (${pct}%) - ${status.label}`;
+                    }
+                    // Clean up old gap rects
+                    barGroup?.querySelectorAll('.bar-gap').forEach(el => el.remove());
+                    return;
+                }
 
                 // Background rect: status color when gap exists, dark gray otherwise
                 if (bgRect) {
@@ -4628,7 +5008,7 @@ FEW-SHOT EXAMPLES
                             <span class="material-icons-round" style="font-size:15px">${isLocked ? 'lock' : 'lock_open'}</span>
                         </button>
                     </td>
-                    <td class="p-3"><span class="material-icons-round ${priMeta.color} align-middle mr-1" style="font-size:14px" title="${priMeta.label} priority">flag</span><a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
+                    <td class="p-3"><span class="material-icons-round ${priMeta.color} align-middle mr-1" style="font-size:14px" title="${priMeta.label} priority">flag</span>${task.start === task.end ? '<span class="material-icons-round text-blue-400 align-middle mr-0.5" style="font-size:13px" title="Fixed date">event</span>' : ''}<a id="taskName-${index}" href="#" onclick="event.preventDefault();openTaskDetail(${index})" class="text-blue-400 hover:text-blue-300 hover:underline transition-colors cursor-pointer">${escapeHtml(task.name)}</a></td>
                     <td class="p-3">
                         <input type="text" value="${escapeHtml(task.assigned || '')}"
                                onchange="updateTask(${index}, 'assigned', this.value)"
@@ -4720,11 +5100,11 @@ FEW-SHOT EXAMPLES
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-2 mb-1.5 cursor-pointer" onclick="openTaskDetail(${index})">
                         <span class="material-icons-round ${priMeta.color} shrink-0 mt-0.5" style="font-size:14px" title="${priMeta.label} priority">flag</span>
-                        <span class="text-sm font-medium text-white leading-tight flex-1">${escapeHtml(task.name)}</span>
+                        ${task.start === task.end ? '<span class="material-icons-round text-blue-400 shrink-0 mt-0.5" style="font-size:13px" title="Fixed date">event</span>' : ''}<span class="text-sm font-medium text-white leading-tight flex-1">${escapeHtml(task.name)}</span>
                         <span class="status-badge ${status.css} flex-shrink-0"><span class="material-icons-round" style="font-size:11px">${status.icon}</span> ${status.label}</span>
                     </div>
                     <div class="flex items-center gap-3 text-[11px] text-slate-400 mb-1.5 cursor-pointer" onclick="openTaskDetail(${index})">
-                        <span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">date_range</span>${task.start} → ${task.end}</span>
+                        <span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">${task.start === task.end ? 'event' : 'date_range'}</span>${task.start === task.end ? task.start : task.start + ' → ' + task.end}</span>
                         ${task.assigned ? '<span class="flex items-center gap-1"><span class="material-icons-round" style="font-size:13px">person</span>' + escapeHtml(task.assigned) + '</span>' : ''}
                     </div>
                     <div class="card-progress-area flex items-center gap-2 mb-1.5" data-task-index="${index}">
@@ -4892,6 +5272,35 @@ FEW-SHOT EXAMPLES
             renderMobileCards();
         }
 
+        let addTaskFixedDateOn = false;
+
+        function toggleAddTaskFixedDate() {
+            addTaskFixedDateOn = !addTaskFixedDateOn;
+            const btn = document.getElementById('addTaskFixedDate');
+            const startWrap = document.getElementById('addTaskStartWrap');
+            const endLabel = document.getElementById('addTaskEndLabel');
+            const dateGrid = document.getElementById('addTaskDateGrid');
+            if (addTaskFixedDateOn) {
+                btn.classList.remove('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                btn.classList.add('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                startWrap.classList.add('hidden');
+                dateGrid.classList.remove('grid-cols-2');
+                dateGrid.classList.add('grid-cols-1');
+                endLabel.textContent = 'Date';
+                // Sync start = end
+                const endVal = document.getElementById('addTaskEnd').value;
+                document.getElementById('addTaskStart').value = endVal;
+            } else {
+                btn.classList.remove('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                btn.classList.add('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                startWrap.classList.remove('hidden');
+                dateGrid.classList.remove('grid-cols-1');
+                dateGrid.classList.add('grid-cols-2');
+                endLabel.textContent = 'End Date';
+                document.getElementById('addTaskStart').value = new Date().toISOString().slice(0, 10);
+            }
+        }
+
         function showAddTaskModal() {
             const today = new Date();
             const startStr = today.toISOString().slice(0, 10);
@@ -4903,6 +5312,16 @@ FEW-SHOT EXAMPLES
             document.getElementById('addTaskPriority').value = 'medium';
             document.getElementById('addTaskStart').value = startStr;
             document.getElementById('addTaskEnd').value = endStr;
+            // Reset fixed-date toggle to OFF
+            addTaskFixedDateOn = false;
+            const fdBtn = document.getElementById('addTaskFixedDate');
+            fdBtn.classList.remove('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+            fdBtn.classList.add('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+            document.getElementById('addTaskStartWrap').classList.remove('hidden');
+            document.getElementById('addTaskDateGrid').classList.remove('grid-cols-1');
+            document.getElementById('addTaskDateGrid').classList.add('grid-cols-2');
+            document.getElementById('addTaskEndLabel').textContent = 'End Date';
+
             document.getElementById('addTaskModal').classList.remove('hidden');
             highlightDateChip('tomorrow');
             document.getElementById('addTaskName').focus();
@@ -4930,17 +5349,23 @@ FEW-SHOT EXAMPLES
             const endStr = d.toISOString().slice(0, 10);
             document.getElementById('addTaskEnd').value = endStr;
             highlightDateChip(preset);
-            // Auto-sync: if end < start, push start back
-            const startEl = document.getElementById('addTaskStart');
-            if (startEl.value && startEl.value > endStr) {
-                startEl.value = endStr;
+            if (addTaskFixedDateOn) {
+                document.getElementById('addTaskStart').value = endStr;
+            } else {
+                // Auto-sync: if end < start, push start back
+                const startEl = document.getElementById('addTaskStart');
+                if (startEl.value && startEl.value > endStr) {
+                    startEl.value = endStr;
+                }
             }
         }
 
         function onAddTaskDateChange(which) {
             const startEl = document.getElementById('addTaskStart');
             const endEl = document.getElementById('addTaskEnd');
-            if (which === 'start' && endEl.value && startEl.value > endEl.value) {
+            if (addTaskFixedDateOn && which === 'end') {
+                startEl.value = endEl.value;
+            } else if (which === 'start' && endEl.value && startEl.value > endEl.value) {
                 endEl.value = startEl.value;
             } else if (which === 'end' && startEl.value && endEl.value < startEl.value) {
                 startEl.value = endEl.value;
@@ -5240,13 +5665,60 @@ FEW-SHOT EXAMPLES
             else if (tabName === 'checklist') renderChecklistTab(task);
         }
 
+        let detailFixedDateOn = false;
+
+        function toggleDetailFixedDate() {
+            detailFixedDateOn = !detailFixedDateOn;
+            const btn = document.getElementById('detailFixedDateBtn');
+            const startWrap = document.getElementById('tdStartWrap');
+            const endLabel = document.getElementById('tdEndLabel');
+            if (detailFixedDateOn) {
+                btn.classList.remove('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                btn.classList.add('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                startWrap.classList.add('hidden');
+                endLabel.textContent = 'Date';
+                // Sync start = end and save
+                const endVal = document.getElementById('tdEnd').value;
+                if (tasks[currentTaskIndex].start !== endVal) {
+                    updateTaskDetail('start', endVal);
+                    document.getElementById('tdStart').value = endVal;
+                }
+            } else {
+                btn.classList.remove('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                btn.classList.add('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                startWrap.classList.remove('hidden');
+                endLabel.textContent = 'End Date';
+            }
+            renderTaskDetailHeader();
+        }
+
+        function applyDetailFixedDateState(task) {
+            detailFixedDateOn = task.start === task.end;
+            const btn = document.getElementById('detailFixedDateBtn');
+            const startWrap = document.getElementById('tdStartWrap');
+            const endLabel = document.getElementById('tdEndLabel');
+            if (detailFixedDateOn) {
+                btn.classList.remove('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                btn.classList.add('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                startWrap.classList.add('hidden');
+                endLabel.textContent = 'Date';
+            } else {
+                btn.classList.remove('bg-blue-600/30', 'text-blue-300', 'border-blue-500');
+                btn.classList.add('bg-slate-700/60', 'text-slate-400', 'border-slate-600');
+                startWrap.classList.remove('hidden');
+                endLabel.textContent = 'End Date';
+            }
+        }
+
         function renderTaskDetailHeader() {
             const task = tasks[currentTaskIndex];
             const status = getTaskStatus(task);
             const pct = parseInt(task.progress) || 0;
 
             document.getElementById('tdTaskName').textContent = task.name;
-            document.getElementById('tdTaskDates').innerHTML = `<span class="material-icons-round text-sm">date_range</span> ${task.start} → ${task.end}`;
+            const dateIcon = task.start === task.end ? 'event' : 'date_range';
+            const dateText = task.start === task.end ? task.start : `${task.start} → ${task.end}`;
+            document.getElementById('tdTaskDates').innerHTML = `<span class="material-icons-round text-sm">${dateIcon}</span> ${dateText}`;
 
             // Days left
             const today = new Date(); today.setHours(0,0,0,0);
@@ -5289,6 +5761,7 @@ FEW-SHOT EXAMPLES
             document.getElementById('tdProgressVal').textContent = progVal + '%';
             document.getElementById('tdDescription').value = task.description || '';
             document.getElementById('clearDescriptionBtn').style.display = task.description ? '' : 'none';
+            applyDetailFixedDateState(task);
             renderDependencies(task);
         }
 
@@ -5310,12 +5783,15 @@ FEW-SHOT EXAMPLES
                     return;
                 }
             }
-            if (field === 'start' && task.end && value > task.end) {
+            if (detailFixedDateOn && field === 'end') {
+                task.start = value;
+                document.getElementById('tdStart').value = value;
+                markTaskDirty(task, 'start_date');
+            } else if (field === 'start' && task.end && value > task.end) {
                 task.end = value;
                 document.getElementById('tdEnd').value = value;
                 markTaskDirty(task, 'end_date');
-            }
-            if (field === 'end' && task.start && value < task.start) {
+            } else if (field === 'end' && task.start && value < task.start) {
                 task.start = value;
                 document.getElementById('tdStart').value = value;
                 markTaskDirty(task, 'start_date');
