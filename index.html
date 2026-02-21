@@ -2465,6 +2465,8 @@ FEW-SHOT EXAMPLES
                     .single();
                 if (insertErr) { console.error('Failed to create user profile:', insertErr); userProfile = null; return; }
                 userProfile = newRow;
+                // Seed a Personal project for brand-new accounts
+                await createProject('Personal', { isDefault: true });
             } else if (error) {
                 console.error('Failed to load user profile:', error);
                 userProfile = null;
@@ -3220,23 +3222,8 @@ FEW-SHOT EXAMPLES
             noResults.querySelector('.material-icons-round').textContent = 'search_off';
             noResults.querySelector('p').textContent = 'No projects match your search.';
 
-            // Ensure Personal project exists for every user
-            const hasPersonal = registry.some(p => p.metadata && p.metadata.isDefault);
-            if (!hasPersonal) {
-                const personalId = await createProject('Personal', { isDefault: true });
-                if (personalId) {
-                    // Reload registry to include the new Personal project
-                    registry = await loadRegistry(true);
-                    if (registry.length === 1) {
-                        // Only project is the new Personal — open it directly
-                        openProject(personalId);
-                        return;
-                    }
-                }
-            }
-
             if (registry.length === 0) {
-                // Fallback empty state if creation failed
+                // Empty state — no projects yet
                 grid.classList.add('hidden');
                 toolbar.classList.add('hidden');
                 emptyState.classList.remove('hidden');
