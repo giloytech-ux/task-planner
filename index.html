@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v15</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v16</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -2673,9 +2673,9 @@ FEW-SHOT EXAMPLES
             if (!raw || !currentUser) return;
             const ids = JSON.parse(raw);
             if (ids.length === 0) return;
-            for (const id of ids) {
-                await supabase.from('projects').update({ archived: true }).eq('id', id);
-            }
+            await Promise.all(ids.map(id =>
+                supabase.from('projects').update({ archived: true }).eq('id', id)
+            ));
             localStorage.removeItem('planner_archived');
             DataStore.invalidate('registry');
         }
@@ -2688,8 +2688,7 @@ FEW-SHOT EXAMPLES
             document.getElementById('headerDivider').classList.remove('hidden');
             document.getElementById('userEmail').textContent = currentUser.email;
             try {
-                await loadUserProfile();
-                await migrateArchivedToSupabase();
+                await Promise.all([loadUserProfile(), migrateArchivedToSupabase()]);
                 await showDashboard();
             } catch (err) {
                 console.error('onUserLoggedIn error:', err);
@@ -2942,14 +2941,21 @@ FEW-SHOT EXAMPLES
                     return [];
                 }
 
-                // Fetch shares separately (graceful fallback if table doesn't exist yet)
+                // Fetch shares + owned share count in parallel (graceful fallback if table doesn't exist yet)
                 let sharesData = [];
+                let ownedShareCount = 0;
                 try {
-                    const sharesResult = await supabase.from('project_shares')
-                        .select('project_id, role, owner_id')
-                        .eq('shared_with_id', currentUser.id);
+                    const [sharesResult, ownedShareCountResult] = await Promise.all([
+                        supabase.from('project_shares')
+                            .select('project_id, role, owner_id')
+                            .eq('shared_with_id', currentUser.id),
+                        supabase.from('project_shares')
+                            .select('project_id')
+                            .eq('owner_id', currentUser.id)
+                    ]);
                     sharesData = sharesResult.data || [];
-                } catch (e) { console.warn('project_shares query failed:', e.message); }
+                    ownedShareCount = new Set((ownedShareCountResult.data || []).map(s => s.project_id)).size;
+                } catch (e) { console.warn('project_shares queries failed:', e.message); }
 
                 // Build shares map keyed by project_id
                 const sharesMap = {};
@@ -2969,15 +2975,6 @@ FEW-SHOT EXAMPLES
                     if (!projectTasksMap[t.project_id]) projectTasksMap[t.project_id] = [];
                     projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress });
                 });
-
-                // Count how many distinct projects the current user has shared (as owner)
-                let ownedShareCount = 0;
-                try {
-                    const ownedShareCountResult = await supabase.from('project_shares')
-                        .select('project_id')
-                        .eq('owner_id', currentUser.id);
-                    ownedShareCount = new Set((ownedShareCountResult.data || []).map(s => s.project_id)).size;
-                } catch (e) { console.warn('ownedShareCount query failed:', e.message); }
 
                 const result = (projects || []).map(p => {
                     const isShared = p.user_id !== currentUser.id;
