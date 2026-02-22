@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v32</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v33</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1119,7 +1119,7 @@
                         <button id="focusLockAllBtn" onclick="toggleAllLocks()" class="flex items-center justify-center w-7 h-7 rounded-lg transition-colors text-slate-400 hover:bg-slate-700/50" title="Lock/unlock all tasks from AI">
                             <span class="material-icons-round" style="font-size:16px">lock_open</span>
                         </button>
-                        <button onclick="deleteAllTasks()" class="flex items-center justify-center w-7 h-7 rounded-lg transition-colors text-slate-400 hover:bg-slate-700/50 hover:text-red-400" title="Delete all tasks">
+                        <button id="deleteAllTasksBtn" onclick="deleteAllTasks()" class="flex items-center justify-center w-7 h-7 rounded-lg transition-colors text-slate-400 hover:bg-slate-700/50 hover:text-red-400" title="Delete all tasks">
                             <span class="material-icons-round" style="font-size:16px">delete_sweep</span>
                         </button>
                         <button id="taskSortBtn" onclick="toggleTaskSort()" class="flex items-center justify-center w-7 h-7 rounded-lg transition-colors text-slate-500 hover:bg-slate-700/50" title="Sort by priority">
@@ -1962,6 +1962,12 @@
             document.querySelectorAll('#projectView button[onclick*="showAddTaskModal"]').forEach(btn => {
                 btn.style.display = owner ? '' : 'none';
             });
+
+            // --- Today's Focus: Delete All + Lock All buttons (owner only) ---
+            const deleteAllBtn = document.getElementById('deleteAllTasksBtn');
+            if (deleteAllBtn) deleteAllBtn.style.display = owner ? '' : 'none';
+            const lockAllBtn = document.getElementById('focusLockAllBtn');
+            if (lockAllBtn) lockAllBtn.style.display = owner ? '' : 'none';
 
             // --- Gantt toolbar: AI Summary button ---
             document.querySelectorAll('#projectView button[onclick*="showProjectSummary"]').forEach(btn => {
@@ -6064,6 +6070,7 @@ FEW-SHOT EXAMPLES
         }
 
         function deleteAllTasks() {
+            if (!isProjectOwner()) return;
             if (tasks.length === 0) return;
             showConfirmModal(`Delete all ${tasks.length} tasks? This cannot be undone.`, () => {
                 tasks.forEach(t => { if (t._rowId) _pendingDeletes.push(t._rowId); });
@@ -6503,6 +6510,7 @@ FEW-SHOT EXAMPLES
         let detailFixedDateOn = false;
 
         function toggleDetailFixedDate() {
+            if (!isProjectOwner()) return;
             detailFixedDateOn = !detailFixedDateOn;
             const btn = document.getElementById('detailFixedDateBtn');
             const startWrap = document.getElementById('tdStartWrap');
@@ -6628,7 +6636,10 @@ FEW-SHOT EXAMPLES
             const startLabel = document.getElementById('tdStart')?.closest('div')?.querySelector('.td-field-label');
             if (startLabel) startLabel.innerHTML = (!_own ? lockIcon : '') + 'Start Date';
             const endLabel = document.getElementById('tdEndLabel');
-            if (endLabel) endLabel.innerHTML = (!_own ? lockIcon : '') + 'End Date';
+            if (endLabel) endLabel.innerHTML = (!_own ? lockIcon : '') + (detailFixedDateOn ? 'Date' : 'End Date');
+            // Fixed date toggle button: owner only
+            const fixedDateBtn = document.getElementById('detailFixedDateBtn');
+            if (fixedDateBtn) fixedDateBtn.style.display = _own ? '' : 'none';
             // Description label
             const descLabel = document.getElementById('tdDescription')?.closest('div')?.querySelector('.td-field-label');
             if (descLabel) descLabel.innerHTML = (!_own ? lockIcon : '') + 'Description';
