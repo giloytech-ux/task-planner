@@ -97,6 +97,22 @@
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
         }
+        .project-list-row {
+            background: transparent;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            transition: background 0.15s ease;
+            cursor: pointer;
+        }
+        .project-list-row:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+        #listRowMenu {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
         .project-card .card-actions {
             opacity: 0;
             transition: opacity 0.2s ease;
@@ -567,6 +583,17 @@
             border-color: rgba(0,122,255,0.4) !important;
             background: rgba(0,122,255,0.03) !important;
         }
+        body.light-theme .project-list-row {
+            border-bottom: 1px solid rgba(60,60,67,0.1) !important;
+        }
+        body.light-theme .project-list-row:hover {
+            background: rgba(0,0,0,0.03) !important;
+        }
+        body.light-theme #listRowMenu {
+            background: rgba(255,255,255,0.97) !important;
+            border: 1px solid rgba(60,60,67,0.12) !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06) !important;
+        }
         body.light-theme .td-input,
         body.light-theme .td-textarea {
             background: #E5E5EA !important;
@@ -755,6 +782,10 @@
             <button id="calendarToggleBtn" onclick="toggleCalendarView()" class="hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="Calendar view">
                 <span class="material-icons-round">calendar_today</span>
             </button>
+            <!-- List/Grid Toggle (dashboard only) -->
+            <button id="listViewToggleBtn" onclick="toggleDashboardViewMode()" class="hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="List view">
+                <span class="material-icons-round">view_list</span>
+            </button>
             <!-- Mobile sidebar toggle (project view only) -->
             <button id="mobileSidebarToggle" onclick="toggleMobileSidebar()" class="hidden md:!hidden items-center justify-center text-slate-400 hover:text-blue-400 transition-colors min-w-[44px] min-h-[44px]" title="AI Chat">
                 <span class="material-icons-round">smart_toy</span>
@@ -842,7 +873,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v37</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v38</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -910,7 +941,11 @@
                 </div>
             </div>
             <div id="projectGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                <!-- Project cards injected here -->
+                <!-- Project cards / list rows injected here -->
+            </div>
+            <!-- List Row Context Menu (shared by all rows) -->
+            <div id="listRowMenu" class="hidden fixed z-50 py-1 min-w-[180px]">
+                <!-- Populated dynamically -->
             </div>
             <!-- Calendar View -->
             <div id="calendarView" class="hidden">
@@ -2393,6 +2428,7 @@
 
         // Dashboard state
         let dashboardSort = localStorage.getItem('planner_sort') || 'urgency';
+        let dashboardViewMode = localStorage.getItem('planner_dashview') || 'grid';
         let showArchived = false;
         let calendarViewActive = false;
         let calendarMonth = new Date().getMonth();
@@ -3829,6 +3865,7 @@ FEW-SHOT EXAMPLES
             noResults.querySelector('p').textContent = 'No projects match your search.';
 
             const calBtn = document.getElementById('calendarToggleBtn');
+            const listBtn = document.getElementById('listViewToggleBtn');
             if (registry.length === 0) {
                 // Empty state — no projects yet
                 grid.classList.add('hidden');
@@ -3838,6 +3875,8 @@ FEW-SHOT EXAMPLES
                 document.getElementById('calendarView').classList.add('hidden');
                 calBtn.classList.add('hidden');
                 calBtn.classList.remove('flex');
+                listBtn.classList.add('hidden');
+                listBtn.classList.remove('flex');
                 calendarViewActive = false;
                 return;
             }
@@ -3852,6 +3891,14 @@ FEW-SHOT EXAMPLES
             }
             calBtn.classList.remove('hidden');
             calBtn.classList.add('flex');
+            // Show list toggle only when not in calendar view
+            if (calendarViewActive) {
+                listBtn.classList.add('hidden');
+                listBtn.classList.remove('flex');
+            } else {
+                listBtn.classList.remove('hidden');
+                listBtn.classList.add('flex');
+            }
             emptyState.classList.add('hidden');
             emptyState.classList.remove('flex');
 
@@ -3861,6 +3908,7 @@ FEW-SHOT EXAMPLES
 
             // Update archive toggle button appearance
             updateArchiveToggleBtn();
+            updateListViewToggleBtn();
 
             // Separate owned and shared projects
             const ownedProjects = registry.filter(p => !p._isShared);
@@ -3924,148 +3972,55 @@ FEW-SHOT EXAMPLES
 
             grid.classList.remove('hidden');
 
+            // Toggle grid/list layout classes
+            if (dashboardViewMode === 'list') {
+                grid.className = 'flex flex-col gap-0';
+            } else {
+                grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
+            }
+
             filtered.forEach(project => {
                 const isArchived = archivedIds.has(project.id);
                 const isDefaultProject = (project.metadata && project.metadata.isDefault) || project.name === 'Personal';
                 const progress = project.taskCount > 0
                     ? Math.round((project.completedCount / project.taskCount) * 100)
                     : 0;
-                const updatedStr = timeAgo(project.updatedAt);
 
-                // Focus summary
-                let focusHtml = '';
-                if (project._tasks && project._tasks.length > 0 && progress < 100) {
-                    const focus = computeProjectFocus(project._tasks);
-                    const pills = [];
-                    if (focus.overdue > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`);
-                    if (focus.dueToday > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.dueToday} due today</span>`);
-                    if (focus.attention > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`);
-                    if (focus.overdueSoon > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20"><span class="w-1 h-1 rounded-full bg-orange-500"></span>${focus.overdueSoon} overdue soon</span>`);
-                    if (focus.nearDeadline > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`);
-
-                    if (pills.length > 0) {
-                        const hintItems = focus.items.slice(0, 2).map(i => escapeHtml(i.name)).join(', ');
-                        const hintHtml = hintItems ? `<div class="text-[10px] text-slate-500 truncate mt-0.5">${hintItems}</div>` : '';
-                        focusHtml = `<div class="mb-2">${pills.join(' ')}${hintHtml}</div>`;
-                    } else {
-                        focusHtml = `<div class="mb-2"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>All on track</span></div>`;
-                    }
-                }
-
-                // Deadline display
-                let deadlineHtml = '';
-                if (project.deadline) {
-                    const dlDate = new Date(project.deadline + 'T00:00:00');
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    const daysLeft = Math.ceil((dlDate - today) / 86400000);
-                    const dlFormatted = dlDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                    let dlColor = 'text-slate-400';
-                    let dlLabel = '';
-                    if (progress >= 100) {
-                        dlLabel = 'Complete';
-                        dlColor = 'text-emerald-400';
-                    } else if (daysLeft < 0) {
-                        dlLabel = `${Math.abs(daysLeft)}d overdue`;
-                        dlColor = 'text-red-400';
-                    } else if (daysLeft === 0) {
-                        dlLabel = 'Due today';
-                        dlColor = 'text-amber-400';
-                    } else if (daysLeft <= 7) {
-                        dlLabel = `${daysLeft}d left`;
-                        dlColor = 'text-amber-400';
-                    } else {
-                        dlLabel = dlFormatted;
-                    }
-                    deadlineHtml = `<div class="flex items-center gap-1 text-[11px] ${dlColor} mb-2"><span class="material-icons-round" style="font-size:13px">event</span> ${dlLabel}</div>`;
-                }
-
-                const card = document.createElement('div');
-                card.setAttribute('data-project-id', project.id);
-                card.className = `project-card rounded-xl p-5 relative ${isArchived ? 'opacity-60' : ''}`;
-                card.onclick = (e) => {
-                    if (e.target.closest('.card-actions button')) return;
-                    openProject(project.id);
-                };
-                const sharedBadge = project._shareCount > 0
-                    ? `<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5"><span class="material-icons-round" style="font-size:11px">group</span>${project._shareCount}</span>`
-                    : '';
-                card.innerHTML = `
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="color-dot" style="background: ${project.color}"></span>
-                        <h3 class="font-semibold text-white text-sm truncate flex-1">${escapeHtml(project.name)}</h3>
-                        ${isArchived ? '<span class="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">Archived</span>' : ''}
-                        ${sharedBadge}
-                    </div>
-                    ${deadlineHtml}
-                    ${focusHtml}
-                    <div class="progress-bar-bg mb-2">
-                        <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
-                    </div>
-                    <div class="flex justify-between items-center text-xs text-slate-500 mb-3">
-                        <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
-                        <span>${updatedStr}</span>
-                    </div>
-                    <div class="card-actions flex items-center gap-1 pt-2 border-t border-slate-700/50">
-                        <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
-                            <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
-                        </button>
-                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
-                            <span class="material-icons-round" style="font-size:18px">edit</span>
-                        </button>`}
-                        <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
-                            <span class="material-icons-round" style="font-size:18px">palette</span>
-                        </button>
-                        ${currentUser && !isDefaultProject ? `<button onclick="event.stopPropagation(); openShareModal('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-green-400 rounded transition-colors" title="Share">
-                            <span class="material-icons-round" style="font-size:18px">group_add</span>
-                        </button>` : ''}
-                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
-                            <span class="material-icons-round" style="font-size:18px">content_copy</span>
-                        </button>`}
-                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
-                            <span class="material-icons-round" style="font-size:18px">${isArchived ? 'unarchive' : 'inventory_2'}</span>
-                        </button>`}
-                        <div class="flex-1"></div>
-                        ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
-                            <span class="material-icons-round" style="font-size:18px">delete</span>
-                        </button>`}
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-
-            // Add "New Project" card (only in non-archived view)
-            if (!showArchived) {
-                const newCard = document.createElement('div');
-                newCard.className = 'new-project-card rounded-xl p-5 flex flex-col items-center justify-center min-h-[140px]';
-                newCard.onclick = () => promptNewProject();
-                newCard.innerHTML = `
-                    <span class="material-icons-round text-3xl text-slate-500 mb-2">add_circle_outline</span>
-                    <span class="text-sm font-medium text-slate-400">New Project</span>
-                `;
-                grid.appendChild(newCard);
-            }
-
-            // === Shared with me section ===
-            const filteredShared = sharedProjects.filter(p => {
-                if (searchTerm) return p.name.toLowerCase().includes(searchTerm);
-                return true;
-            });
-            if (currentUser && filteredShared.length > 0 && !showArchived) {
-                const sharedHeader = document.createElement('div');
-                sharedHeader.className = 'col-span-full flex items-center gap-2 mt-6 mb-2';
-                sharedHeader.innerHTML = `
-                    <span class="material-icons-round text-slate-500" style="font-size:18px">people</span>
-                    <h3 class="text-sm font-semibold text-slate-400">Shared with me</h3>
-                `;
-                grid.appendChild(sharedHeader);
-
-                filteredShared.forEach(project => {
-                    const progress = project.taskCount > 0
-                        ? Math.round((project.completedCount / project.taskCount) * 100) : 0;
+                if (dashboardViewMode === 'list') {
+                    // --- LIST ROW ---
+                    const statusPill = getTopStatusPill(project, progress);
+                    const sharedCol = project._shareCount > 0
+                        ? `<span class="inline-flex items-center gap-0.5 text-[11px] text-emerald-400"><span class="material-icons-round" style="font-size:13px">group</span>${project._shareCount}</span>`
+                        : '<span class="text-slate-600 text-xs">\u2014</span>';
+                    const row = document.createElement('div');
+                    row.setAttribute('data-project-id', project.id);
+                    row.className = `project-list-row flex items-center px-3 py-2.5 ${isArchived ? 'opacity-60' : ''}`;
+                    row.onclick = (e) => {
+                        if (e.target.closest('.list-row-menu-btn')) return;
+                        openProject(project.id);
+                    };
+                    row.innerHTML = `
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background: ${project.color}"></span>
+                            <span class="text-sm text-white truncate">${escapeHtml(project.name)}</span>
+                            ${isArchived ? '<span class="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded flex-shrink-0">Archived</span>' : ''}
+                        </div>
+                        <div class="hidden sm:flex items-center gap-2 w-32 flex-shrink-0 ml-3">
+                            <div class="progress-bar-bg flex-1 h-1.5 rounded-full"><div class="progress-bar-fill h-1.5 rounded-full" style="width:${progress}%; background:${project.color}"></div></div>
+                            <span class="text-[11px] text-slate-400 w-8 text-right">${progress}%</span>
+                        </div>
+                        <div class="hidden md:flex items-center w-28 flex-shrink-0 ml-3 justify-center">${statusPill}</div>
+                        <div class="hidden lg:flex items-center w-12 flex-shrink-0 ml-3 justify-center">${sharedCol}</div>
+                        <div class="w-[36px] flex-shrink-0 ml-1 flex items-center justify-center">
+                            <button class="list-row-menu-btn p-1 rounded hover:bg-slate-700/50 text-slate-500 hover:text-slate-300 transition-colors min-w-[28px] min-h-[28px] flex items-center justify-center" onclick="toggleListRowMenu(this, '${project.id}', '${escapeAttr(project.name)}', ${isArchived}, ${isDefaultProject})">
+                                <span class="material-icons-round" style="font-size:18px">more_vert</span>
+                            </button>
+                        </div>
+                    `;
+                    grid.appendChild(row);
+                } else {
+                    // --- GRID CARD (existing) ---
                     const updatedStr = timeAgo(project.updatedAt);
-                    const roleBadge = project._shareRole === 'editor'
-                        ? '<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Editor</span>'
-                        : '<span class="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">Viewer</span>';
 
                     // Focus summary
                     let focusHtml = '';
@@ -4116,13 +4071,20 @@ FEW-SHOT EXAMPLES
 
                     const card = document.createElement('div');
                     card.setAttribute('data-project-id', project.id);
-                    card.className = 'project-card rounded-xl p-5 relative';
-                    card.onclick = () => openProject(project.id);
+                    card.className = `project-card rounded-xl p-5 relative ${isArchived ? 'opacity-60' : ''}`;
+                    card.onclick = (e) => {
+                        if (e.target.closest('.card-actions button')) return;
+                        openProject(project.id);
+                    };
+                    const sharedBadge = project._shareCount > 0
+                        ? `<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5"><span class="material-icons-round" style="font-size:11px">group</span>${project._shareCount}</span>`
+                        : '';
                     card.innerHTML = `
                         <div class="flex items-center gap-2 mb-3">
                             <span class="color-dot" style="background: ${project.color}"></span>
                             <h3 class="font-semibold text-white text-sm truncate flex-1">${escapeHtml(project.name)}</h3>
-                            ${roleBadge}
+                            ${isArchived ? '<span class="text-[10px] text-slate-500 bg-slate-700/50 px-1.5 py-0.5 rounded">Archived</span>' : ''}
+                            ${sharedBadge}
                         </div>
                         ${deadlineHtml}
                         ${focusHtml}
@@ -4133,8 +4095,174 @@ FEW-SHOT EXAMPLES
                             <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
                             <span>${updatedStr}</span>
                         </div>
+                        <div class="card-actions flex items-center gap-1 pt-2 border-t border-slate-700/50">
+                            <button onclick="event.stopPropagation(); showProjectSummary('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-purple-400 rounded transition-colors" title="AI Project Summary">
+                                <span class="material-icons-round" style="font-size:18px">auto_awesome</span>
+                            </button>
+                            ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); renameProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Rename">
+                                <span class="material-icons-round" style="font-size:18px">edit</span>
+                            </button>`}
+                            <button onclick="event.stopPropagation(); promptColorPicker('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Change color">
+                                <span class="material-icons-round" style="font-size:18px">palette</span>
+                            </button>
+                            ${currentUser && !isDefaultProject ? `<button onclick="event.stopPropagation(); openShareModal('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-green-400 rounded transition-colors" title="Share">
+                                <span class="material-icons-round" style="font-size:18px">group_add</span>
+                            </button>` : ''}
+                            ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); duplicateProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-blue-400 rounded transition-colors" title="Duplicate">
+                                <span class="material-icons-round" style="font-size:18px">content_copy</span>
+                            </button>`}
+                            ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); toggleArchiveProject('${project.id}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-amber-400 rounded transition-colors" title="${isArchived ? 'Unarchive' : 'Archive'}">
+                                <span class="material-icons-round" style="font-size:18px">${isArchived ? 'unarchive' : 'inventory_2'}</span>
+                            </button>`}
+                            <div class="flex-1"></div>
+                            ${isDefaultProject ? '' : `<button onclick="event.stopPropagation(); confirmDeleteProject('${project.id}', '${escapeAttr(project.name)}')" class="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors" title="Delete">
+                                <span class="material-icons-round" style="font-size:18px">delete</span>
+                            </button>`}
+                        </div>
                     `;
                     grid.appendChild(card);
+                }
+            });
+
+            // Add "New Project" card/row (only in non-archived view)
+            if (!showArchived) {
+                if (dashboardViewMode === 'list') {
+                    const newRow = document.createElement('div');
+                    newRow.className = 'project-list-row flex items-center px-3 py-2.5 text-slate-400 hover:text-blue-400 transition-colors';
+                    newRow.style.cursor = 'pointer';
+                    newRow.onclick = () => promptNewProject();
+                    newRow.innerHTML = `
+                        <span class="material-icons-round mr-2" style="font-size:18px">add_circle_outline</span>
+                        <span class="text-sm font-medium">New Project</span>
+                    `;
+                    grid.appendChild(newRow);
+                } else {
+                    const newCard = document.createElement('div');
+                    newCard.className = 'new-project-card rounded-xl p-5 flex flex-col items-center justify-center min-h-[140px]';
+                    newCard.onclick = () => promptNewProject();
+                    newCard.innerHTML = `
+                        <span class="material-icons-round text-3xl text-slate-500 mb-2">add_circle_outline</span>
+                        <span class="text-sm font-medium text-slate-400">New Project</span>
+                    `;
+                    grid.appendChild(newCard);
+                }
+            }
+
+            // === Shared with me section ===
+            const filteredShared = sharedProjects.filter(p => {
+                if (searchTerm) return p.name.toLowerCase().includes(searchTerm);
+                return true;
+            });
+            if (currentUser && filteredShared.length > 0 && !showArchived) {
+                const sharedHeader = document.createElement('div');
+                sharedHeader.className = (dashboardViewMode === 'list' ? '' : 'col-span-full ') + 'flex items-center gap-2 mt-6 mb-2';
+                sharedHeader.innerHTML = `
+                    <span class="material-icons-round text-slate-500" style="font-size:18px">people</span>
+                    <h3 class="text-sm font-semibold text-slate-400">Shared with me</h3>
+                `;
+                grid.appendChild(sharedHeader);
+
+                filteredShared.forEach(project => {
+                    const progress = project.taskCount > 0
+                        ? Math.round((project.completedCount / project.taskCount) * 100) : 0;
+                    const roleBadge = project._shareRole === 'editor'
+                        ? '<span class="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">Editor</span>'
+                        : '<span class="text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">Viewer</span>';
+
+                    if (dashboardViewMode === 'list') {
+                        // --- SHARED LIST ROW ---
+                        const statusPill = getTopStatusPill(project, progress);
+                        const row = document.createElement('div');
+                        row.setAttribute('data-project-id', project.id);
+                        row.className = 'project-list-row flex items-center px-3 py-2.5';
+                        row.onclick = () => openProject(project.id);
+                        row.innerHTML = `
+                            <div class="flex items-center gap-2 flex-1 min-w-0">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background: ${project.color}"></span>
+                                <span class="text-sm text-white truncate">${escapeHtml(project.name)}</span>
+                            </div>
+                            <div class="hidden sm:flex items-center gap-2 w-32 flex-shrink-0 ml-3">
+                                <div class="progress-bar-bg flex-1 h-1.5 rounded-full"><div class="progress-bar-fill h-1.5 rounded-full" style="width:${progress}%; background:${project.color}"></div></div>
+                                <span class="text-[11px] text-slate-400 w-8 text-right">${progress}%</span>
+                            </div>
+                            <div class="hidden md:flex items-center w-28 flex-shrink-0 ml-3 justify-center">${statusPill}</div>
+                            <div class="hidden lg:flex items-center w-12 flex-shrink-0 ml-3 justify-center">${roleBadge}</div>
+                            <div class="w-[36px] flex-shrink-0 ml-1"></div>
+                        `;
+                        grid.appendChild(row);
+                    } else {
+                        // --- SHARED GRID CARD (existing) ---
+                        const updatedStr = timeAgo(project.updatedAt);
+
+                        // Focus summary
+                        let focusHtml = '';
+                        if (project._tasks && project._tasks.length > 0 && progress < 100) {
+                            const focus = computeProjectFocus(project._tasks);
+                            const pills = [];
+                            if (focus.overdue > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`);
+                            if (focus.dueToday > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.dueToday} due today</span>`);
+                            if (focus.attention > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`);
+                            if (focus.overdueSoon > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20"><span class="w-1 h-1 rounded-full bg-orange-500"></span>${focus.overdueSoon} overdue soon</span>`);
+                            if (focus.nearDeadline > 0) pills.push(`<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`);
+
+                            if (pills.length > 0) {
+                                const hintItems = focus.items.slice(0, 2).map(i => escapeHtml(i.name)).join(', ');
+                                const hintHtml = hintItems ? `<div class="text-[10px] text-slate-500 truncate mt-0.5">${hintItems}</div>` : '';
+                                focusHtml = `<div class="mb-2">${pills.join(' ')}${hintHtml}</div>`;
+                            } else {
+                                focusHtml = `<div class="mb-2"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>All on track</span></div>`;
+                            }
+                        }
+
+                        // Deadline display
+                        let deadlineHtml = '';
+                        if (project.deadline) {
+                            const dlDate = new Date(project.deadline + 'T00:00:00');
+                            const today = new Date(); today.setHours(0,0,0,0);
+                            const daysLeft = Math.ceil((dlDate - today) / 86400000);
+                            const dlFormatted = dlDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                            let dlColor = 'text-slate-400';
+                            let dlLabel = '';
+                            if (progress >= 100) {
+                                dlLabel = 'Complete';
+                                dlColor = 'text-emerald-400';
+                            } else if (daysLeft < 0) {
+                                dlLabel = `${Math.abs(daysLeft)}d overdue`;
+                                dlColor = 'text-red-400';
+                            } else if (daysLeft === 0) {
+                                dlLabel = 'Due today';
+                                dlColor = 'text-amber-400';
+                            } else if (daysLeft <= 7) {
+                                dlLabel = `${daysLeft}d left`;
+                                dlColor = 'text-amber-400';
+                            } else {
+                                dlLabel = dlFormatted;
+                            }
+                            deadlineHtml = `<div class="flex items-center gap-1 text-[11px] ${dlColor} mb-2"><span class="material-icons-round" style="font-size:13px">event</span> ${dlLabel}</div>`;
+                        }
+
+                        const card = document.createElement('div');
+                        card.setAttribute('data-project-id', project.id);
+                        card.className = 'project-card rounded-xl p-5 relative';
+                        card.onclick = () => openProject(project.id);
+                        card.innerHTML = `
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="color-dot" style="background: ${project.color}"></span>
+                                <h3 class="font-semibold text-white text-sm truncate flex-1">${escapeHtml(project.name)}</h3>
+                                ${roleBadge}
+                            </div>
+                            ${deadlineHtml}
+                            ${focusHtml}
+                            <div class="progress-bar-bg mb-2">
+                                <div class="progress-bar-fill" style="width: ${progress}%; background: ${project.color}"></div>
+                            </div>
+                            <div class="flex justify-between items-center text-xs text-slate-500 mb-3">
+                                <span>${project.taskCount} task${project.taskCount !== 1 ? 's' : ''} · ${progress}%</span>
+                                <span>${updatedStr}</span>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    }
                 });
             }
 
@@ -4217,6 +4345,7 @@ FEW-SHOT EXAMPLES
             const grid = document.getElementById('projectGrid');
             const empty = document.getElementById('emptyState');
             const calView = document.getElementById('calendarView');
+            const listBtn = document.getElementById('listViewToggleBtn');
             if (calendarViewActive) {
                 grid.classList.add('hidden');
                 empty.classList.add('hidden');
@@ -4229,6 +4358,9 @@ FEW-SHOT EXAMPLES
                 document.getElementById('dashboardToolbar').classList.add('hidden');
                 document.getElementById('dashboardHeader').classList.add('hidden');
                 document.getElementById('calendarProjectFilter').value = 'all';
+                listBtn.classList.add('hidden');
+                listBtn.classList.remove('flex');
+                closeListRowMenu();
                 renderCalendar();
             } else {
                 calView.classList.add('hidden');
@@ -4239,6 +4371,90 @@ FEW-SHOT EXAMPLES
                 btn.title = 'Calendar view';
                 document.getElementById('dashboardHeader').classList.remove('hidden');
                 renderDashboard();
+            }
+        }
+
+        // --- Dashboard: List/Grid View Toggle ---
+        function toggleDashboardViewMode() {
+            dashboardViewMode = dashboardViewMode === 'grid' ? 'list' : 'grid';
+            localStorage.setItem('planner_dashview', dashboardViewMode);
+            closeListRowMenu();
+            renderDashboard();
+        }
+
+        function updateListViewToggleBtn() {
+            const btn = document.getElementById('listViewToggleBtn');
+            if (!btn) return;
+            const icon = btn.querySelector('.material-icons-round');
+            if (dashboardViewMode === 'list') {
+                icon.textContent = 'view_module';
+                btn.classList.remove('text-slate-400');
+                btn.classList.add('text-blue-400');
+                btn.title = 'Grid view';
+            } else {
+                icon.textContent = 'view_list';
+                btn.classList.remove('text-blue-400');
+                btn.classList.add('text-slate-400');
+                btn.title = 'List view';
+            }
+        }
+
+        function getTopStatusPill(project, progress) {
+            if (progress >= 100) {
+                return '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>Complete</span>';
+            }
+            if (!project._tasks || project._tasks.length === 0) return '';
+            const focus = computeProjectFocus(project._tasks);
+            if (focus.overdue > 0) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.overdue} overdue</span>`;
+            if (focus.dueToday > 0) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-red-500"></span>${focus.dueToday} due today</span>`;
+            if (focus.attention > 0) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-amber-400"></span>${focus.attention} attention</span>`;
+            if (focus.overdueSoon > 0) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-orange-500"></span>${focus.overdueSoon} overdue soon</span>`;
+            if (focus.nearDeadline > 0) return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-blue-500"></span>${focus.nearDeadline} near deadline</span>`;
+            return '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>On track</span>';
+        }
+
+        function toggleListRowMenu(btnEl, projectId, projectName, isArchived, isDefault) {
+            event.stopPropagation();
+            const menu = document.getElementById('listRowMenu');
+            const wasVisible = !menu.classList.contains('hidden') && menu.dataset.projectId === projectId;
+            closeListRowMenu();
+            if (wasVisible) return;
+
+            const nameEsc = escapeAttr(projectName);
+            let items = '';
+            items += `<button onclick="closeListRowMenu(); showProjectSummary('${projectId}', '${nameEsc}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-purple-400">auto_awesome</span>AI Summary</button>`;
+            if (!isDefault) items += `<button onclick="closeListRowMenu(); renameProject('${projectId}', '${nameEsc}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-blue-400">edit</span>Rename</button>`;
+            items += `<button onclick="closeListRowMenu(); promptColorPicker('${projectId}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-blue-400">palette</span>Color</button>`;
+            if (currentUser && !isDefault) items += `<button onclick="closeListRowMenu(); openShareModal('${projectId}', '${nameEsc}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-green-400">group_add</span>Share</button>`;
+            if (!isDefault) items += `<button onclick="closeListRowMenu(); duplicateProject('${projectId}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-blue-400">content_copy</span>Duplicate</button>`;
+            if (!isDefault) items += `<button onclick="closeListRowMenu(); toggleArchiveProject('${projectId}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm text-amber-400">${isArchived ? 'unarchive' : 'inventory_2'}</span>${isArchived ? 'Unarchive' : 'Archive'}</button>`;
+            if (!isDefault) {
+                items += `<div class="border-t border-slate-700/50 my-1"></div>`;
+                items += `<button onclick="closeListRowMenu(); confirmDeleteProject('${projectId}', '${nameEsc}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-slate-700/50 transition-colors"><span class="material-icons-round text-sm">delete</span>Delete</button>`;
+            }
+            menu.innerHTML = items;
+            menu.dataset.projectId = projectId;
+
+            const rect = btnEl.getBoundingClientRect();
+            menu.style.top = rect.bottom + 4 + 'px';
+            menu.style.left = 'auto';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+            menu.classList.remove('hidden');
+
+            // Adjust if overflows bottom
+            requestAnimationFrame(() => {
+                const menuRect = menu.getBoundingClientRect();
+                if (menuRect.bottom > window.innerHeight - 8) {
+                    menu.style.top = (rect.top - menuRect.height - 4) + 'px';
+                }
+            });
+        }
+
+        function closeListRowMenu() {
+            const menu = document.getElementById('listRowMenu');
+            if (menu) {
+                menu.classList.add('hidden');
+                delete menu.dataset.projectId;
             }
         }
 
@@ -4730,6 +4946,11 @@ FEW-SHOT EXAMPLES
             const pop = document.getElementById('calendarPopover');
             if (pop && !pop.classList.contains('hidden') && !pop.contains(e.target) && !e.target.closest('.cal-cell')) {
                 closeCalendarPopover();
+            }
+            // Close list row menu when clicking outside
+            const lrm = document.getElementById('listRowMenu');
+            if (lrm && !lrm.classList.contains('hidden') && !lrm.contains(e.target) && !e.target.closest('.list-row-menu-btn')) {
+                closeListRowMenu();
             }
         });
 
