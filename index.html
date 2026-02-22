@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v33</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v34</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -4426,8 +4426,13 @@ FEW-SHOT EXAMPLES
             if (currentUser) {
                 // Supabase mode
                 const { data: existing } = await supabase.from('tasks')
-                    .select('task_number, sort_order')
+                    .select('task_number, sort_order, name, start_date, end_date')
                     .eq('project_id', projectId);
+                if ((existing || []).some(t => (t.name || '').toLowerCase() === name.toLowerCase() && t.start_date === dateStr && t.end_date === dateStr)) {
+                    alert(`A task named "${name}" with the same date already exists in this project.`);
+                    document.getElementById('calAddTaskName').focus();
+                    return;
+                }
                 const maxTaskNum = (existing || []).reduce((max, t) => Math.max(max, parseInt(t.task_number) || 0), 0);
                 const maxSort = (existing || []).reduce((max, t) => Math.max(max, t.sort_order ?? 0), 0);
                 const { error } = await supabase.from('tasks').insert({
@@ -4454,6 +4459,11 @@ FEW-SHOT EXAMPLES
                 // Guest / localStorage mode
                 const projRaw = localStorage.getItem('planner_proj_' + projectId);
                 const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
+                if ((data.tasks || []).some(t => (t.name || '').toLowerCase() === name.toLowerCase() && t.start === dateStr && t.end === dateStr)) {
+                    alert(`A task named "${name}" with the same date already exists in this project.`);
+                    document.getElementById('calAddTaskName').focus();
+                    return;
+                }
                 const maxId = (data.tasks || []).reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
                 data.tasks.push({
                     id: String(maxId + 1),
@@ -6233,16 +6243,16 @@ FEW-SHOT EXAMPLES
         function confirmAddTask() {
             const name = document.getElementById('addTaskName').value.trim();
             if (!name) { document.getElementById('addTaskName').focus(); return; }
-            if (tasks.some(t => t.name.toLowerCase() === name.toLowerCase())) {
-                alert(`A task named "${name}" already exists in this project.`);
-                document.getElementById('addTaskName').focus();
-                return;
-            }
 
             let startVal = document.getElementById('addTaskStart').value;
             let endVal = document.getElementById('addTaskEnd').value;
             if (startVal && endVal && startVal > endVal) {
                 endVal = startVal;
+            }
+            if (tasks.some(t => t.name.toLowerCase() === name.toLowerCase() && t.start === startVal && t.end === endVal)) {
+                alert(`A task named "${name}" with the same dates already exists in this project.`);
+                document.getElementById('addTaskName').focus();
+                return;
             }
 
             const maxId = tasks.reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
@@ -6686,8 +6696,8 @@ FEW-SHOT EXAMPLES
             if (field === 'progress' && !canEditTaskDetails()) { showToast('View-only access — you cannot edit this field', 'warning'); return; }
             if (field === 'name' && value.trim()) {
                 const trimmed = value.trim();
-                if (tasks.some((t, i) => i !== currentTaskIndex && t.name.toLowerCase() === trimmed.toLowerCase())) {
-                    alert(`A task named "${trimmed}" already exists in this project.`);
+                if (tasks.some((t, i) => i !== currentTaskIndex && t.name.toLowerCase() === trimmed.toLowerCase() && t.start === task.start && t.end === task.end)) {
+                    alert(`A task named "${trimmed}" with the same dates already exists in this project.`);
                     document.getElementById('tdName').value = task.name;
                     return;
                 }
@@ -10027,22 +10037,24 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                 selectedTasks = sourceTasks;
             }
 
-            // Build set of existing task names for duplicate detection
-            const existingNames = new Set(tasks.map(t => (t.name || '').toLowerCase()));
+            // Build set of existing task keys (name+start+end) for duplicate detection
+            const existingKeys = new Set(tasks.map(t => `${(t.name || '').toLowerCase()}|${t.start}|${t.end}`));
 
             // Map source tasks to new internal-format tasks with fresh IDs
             const readyTasks = selectedTasks.map(t => {
                 let newName = t.name || 'Untitled Task';
-                if (existingNames.has(newName.toLowerCase())) {
+                const newStart = t.start || localDateStr();
+                const newEnd = t.end || t.start || localDateStr();
+                if (existingKeys.has(`${newName.toLowerCase()}|${newStart}|${newEnd}`)) {
                     newName = newName + ' (copy)';
                     // Handle edge case where "(copy)" also exists
                     let suffix = 2;
-                    while (existingNames.has(newName.toLowerCase())) {
+                    while (existingKeys.has(`${newName.toLowerCase()}|${newStart}|${newEnd}`)) {
                         newName = (t.name || 'Untitled Task') + ` (copy ${suffix})`;
                         suffix++;
                     }
                 }
-                existingNames.add(newName.toLowerCase()); // prevent duplicates within the batch
+                existingKeys.add(`${newName.toLowerCase()}|${newStart}|${newEnd}`); // prevent duplicates within the batch
 
                 return {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 6),
