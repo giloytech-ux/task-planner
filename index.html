@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v36</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v37</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -8056,10 +8056,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     <div class="text-xs text-slate-200 font-medium truncate" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
                     <div class="flex items-center justify-between mt-1">
                         <span class="text-[10px] text-slate-500">${sizeStr} · ${dateStr}</span>
-                        <div class="flex gap-1">
-                            ${isImage ? `<button onclick="previewProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Preview"><span class="material-icons-round text-sm">visibility</span></button>` : ''}
-                            <button onclick="downloadProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Download"><span class="material-icons-round text-sm">download</span></button>
-                            <button onclick="deleteProjectFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>
+                        <div class="flex gap-2">
+                            ${isImage ? `<button onclick="previewProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors p-1" title="Preview"><span class="material-icons-round text-base">visibility</span></button>` : ''}
+                            <button onclick="downloadProjectFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors p-1" title="Download"><span class="material-icons-round text-base">download</span></button>
+                            <button onclick="deleteProjectFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors p-1" title="Delete"><span class="material-icons-round text-base">close</span></button>
                         </div>
                     </div>
                 `;
@@ -8102,6 +8102,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 markMetadataDirty();
                 saveProjectFromHub();
                 renderProjectFilesTab();
+                showToast(`${added} file${added > 1 ? 's' : ''} uploaded successfully`, 'success');
             } finally {
                 dropZone.innerHTML = '<span class="material-icons-round text-3xl text-slate-500 mb-2">cloud_upload</span><p class="text-sm text-slate-400">Drop files here or click to upload</p><p class="text-[10px] text-slate-600 mt-1">Max 5 MB per file. Images, PDFs, documents.</p><input type="file" id="projFileInput" class="hidden" multiple onchange="handleProjectFileUpload(this.files)">';
                 dropZone.style.pointerEvents = '';
@@ -8657,10 +8658,10 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     <div class="text-xs text-slate-200 font-medium truncate" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
                     <div class="flex items-center justify-between mt-1">
                         <span class="text-[10px] text-slate-500">${sizeStr} · ${dateStr}</span>
-                        <div class="flex gap-1">
-                            ${isImage ? `<button onclick="previewFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Preview"><span class="material-icons-round text-sm">visibility</span></button>` : ''}
-                            <button onclick="downloadFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors" title="Download"><span class="material-icons-round text-sm">download</span></button>
-                            ${_fEdit ? `<button onclick="deleteFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors" title="Delete"><span class="material-icons-round text-sm">close</span></button>` : ''}
+                        <div class="flex gap-2">
+                            ${isImage ? `<button onclick="previewFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors p-1" title="Preview"><span class="material-icons-round text-base">visibility</span></button>` : ''}
+                            <button onclick="downloadFile(${i})" class="text-slate-500 hover:text-blue-400 transition-colors p-1" title="Download"><span class="material-icons-round text-base">download</span></button>
+                            ${_fEdit ? `<button onclick="deleteFile(${i})" class="text-slate-500 hover:text-red-400 transition-colors p-1" title="Delete"><span class="material-icons-round text-base">close</span></button>` : ''}
                         </div>
                     </div>
                 `;
@@ -8711,6 +8712,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 renderFilesTab(task);
                 renderTaskDetailHeader();
                 updateRowIndicators(currentTaskIndex);
+                showToast(`${added} file${added > 1 ? 's' : ''} uploaded successfully`, 'success');
             } finally {
                 dropZone.innerHTML = '<span class="material-icons-round text-3xl text-slate-500 mb-2">cloud_upload</span><p class="text-sm text-slate-400">Drop files here or click to upload</p><p class="text-[10px] text-slate-600 mt-1">Max 5 MB per file. Images, PDFs, documents.</p><input type="file" id="fileInput" class="hidden" multiple onchange="handleFileUpload(this.files)">';
                 dropZone.style.pointerEvents = '';
