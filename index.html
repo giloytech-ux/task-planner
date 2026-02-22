@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v29</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v30</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -851,7 +851,8 @@
                     <!-- Search -->
                     <div class="relative flex-1 max-w-sm">
                         <span class="material-icons-round text-sm text-slate-500 absolute left-3 top-1/2 -translate-y-1/2">search</span>
-                        <input type="text" id="projectSearch" oninput="handleProjectSearch()" placeholder="Search projects..." class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors min-h-[44px]">
+                        <input type="text" id="projectSearch" oninput="handleProjectSearch()" placeholder="Search projects..." class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-8 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors min-h-[44px]">
+                        <button id="projectSearchClear" onclick="clearInput('projectSearch', handleProjectSearch)" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
                     </div>
                     <div class="flex items-center gap-3">
                         <!-- Sort -->
@@ -960,7 +961,7 @@
             <div id="calendarAddModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                 <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
                     <div class="px-5 py-4 border-b border-slate-700">
-                        <h3 class="text-base font-semibold text-white">Add Event</h3>
+                        <h3 class="text-base font-semibold text-white">Add Task <span class="text-xs font-normal text-slate-400">(fixed date)</span></h3>
                         <p id="calAddDateLabel" class="text-xs text-slate-400 mt-0.5"></p>
                     </div>
                     <div class="px-5 py-4 space-y-3">
@@ -971,7 +972,10 @@
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-400 mb-1">Task name</label>
-                            <input type="text" id="calAddTaskName" placeholder="Enter task name..." class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCalendarAdd();}">
+                            <div class="relative">
+                                <input type="text" id="calAddTaskName" placeholder="Enter task name..." class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="toggleClearBtn('calAddTaskName')" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCalendarAdd();}">
+                                <button id="calAddTaskNameClear" onclick="clearInput('calAddTaskName')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                            </div>
                         </div>
                     </div>
                     <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-700">
@@ -1249,12 +1253,18 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                             <div>
                                 <div class="td-field-label">Task Name</div>
-                                <input type="text" id="tdName" class="td-input" onchange="updateTaskDetail('name', this.value)">
+                                <div class="relative">
+                                    <input type="text" id="tdName" class="td-input pr-8" oninput="toggleClearBtn('tdName')" onchange="updateTaskDetail('name', this.value)">
+                                    <button id="tdNameClear" onclick="clearInput('tdName')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                             </div>
                             <div>
                                 <div class="td-field-label">Assigned To</div>
-                                <input type="text" id="tdAssigned" class="td-input" placeholder="e.g., John, Sarah"
-                                       onchange="updateTaskDetail('assigned', this.value)">
+                                <div class="relative">
+                                    <input type="text" id="tdAssigned" class="td-input pr-8" placeholder="e.g., John, Sarah"
+                                           oninput="toggleClearBtn('tdAssigned')" onchange="updateTaskDetail('assigned', this.value)">
+                                    <button id="tdAssignedClear" onclick="clearInput('tdAssigned')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                             </div>
                             <div>
                                 <div class="td-field-label">Priority</div>
@@ -1324,7 +1334,10 @@
                         <div id="checklistItems" class="flex-1 overflow-y-auto mb-3"></div>
                         <div id="checklistInputArea" class="flex-shrink-0">
                             <div class="flex gap-2">
-                                <input type="text" id="checklistInput" class="td-input flex-1" placeholder="Add a checklist item..." onkeydown="if(event.key==='Enter')addChecklistItem()">
+                                <div class="relative flex-1">
+                                    <input type="text" id="checklistInput" class="td-input w-full pr-8" placeholder="Add a checklist item..." oninput="toggleClearBtn('checklistInput')" onkeydown="if(event.key==='Enter')addChecklistItem()">
+                                    <button id="checklistInputClear" onclick="clearInput('checklistInput')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                                 <button onclick="addChecklistItem()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Add</button>
                             </div>
                         </div>
@@ -1350,7 +1363,10 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <div class="td-field-label">Title</div>
-                                    <input type="text" id="mtgTitle" class="td-input" placeholder="Meeting title">
+                                    <div class="relative">
+                                        <input type="text" id="mtgTitle" class="td-input pr-8" placeholder="Meeting title" oninput="toggleClearBtn('mtgTitle')">
+                                        <button id="mtgTitleClear" onclick="clearInput('mtgTitle')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                    </div>
                                 </div>
                                 <div>
                                     <div class="td-field-label">Date</div>
@@ -1359,7 +1375,10 @@
                             </div>
                             <div>
                                 <div class="td-field-label">Attendees</div>
-                                <input type="text" id="mtgAttendees" class="td-input" placeholder="e.g., John, Sarah, Mike">
+                                <div class="relative">
+                                    <input type="text" id="mtgAttendees" class="td-input pr-8" placeholder="e.g., John, Sarah, Mike" oninput="toggleClearBtn('mtgAttendees')">
+                                    <button id="mtgAttendeesClear" onclick="clearInput('mtgAttendees')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                             </div>
                             <div class="flex flex-col flex-1">
                                 <div class="flex items-center justify-between">
@@ -1428,7 +1447,10 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <div class="td-field-label">Title</div>
-                                    <input type="text" id="projMtgTitle" class="td-input" placeholder="Meeting title">
+                                    <div class="relative">
+                                        <input type="text" id="projMtgTitle" class="td-input pr-8" placeholder="Meeting title" oninput="toggleClearBtn('projMtgTitle')">
+                                        <button id="projMtgTitleClear" onclick="clearInput('projMtgTitle')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                    </div>
                                 </div>
                                 <div>
                                     <div class="td-field-label">Date</div>
@@ -1437,7 +1459,10 @@
                             </div>
                             <div>
                                 <div class="td-field-label">Attendees</div>
-                                <input type="text" id="projMtgAttendees" class="td-input" placeholder="e.g., John, Sarah, Mike">
+                                <div class="relative">
+                                    <input type="text" id="projMtgAttendees" class="td-input pr-8" placeholder="e.g., John, Sarah, Mike" oninput="toggleClearBtn('projMtgAttendees')">
+                                    <button id="projMtgAttendeesClear" onclick="clearInput('projMtgAttendees')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                             </div>
                             <div class="flex flex-col flex-1">
                                 <div class="flex items-center justify-between">
@@ -1461,7 +1486,10 @@
                         <div id="projChecklistItems" class="flex-1 overflow-y-auto mb-3"></div>
                         <div class="flex-shrink-0">
                             <div class="flex gap-2">
-                                <input type="text" id="projChecklistInput" class="td-input flex-1" placeholder="Add a checklist item..." onkeydown="if(event.key==='Enter')addProjectChecklistItem()">
+                                <div class="relative flex-1">
+                                    <input type="text" id="projChecklistInput" class="td-input w-full pr-8" placeholder="Add a checklist item..." oninput="toggleClearBtn('projChecklistInput')" onkeydown="if(event.key==='Enter')addProjectChecklistItem()">
+                                    <button id="projChecklistInputClear" onclick="clearInput('projChecklistInput')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                                </div>
                                 <button onclick="addProjectChecklistItem()" class="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors min-h-[44px]">Add</button>
                             </div>
                         </div>
@@ -1552,7 +1580,10 @@
             <div class="space-y-3">
                 <div>
                     <label class="td-field-label">Task Name <span class="text-red-400">*</span></label>
-                    <input id="addTaskName" type="text" class="td-input" placeholder="e.g. Call my mom tomorrow at 5pm">
+                    <div class="relative">
+                        <input id="addTaskName" type="text" class="td-input pr-8" placeholder="e.g. Call my mom at 5pm" oninput="toggleClearBtn('addTaskName')">
+                        <button id="addTaskNameClear" onclick="clearInput('addTaskName')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                    </div>
                 </div>
                 <div>
                     <label class="td-field-label">Priority</label>
@@ -1599,14 +1630,17 @@
             <p class="text-xs text-slate-400 mb-4">A project is a collection of tasks you can plan, track, and organize.</p>
             <div>
                 <label class="td-field-label">Project Name <span class="text-red-400">*</span></label>
-                <input id="newProjectName" type="text" class="td-input" placeholder="e.g. Website Redesign, Q2 Marketing…" onkeydown="if(event.key==='Enter')confirmNewProject()">
+                <div class="relative">
+                    <input id="newProjectName" type="text" class="td-input pr-8" placeholder="e.g. Website Redesign, Q2 Marketing…" oninput="toggleClearBtn('newProjectName')" onkeydown="if(event.key==='Enter')confirmNewProject()">
+                    <button id="newProjectNameClear" onclick="clearInput('newProjectName')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+                </div>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-3">
                 <span class="text-[10px] text-slate-500 w-full">Suggestions</span>
-                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Work</button>
-                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Home</button>
-                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">School</button>
-                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Side Project</button>
+                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;toggleClearBtn('newProjectName');document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Work</button>
+                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;toggleClearBtn('newProjectName');document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Home</button>
+                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;toggleClearBtn('newProjectName');document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">School</button>
+                <button type="button" onclick="document.getElementById('newProjectName').value=this.textContent;toggleClearBtn('newProjectName');document.getElementById('newProjectName').focus()" class="px-2.5 py-1 text-[11px] text-slate-300 bg-slate-700/60 hover:bg-slate-600 border border-slate-600 rounded-full transition-colors">Side Project</button>
             </div>
             <div class="flex justify-end gap-2 mt-5">
                 <button onclick="closeNewProjectModal()" class="px-4 py-1.5 text-xs text-slate-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors">Cancel</button>
@@ -2942,6 +2976,9 @@ FEW-SHOT EXAMPLES
             }
             if (!document.getElementById('filePreviewOverlay').classList.contains('hidden')) {
                 closeFilePreview(); return;
+            }
+            if (!document.getElementById('renameProjectModal').classList.contains('hidden')) {
+                closeRenameProject(); return;
             }
             if (!document.getElementById('logSummaryModal').classList.contains('hidden')) {
                 closeLogSummary(); return;
@@ -4415,8 +4452,22 @@ FEW-SHOT EXAMPLES
             openProject(projectId);
         }
 
+        // --- Clear button helper ---
+        function toggleClearBtn(inputId) {
+            const btn = document.getElementById(inputId + 'Clear');
+            if (btn) btn.classList.toggle('hidden', !document.getElementById(inputId).value);
+        }
+        function clearInput(inputId, cb) {
+            const el = document.getElementById(inputId);
+            el.value = '';
+            document.getElementById(inputId + 'Clear').classList.add('hidden');
+            el.focus();
+            if (cb) cb();
+        }
+
         // --- Dashboard: Search ---
         function handleProjectSearch() {
+            toggleClearBtn('projectSearch');
             renderDashboard();
         }
 
@@ -5076,60 +5127,71 @@ FEW-SHOT EXAMPLES
             container.scrollTop = container.scrollHeight;
         }
 
+        let _renameProjectId = null;
+        let _renameProjectCallback = null;
+
+        function openRenameProject(id, currentName, callback) {
+            _renameProjectId = id;
+            _renameProjectCallback = callback || null;
+            const input = document.getElementById('renameProjectInput');
+            input.value = currentName;
+            toggleClearBtn('renameProjectInput');
+            document.getElementById('renameProjectModal').classList.remove('hidden');
+            pushNavState('renameProject');
+            setTimeout(() => { input.focus(); input.select(); }, 100);
+        }
+
+        function closeRenameProject() {
+            document.getElementById('renameProjectModal').classList.add('hidden');
+            _renameProjectId = null;
+            _renameProjectCallback = null;
+        }
+
+        async function confirmRenameProject() {
+            const newName = document.getElementById('renameProjectInput').value.trim();
+            if (!newName || !_renameProjectId) return;
+            const id = _renameProjectId;
+            const registry = await loadRegistry();
+            if (registry.some(p => p.id !== id && p.name.toLowerCase() === newName.toLowerCase())) {
+                alert(`A project named "${newName}" already exists.`);
+                return;
+            }
+
+            if (currentUser) {
+                await supabase.from('projects').update({
+                    name: newName,
+                    updated_at: new Date().toISOString()
+                }).eq('id', id);
+            } else {
+                const project = registry.find(p => p.id === id);
+                if (project) {
+                    project.name = newName;
+                    project.updatedAt = new Date().toISOString();
+                    saveRegistryLocal(registry);
+                }
+            }
+            if (_renameProjectCallback) _renameProjectCallback(newName);
+            closeRenameProject();
+            renderDashboard();
+        }
+
         async function renameCurrentProject() {
             if (!currentProjectId) return;
             const registry = await loadRegistry();
             const project = registry.find(p => p.id === currentProjectId);
             if (!project) return;
             if ((project.metadata && project.metadata.isDefault) || project.name === 'Personal') return;
-            const newName = prompt('Rename project:', project.name);
-            if (!newName || !newName.trim()) return;
-            if (registry.some(p => p.id !== currentProjectId && p.name.toLowerCase() === newName.trim().toLowerCase())) {
-                alert(`A project named "${newName.trim()}" already exists.`);
-                return;
-            }
-
-            if (currentUser) {
-                await supabase.from('projects').update({
-                    name: newName.trim(),
-                    updated_at: new Date().toISOString()
-                }).eq('id', currentProjectId);
-            } else {
-                project.name = newName.trim();
-                project.updatedAt = new Date().toISOString();
-                saveRegistryLocal(registry);
-            }
-            currentProjectName = newName.trim();
-            document.getElementById('breadcrumbName').textContent = newName.trim();
+            openRenameProject(currentProjectId, project.name, (newName) => {
+                currentProjectName = newName;
+                document.getElementById('breadcrumbName').textContent = newName;
+            });
         }
 
         async function renameProject(id, currentName) {
             if (!isProjectOwner()) return;
-            const newName = prompt('Rename project:', currentName);
-            if (!newName || !newName.trim() || newName.trim() === currentName) return;
-            const registry = await loadRegistry();
-            if (registry.some(p => p.id !== id && p.name.toLowerCase() === newName.trim().toLowerCase())) {
-                alert(`A project named "${newName.trim()}" already exists.`);
-                return;
-            }
-
-            if (currentUser) {
-                await supabase.from('projects').update({
-                    name: newName.trim(),
-                    updated_at: new Date().toISOString()
-                }).eq('id', id);
-            } else {
-                const raw = localStorage.getItem('planner_registry');
-                const registry = raw ? JSON.parse(raw) : [];
-                const project = registry.find(p => p.id === id);
-                if (project) {
-                    project.name = newName.trim();
-                    project.updatedAt = new Date().toISOString();
-                    saveRegistryLocal(registry);
-                }
-            }
-            await renderDashboard();
+            openRenameProject(id, currentName);
         }
+
 
         // =============================================
         // Priority helpers & sort toggle
@@ -6493,7 +6555,9 @@ FEW-SHOT EXAMPLES
         // ---- DETAILS TAB ----
         function renderDetailsTab(task) {
             document.getElementById('tdName').value = task.name;
+            toggleClearBtn('tdName');
             document.getElementById('tdAssigned').value = task.assigned || '';
+            toggleClearBtn('tdAssigned');
             document.getElementById('tdPriority').value = task.priority || 'medium';
             document.getElementById('tdStart').value = task.start;
             document.getElementById('tdEnd').value = task.end;
@@ -10881,6 +10945,25 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
       </div>
     </div>
 <!-- File Preview Overlay -->
+<div id="renameProjectModal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-2 md:p-6" onclick="if(event.target===this)closeRenameProject()">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-sm w-full">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+            <h3 class="text-sm font-semibold text-white">Rename Project</h3>
+            <button onclick="closeRenameProject()" class="text-slate-400 hover:text-white"><span class="material-icons-round text-lg">close</span></button>
+        </div>
+        <div class="px-5 py-4">
+            <div class="relative">
+                <input type="text" id="renameProjectInput" class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="toggleClearBtn('renameProjectInput')" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmRenameProject();}">
+                <button id="renameProjectInputClear" onclick="clearInput('renameProjectInput')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-0.5"><span class="material-icons-round text-base">close</span></button>
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-700">
+            <button onclick="closeRenameProject()" class="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">Cancel</button>
+            <button onclick="confirmRenameProject()" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors">Rename</button>
+        </div>
+    </div>
+</div>
+
 <div id="filePreviewOverlay" class="hidden fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center" onclick="if(event.target===this)closeFilePreview()">
     <button onclick="closeFilePreview()" class="absolute top-4 right-4 z-10 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-10 h-10 flex items-center justify-center transition-colors" title="Close preview">
         <span class="material-icons-round text-3xl">close</span>
