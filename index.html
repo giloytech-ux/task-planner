@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v26</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v27</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1082,7 +1082,7 @@
                         <button onclick="zoomGantt(1)" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Zoom in"><span class="material-icons-round" style="font-size:20px">zoom_in</span></button>
                     </div>
                     <div class="w-px h-5 bg-slate-700"></div>
-                    <button onclick="renderGantt()" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Refresh"><span class="material-icons-round" style="font-size:20px">refresh</span></button>
+                    <button onclick="refreshProjectData()" class="w-10 h-10 md:w-8 md:h-8 flex items-center justify-center text-slate-400 hover:text-white rounded-lg" title="Refresh"><span class="material-icons-round" style="font-size:20px">refresh</span></button>
                     <button onclick="showProjectSummary()" class="w-10 h-10 md:w-8 md:h-8 flex items-center gap-1 text-slate-400 hover:text-purple-400 transition-colors justify-center rounded-lg" title="AI Project Summary">
                         <span class="material-icons-round" style="font-size:20px">auto_awesome</span>
                         <span class="text-xs hidden md:inline">AI Summary</span>
@@ -2145,9 +2145,12 @@
                         table: 'projects',
                         filter: 'id=eq.' + projectId
                     }, handleProjectChange)
-                    .subscribe((status) => {
+                    .subscribe((status, err) => {
+                        console.log('Realtime: channel status =', status, err || '');
                         if (status === 'CHANNEL_ERROR') {
-                            console.warn('Realtime: channel error, falling back to SWR cache');
+                            console.warn('Realtime: channel error, falling back to SWR cache. Error:', err);
+                        } else if (status === 'TIMED_OUT') {
+                            console.warn('Realtime: subscription timed out for project', projectId);
                         }
                     });
             } catch (err) {
@@ -2163,6 +2166,43 @@
             _lastWriteTimestamps.clear();
         }
 
+        async function refreshProjectData() {
+            if (!currentProjectId || !currentUser) { renderGantt(); return; }
+            const btn = document.querySelector('[title="Refresh"] .material-icons-round');
+            if (btn) btn.classList.add('animate-spin');
+            try {
+                const freshData = await loadProject(currentProjectId, true);
+                if (!currentProjectId) return;
+                tasks = freshData.tasks || [];
+                history = freshData.history || [];
+                projectLogs = freshData.logs || [];
+                projectDescription = freshData.projectDescription || '';
+                projectMeetings = freshData.projectMeetings || [];
+                projectChecklist = freshData.projectChecklist || [];
+                projectActivity = freshData.projectActivity || [];
+                projectFiles = freshData.projectFiles || [];
+                if (freshData.projectSummary) _projectSummaryCache[currentProjectId] = freshData.projectSummary;
+                if (freshData.logSummary) _logSummaryCache[currentProjectId] = freshData.logSummary;
+                renderGantt();
+                if (currentTaskIndex !== null && tasks[currentTaskIndex]) {
+                    renderTaskDetailHeader();
+                    const activeTab = document.querySelector('.detail-tab.active');
+                    if (activeTab) {
+                        const tn = activeTab.textContent.trim().toLowerCase().replace(/\s+/g, '');
+                        if (tn.startsWith('checklist')) renderChecklistTab(tasks[currentTaskIndex]);
+                        else if (tn.startsWith('activitylog')) renderActivityTab(tasks[currentTaskIndex]);
+                        else if (tn.startsWith('meetings')) renderMeetingsTab(tasks[currentTaskIndex]);
+                        else if (tn.startsWith('files')) renderFilesTab(tasks[currentTaskIndex]);
+                        else if (tn.startsWith('details')) renderDetailsTab(tasks[currentTaskIndex]);
+                    }
+                }
+            } catch (err) {
+                console.error('Refresh failed:', err);
+            } finally {
+                if (btn) btn.classList.remove('animate-spin');
+            }
+        }
+
         function markWriteTimestamp(rowId) {
             _lastWriteTimestamps.set(rowId, Date.now());
         }
@@ -2170,6 +2210,7 @@
         function handleTaskChange(payload) {
             if (!currentProjectId) return;
             const { eventType, new: newRow, old: oldRow } = payload;
+            console.log('Realtime: task event', eventType, newRow?.id || oldRow?.id);
 
             if (eventType === 'UPDATE' && newRow) {
                 const rowId = newRow.id;
@@ -2268,6 +2309,7 @@
 
         function handleProjectChange(payload) {
             if (!currentProjectId) return;
+            console.log('Realtime: project metadata event received');
             const { new: newRow } = payload;
             if (!newRow || !newRow.metadata) return;
             // Update project-level metadata from server
@@ -4681,17 +4723,25 @@ FEW-SHOT EXAMPLES
             // Snapshot project data into cache before clearing globals
             if (currentProjectId && currentUser) {
                 updateRegistryCacheFromProject(currentProjectId);
-                // Cache current project state so re-opening is instant
-                DataStore.set('project:' + currentProjectId, {
-                    tasks: tasks.map(t => ({ ...t })),
-                    history: [...history],
-                    logs: [...projectLogs],
-                    projectDescription,
-                    projectMeetings: [...projectMeetings],
-                    projectChecklist: [...projectChecklist],
-                    projectActivity: [...projectActivity],
-                    projectFiles: [...projectFiles]
-                });
+                // For shared projects, invalidate cache so next open always fetches fresh.
+                // For solo projects, snapshot for instant re-open.
+                const _reg = DataStore.get('registry');
+                const _projEntry = _reg && _reg.find(p => p.id === currentProjectId);
+                const _hasCollaborators = _projEntry && (_projEntry._isShared || _projEntry._shareCount > 0);
+                if (_hasCollaborators) {
+                    DataStore.invalidate('project:' + currentProjectId);
+                } else {
+                    DataStore.set('project:' + currentProjectId, {
+                        tasks: tasks.map(t => ({ ...t })),
+                        history: [...history],
+                        logs: [...projectLogs],
+                        projectDescription,
+                        projectMeetings: [...projectMeetings],
+                        projectChecklist: [...projectChecklist],
+                        projectActivity: [...projectActivity],
+                        projectFiles: [...projectFiles]
+                    });
+                }
             }
 
             // Fire save non-blocking (mutation queue will handle failures)
@@ -4886,26 +4936,31 @@ FEW-SHOT EXAMPLES
                 if (task) scrollToTask(task.id);
             }
 
-            // Background refresh: if project data was from stale cache, silently re-fetch
-            if (currentUser && DataStore.isStale(cacheKey)) {
+            // Background refresh: always re-fetch from server to pick up remote changes
+            if (currentUser) {
                 loadProject(id, true).then(freshData => {
                     if (currentProjectId !== id) return; // navigated away
-                    // Only update if data actually changed
                     const freshTasks = freshData.tasks || [];
-                    if (JSON.stringify(freshTasks.map(t => t._rowId)) !== JSON.stringify(tasks.map(t => t._rowId))) {
-                        tasks = freshTasks;
-                        history = freshData.history || [];
-                        projectLogs = freshData.logs || [];
-                        projectDescription = freshData.projectDescription || '';
-                        projectMeetings = freshData.projectMeetings || [];
-                        projectChecklist = freshData.projectChecklist || [];
-                        projectActivity = freshData.projectActivity || [];
-                        projectFiles = freshData.projectFiles || [];
-                        if (freshData.projectSummary) _projectSummaryCache[id] = freshData.projectSummary;
-                        if (freshData.logSummary) _logSummaryCache[id] = freshData.logSummary;
+                    // Full snapshot comparison — catches field-level edits, not just add/remove
+                    const oldSnap = JSON.stringify({ t: tasks, d: projectDescription, m: projectMeetings, c: projectChecklist, a: projectActivity });
+                    tasks = freshTasks;
+                    history = freshData.history || [];
+                    projectLogs = freshData.logs || [];
+                    projectDescription = freshData.projectDescription || '';
+                    projectMeetings = freshData.projectMeetings || [];
+                    projectChecklist = freshData.projectChecklist || [];
+                    projectActivity = freshData.projectActivity || [];
+                    projectFiles = freshData.projectFiles || [];
+                    if (freshData.projectSummary) _projectSummaryCache[id] = freshData.projectSummary;
+                    if (freshData.logSummary) _logSummaryCache[id] = freshData.logSummary;
+                    const newSnap = JSON.stringify({ t: tasks, d: projectDescription, m: projectMeetings, c: projectChecklist, a: projectActivity });
+                    if (oldSnap !== newSnap) {
                         renderGantt();
+                        if (currentTaskIndex !== null && tasks[currentTaskIndex]) {
+                            renderTaskDetailHeader();
+                        }
                     }
-                }).catch(() => {});
+                }).catch(err => { console.warn('Background refresh failed:', err); });
             }
         }
 
