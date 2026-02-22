@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v31</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v32</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -2401,7 +2401,10 @@
                     id: t.id,
                     name: t.name,
                     start: t.start,
-                    end: t.end
+                    end: t.end,
+                    dependencies: (t.dependencies || '').split(',').map(s => s.trim()).filter(Boolean),
+                    description: t.description || '',
+                    assigned: t.assigned || 'Me'
                 }));
             }
             // execution mode — full fields
@@ -2495,7 +2498,33 @@ RULES FOR COPY:
 - Only copy from projects listed in USER'S OTHER PROJECTS. If no projects are listed, or the requested project name doesn't match any, respond conversationally saying it wasn't found.
 - "task_names" should be "all" if the user wants all tasks, or an array of specific task names if they asked for specific ones.
 - Do NOT invent project names or IDs. Use the exact values from the list.
-- Match project names case-insensitively.`;
+- Match project names case-insensitively.
+
+MODE 4: EDIT OR DELETE EXISTING TASKS
+If the user asks to modify, reschedule, rename, or delete existing tasks, respond with this JSON (do not wrap in markdown):
+{
+  "action": "update | delete",
+  "summary": "A brief message explaining what you changed (e.g., 'I moved Design back by 3 days and updated its dependency chain').",
+  "tasks": [
+    {
+      "id": "existing_task_id",
+      "name": "Task Name",
+      "start": "YYYY-MM-DD",
+      "end": "YYYY-MM-DD",
+      "dependencies": ["id_1"],
+      "description": "Brief explanation of task scope",
+      "assigned": "Me"
+    }
+  ]
+}
+
+RULES FOR EDIT/DELETE:
+- For "update": include ALL project tasks in the "tasks" array (modified and unmodified). Omitting a task does NOT delete it — it will be kept as-is. Only change the fields the user requested.
+- For "delete": include ONLY the tasks that should REMAIN. Tasks not in the array will be marked for removal and shown to the user for confirmation.
+- You MUST use the exact "id" values from CURRENT_PROJECT_TASKS for existing tasks.
+- "dependencies": Array of task ID strings. Use [] if none.
+- Respect the scheduling rules from Mode 1 (weekends, 5-6 hours/day, etc.).
+- If the user's request is ambiguous about which task to edit/delete, use "clarify" action instead (respond conversationally to ask).`;
             }
 
             // Execution mode (default)
@@ -10232,7 +10261,61 @@ Prioritized action items based on overdue tasks, incomplete checklists, meeting 
                     }
                 }
 
-                if (parsed && parsed.copy_tasks && parsed.source_project_id) {
+                if (parsed && parsed.action && (parsed.action === 'update' || parsed.action === 'delete' || parsed.action === 'create')) {
+                    // Edit/delete mode — route through merge infrastructure
+                    const summary = parsed.summary || 'Changes proposed by AI.';
+                    const aiTasks = (parsed.tasks || []).map(t => ({
+                        id: t.id || (Date.now().toString(36) + Math.random().toString(36).substr(2, 6)),
+                        name: t.name || 'Untitled',
+                        start: t.start || localDateStr(),
+                        end: t.end || t.start || localDateStr(),
+                        progress: 0,
+                        dependencies: Array.isArray(t.dependencies) ? t.dependencies.join(',') : (t.dependencies || ''),
+                        custom_class: t.custom_class || '',
+                        description: t.description || '',
+                        checklist: t.checklist || [],
+                        assigned: t.assigned || 'Me'
+                    }));
+
+                    const { merged, changes } = mergeTasks(tasks, aiTasks);
+
+                    // If delete action, mark tasks NOT in AI response as removed
+                    if (parsed.action === 'delete') {
+                        changes.forEach(c => {
+                            if (c.type === 'kept') c.type = 'removed';
+                        });
+                        // Remove "kept" (now "removed") tasks from merged
+                        const removedIds = new Set(changes.filter(c => c.type === 'removed').map(c => c.id));
+                        const filteredMerged = merged.filter(t => !removedIds.has(t.id));
+                        pendingMerge = filteredMerged;
+                    } else {
+                        pendingMerge = merged;
+                    }
+
+                    const hasChanges = changes.some(c => c.type !== 'unchanged');
+                    if (!hasChanges) {
+                        addToChat('model', escapeHtml(summary));
+                        history.push({ role: "user", text: prompt });
+                        history.push({ role: "model", text: aiText, type: 'chat', displayText: summary });
+                        markChatDirty();
+                        pendingMerge = null;
+                    } else {
+                        pendingPrompt = prompt;
+                        pendingAiText = aiText;
+                        pendingAction = parsed.action;
+
+                        let html = `<div style="margin-bottom:10px">${escapeHtml(summary)}</div>`;
+                        html += buildChangeSummaryHTML(changes);
+                        addToChat('model', html);
+                    }
+                } else if (parsed && parsed.action === 'clarify') {
+                    // Clarify mode — AI needs more info from user
+                    const displayText = parsed.summary || 'Could you clarify what you mean?';
+                    addToChat('model', escapeHtml(displayText));
+                    history.push({ role: "user", text: prompt });
+                    history.push({ role: "model", text: aiText, type: 'chat', displayText: displayText });
+                    markChatDirty();
+                } else if (parsed && parsed.copy_tasks && parsed.source_project_id) {
                     // Copy tasks mode — load from source project
                     await handleCopyTasks(parsed, prompt, aiText);
                 } else if (parsed && parsed.has_data_to_confirm && parsed.proposed_items && parsed.proposed_items.tasks) {
