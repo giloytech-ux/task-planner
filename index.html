@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v25</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v26</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1737,6 +1737,9 @@
                 try {
                     const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
                     const { data, error } = await supabase.storage.from('task-files').download(path);
+                    if (error) {
+                        console.warn('loadFileData: Supabase download failed for', file.id, '| path:', path, '| error:', error.message);
+                    }
                     if (data && !error) {
                         return new Promise(resolve => {
                             const reader = new FileReader();
@@ -1744,7 +1747,9 @@
                             reader.readAsDataURL(data);
                         });
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('loadFileData: exception for', file.id, ':', e.message);
+                }
             }
             const localData = localStorage.getItem('planner_file_' + file.id);
             return localData || null;
@@ -1755,7 +1760,9 @@
                 try {
                     const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
                     await supabase.storage.from('task-files').remove([path]);
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('deleteFileData: exception for', file.id, ':', e.message);
+                }
             }
             try { localStorage.removeItem('planner_file_' + file.id); } catch (e) {}
         }
@@ -6945,6 +6952,15 @@ FEW-SHOT EXAMPLES
                 // Opening from dashboard — load project data
                 _logsSource = 'dashboard';
                 currentProjectId = projectId; // Set for file storage access
+                // Set owner ID for correct file storage paths (shared projects)
+                const _cachedRegistry = DataStore.get('registry');
+                if (_cachedRegistry) {
+                    const _proj = _cachedRegistry.find(p => p.id === projectId);
+                    if (_proj) {
+                        currentProjectOwnerId = _proj._isShared ? _proj._ownerId : (currentUser ? currentUser.id : null);
+                        currentProjectRole = _proj._isShared ? (_proj._shareRole || 'viewer') : 'owner';
+                    }
+                }
                 const data = await loadProject(projectId);
                 projectLogs = data.logs || [];
                 tasks = data.tasks || [];
