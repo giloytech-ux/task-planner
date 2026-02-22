@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v30</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v31</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -1739,7 +1739,7 @@
 
         // ---- File Storage Helpers ----
         // Stores file data separately from task records to avoid JSONB/localStorage size limits
-        async function saveFileData(fileId, data) {
+        async function saveFileData(fileId, data, ownerId) {
             if (currentUser && supabase && currentProjectId) {
                 try {
                     const base64Data = data.split(',')[1];
@@ -1748,7 +1748,7 @@
                     const byteArray = new Uint8Array(byteChars.length);
                     for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
                     const blob = new Blob([byteArray], { type: mimeType });
-                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${fileId}`;
+                    const path = `${ownerId || currentProjectOwnerId || currentUser.id}/${currentProjectId}/${fileId}`;
                     const { error } = await supabase.storage.from('task-files').upload(path, blob, { upsert: true });
                     if (!error) return 'supabase';
                     console.warn('Supabase Storage upload:', error.message);
@@ -1769,7 +1769,8 @@
             if (file.data) return file.data;
             if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
                 try {
-                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
+                    const ownerId = file.ownerId || currentProjectOwnerId || currentUser.id;
+                    const path = `${ownerId}/${currentProjectId}/${file.id}`;
                     const { data, error } = await supabase.storage.from('task-files').download(path);
                     if (error) {
                         console.warn('loadFileData: Supabase download failed for', file.id, '| path:', path, '| error:', error.message);
@@ -1792,7 +1793,8 @@
         async function deleteFileData(file) {
             if (file.storage === 'supabase' && currentUser && supabase && currentProjectId) {
                 try {
-                    const path = `${currentProjectOwnerId || currentUser.id}/${currentProjectId}/${file.id}`;
+                    const ownerId = file.ownerId || currentProjectOwnerId || currentUser.id;
+                    const path = `${ownerId}/${currentProjectId}/${file.id}`;
                     await supabase.storage.from('task-files').remove([path]);
                 } catch (e) {
                     console.warn('deleteFileData: exception for', file.id, ':', e.message);
@@ -1846,7 +1848,7 @@
             for (const task of tasksArr) {
                 for (const file of (task.files || [])) {
                     if (file.data && !file.storage) {
-                        fileOps.push(saveFileData(file.id, file.data).then(s => { file.storage = s; }));
+                        fileOps.push(saveFileData(file.id, file.data, file.ownerId).then(s => { file.storage = s; }));
                     } else if (!file.data) {
                         fileOps.push(loadFileData(file).then(d => { file.data = d; }));
                     }
@@ -7976,7 +7978,8 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4) + i;
                     projectFiles.push({
                         id: fileId, name: file.name, size: fileData.length,
-                        type: file.type, data: fileData, timestamp: new Date().toISOString()
+                        type: file.type, data: fileData, timestamp: new Date().toISOString(),
+                        ownerId: currentProjectOwnerId || (currentUser ? currentUser.id : null)
                     });
                     addProjectLog('attached', null, 'Project', null, file.name);
                 });
@@ -7984,7 +7987,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 const added = validFiles.length - skipped.length;
                 if (!added) return;
                 await Promise.all(projectFiles.slice(-added).map(async f => {
-                    f.storage = await saveFileData(f.id, f.data);
+                    f.storage = await saveFileData(f.id, f.data, f.ownerId);
                 }));
                 markMetadataDirty();
                 saveProjectFromHub();
@@ -8579,7 +8582,8 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                     const fileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4) + i;
                     task.files.push({
                         id: fileId, name: file.name, size: fileData.length,
-                        type: file.type, data: fileData, timestamp: new Date().toISOString()
+                        type: file.type, data: fileData, timestamp: new Date().toISOString(),
+                        ownerId: currentProjectOwnerId || (currentUser ? currentUser.id : null)
                     });
                     addActivityEntry(task, 'system', `File attached: "${file.name}"`);
                     addProjectLog('attached', task.id, task.name, 'files', file.name);
@@ -8588,7 +8592,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 const added = validFiles.length - skipped.length;
                 if (!added) return;
                 await Promise.all(task.files.slice(-added).map(async f => {
-                    f.storage = await saveFileData(f.id, f.data);
+                    f.storage = await saveFileData(f.id, f.data, f.ownerId);
                 }));
                 markTaskDirty(task, 'files');
                 markTaskDirty(task, 'activity');
