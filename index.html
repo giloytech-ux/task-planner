@@ -842,7 +842,7 @@
     <main id="dashboardView" class="flex-1 overflow-auto p-4 md:p-8 hidden">
         <div class="max-w-6xl mx-auto">
             <div id="dashboardHeader" class="mb-5">
-                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v28</span></h2>
+                <h2 class="text-2xl font-bold text-white mb-1">Your Projects <span class="text-xs font-normal text-slate-600">v29</span></h2>
                 <p class="text-sm text-slate-400">Select a project to continue or create a new one.</p>
             </div>
             <!-- Toolbar: Search, Sort, Archive toggle -->
@@ -9389,6 +9389,7 @@ OUTPUT STRUCTURE (TACTICAL VIEW)
             const overdue = tl.filter(t => getTaskStatus(t).css === 'status-overdue').length;
             const attention = tl.filter(t => getTaskStatus(t).label === 'Attention').length;
             const overdueSoon = tl.filter(t => getTaskStatus(t).label === 'Overdue Soon').length;
+            const onTrack = tl.filter(t => { const s = getTaskStatus(t); return s.label === 'On Track' || s.label === 'Scheduled'; }).length;
 
             // === SECTION 1: PROJECT_METADATA ===
             let context = `=== PROJECT_METADATA ===\n`;
@@ -9396,7 +9397,7 @@ OUTPUT STRUCTURE (TACTICAL VIEW)
             context += `Today's Date: ${todayStr}\n`;
             const desc = (pd.description || '').trim();
             if (desc) context += `Description: ${desc.slice(0, 500)}\n`;
-            context += `Total Tasks: ${total} | Completed: ${completed} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
+            context += `Total Tasks: ${total} | Completed: ${completed} | On Track: ${onTrack} | Overdue: ${overdue} | Overdue Soon: ${overdueSoon} | Needs Attention: ${attention}\n\n`;
 
             context += `Task Summary Table:\n`;
             tl.forEach((t, i) => {
@@ -9620,6 +9621,14 @@ You must respect a strict trust hierarchy:
 
 You will receive structured data with these labeled sections:
 - PROJECT_METADATA — project name, date, task summary table with statuses, progress %, checklist stats, dependencies
+  - Status labels are computed by the app based on each task's timeline and progress:
+    - "On Track" = task is progressing within acceptable bounds relative to its start/end dates
+    - "Scheduled" = future single-day task, not yet due
+    - "Attention" = task is falling moderately behind its expected timeline
+    - "Overdue Soon" = task is significantly behind its expected timeline
+    - "Overdue" / "Due Today" = task has passed or reached its end date without completion
+    - "Completed" = task is 100% done
+  - Use the status distribution (On Track / Attention / Overdue counts) as the primary indicator of schedule health, NOT the raw completed-vs-total ratio. A project with 2/11 tasks completed but 9 "On Track" is healthy.
 - USER_ACTIVITY_LOGS — manually written user entries (project-level and per-task)
 - CHECKLIST_STATES — checklist items with checked/unchecked status and done/total counts
 - MEETING_NOTES — user-recorded meetings with dates, titles, attendees, notes
@@ -9653,7 +9662,7 @@ Scan user activity logs and meeting notes for language indicating blockers, frus
 Output exactly 4 sections in markdown:
 
 ### 1. Executive Snapshot
-Combine the Project Description with the latest status. Lead with "Current Focus:" connecting the project's stated purpose to recent activity. Then 1-2 sentences on overall health, timeline status, and completion trajectory. Be honest — if the project is behind, say so.
+Combine the Project Description with the latest status. Lead with "Current Focus:" connecting the project's stated purpose to recent activity. Then 1-2 sentences on overall health, timeline status, and completion trajectory. Base your schedule assessment on the task status distribution (On Track / Attention / Overdue counts), NOT on the completed-vs-total ratio. Tasks that are "On Track" are progressing normally within their timelines — do not flag them as behind. Be honest — if tasks are Overdue or Attention, say so.
 
 ### 2. Reality Checks
 - **Integrity Flags:** List any tasks where progress % doesn't match checklist completion. If none, say "No integrity issues detected."
