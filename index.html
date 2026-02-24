@@ -810,7 +810,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v42</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v43</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -6846,7 +6846,8 @@ FEW-SHOT EXAMPLES
                     color: '#8b5cf6',
                     dotCss: 'bg-violet-500',
                     isMeeting: true,
-                    meetingData: um
+                    meetingData: um,
+                    parentTaskId: um.isProjectLevel ? null : um.taskId
                 });
             });
 
@@ -6872,9 +6873,29 @@ FEW-SHOT EXAMPLES
                     return b.sort - a.sort; // most overdue / biggest gap first
                 });
 
+                // Group meetings under their parent task
+                const grouped = [];
+                const meetingsByParent = new Map();
+                focusTasks.forEach(item => {
+                    if (item.isMeeting && item.parentTaskId) {
+                        if (focusTasks.some(f => !f.isMeeting && f.task.id === item.parentTaskId)) {
+                            if (!meetingsByParent.has(item.parentTaskId)) meetingsByParent.set(item.parentTaskId, []);
+                            meetingsByParent.get(item.parentTaskId).push(item);
+                            return;
+                        }
+                    }
+                    grouped.push(item);
+                    if (!item.isMeeting && meetingsByParent.has(item.task.id)) {
+                        meetingsByParent.get(item.task.id).forEach(m => { m._grouped = true; grouped.push(m); });
+                    }
+                });
+                focusTasks.length = 0;
+                focusTasks.push(...grouped);
+
+                const chipCount = focusTasks.filter(f => !f._grouped).length;
                 const bgMap = { '-1': 'bg-violet-500/10 text-violet-400 border-violet-500/20', 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
 
-                if (focusTasks.length === 1) {
+                if (chipCount === 1 && focusTasks.length === 1) {
                     const item = focusTasks[0];
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
@@ -6890,12 +6911,20 @@ FEW-SHOT EXAMPLES
                         chip.onclick = () => scrollToTask(item.task.id);
                     }
                     container.appendChild(chip);
+                } else if (chipCount === 1) {
+                    // Single task with grouped meetings — show task name chip, open modal on click
+                    const item = focusTasks[0];
+                    const chip = document.createElement('span');
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label} ›</span>`;
+                    chip.onclick = () => openFocusModal(focusTasks);
+                    container.appendChild(chip);
                 } else {
                     // 2+ items: single summary chip → opens modal with everything
                     const topPriority = focusTasks[0].priority;
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
-                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${focusTasks.length} items need attention <span class="opacity-60">›</span>`;
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${chipCount} items need attention <span class="opacity-60">›</span>`;
                     chip.onclick = () => openFocusModal(focusTasks);
                     container.appendChild(chip);
                 }
@@ -6922,10 +6951,11 @@ FEW-SHOT EXAMPLES
             focusTasks.forEach(item => {
                 const s = statusMap[item.priority] || defaultStyle;
                 const btn = document.createElement('button');
-                btn.className = `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
+                const isNested = item._grouped;
+                btn.className = `w-full flex items-center gap-3 ${isNested ? 'pl-8' : 'px-3'} pr-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
                 if (item.isMeeting) {
                     const md = item.meetingData;
-                    const context = md.isProjectLevel ? '· Project' : ('· ' + escapeHtml(md.taskName));
+                    const context = isNested ? '' : (md.isProjectLevel ? '· Project' : ('· ' + escapeHtml(md.taskName)));
                     btn.innerHTML = `<span class="material-icons-round text-violet-400 shrink-0" style="font-size:16px">event</span>
                         <span class="flex-1 text-left min-w-0">
                             <span class="text-sm text-white truncate block">${escapeHtml(item.task.name)}</span>
