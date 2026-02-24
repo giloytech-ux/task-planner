@@ -810,7 +810,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v43</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v44</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -6767,6 +6767,15 @@ FEW-SHOT EXAMPLES
                     upcomingMeetings.push({ mtg, taskName: null, taskId: null, isProjectLevel: true });
                 }
             });
+            // Filter out today's meetings whose time has already passed
+            const nowHHMM = String(new Date().getHours()).padStart(2, '0') + ':' + String(new Date().getMinutes()).padStart(2, '0');
+            for (let i = upcomingMeetings.length - 1; i >= 0; i--) {
+                const um = upcomingMeetings[i];
+                if (um.mtg.date === todayStr && um.mtg.time && um.mtg.time < nowHHMM) {
+                    upcomingMeetings.splice(i, 1);
+                }
+            }
+
             // Sort by date, then time (no time sorts last)
             upcomingMeetings.sort((a, b) => {
                 if (a.mtg.date !== b.mtg.date) return a.mtg.date.localeCompare(b.mtg.date);
