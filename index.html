@@ -769,6 +769,19 @@
         body.light-theme .cal-cell.cal-selected { outline-color: rgba(0,122,255,0.5); background: rgba(0,122,255,0.1); }
         body.light-theme .cal-marker { color: #3A3A3C; }
         body.light-theme .cal-overflow { color: #8E8E93; }
+        /* Calendar slide transitions */
+        #calendarGridWrapper {
+            overflow: hidden;
+            position: relative;
+        }
+        #calendarGrid {
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #calendarGrid.cal-slide-out-left  { transform: translateX(-60px); opacity: 0; }
+        #calendarGrid.cal-slide-out-right { transform: translateX(60px);  opacity: 0; }
+        #calendarGrid.cal-slide-in-left   { transform: translateX(60px);  opacity: 0; transition: none; }
+        #calendarGrid.cal-slide-in-right  { transform: translateX(-60px); opacity: 0; transition: none; }
+        #calendarGrid.cal-slide-settle    { transform: translateX(0);     opacity: 1; }
 
     </style>
 </head>
@@ -797,7 +810,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v40</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v41</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -819,6 +832,10 @@
             <div id="statusIndicator" class="text-xs text-green-500 hidden">Ready</div>
             <!-- User menu -->
             <div id="userMenu" class="flex items-center gap-2 hidden">
+                <button id="reminderBellBtn" onclick="toggleReminderDropdown()" class="relative flex items-center justify-center w-9 h-9 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white rounded-lg transition-colors" title="Meeting Reminders">
+                    <span class="material-icons-round" style="font-size:20px">notifications</span>
+                    <span id="reminderBellDot" class="hidden absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+                </button>
                 <span id="tokenIndicator" class="text-xs text-slate-500 hidden sm:inline cursor-pointer hover:text-slate-300" onclick="showTokenDetails()" title="Token usage"></span>
                 <span id="userEmail" class="text-xs text-slate-400 max-w-[150px] truncate hidden sm:inline"></span>
                 <button onclick="handleSignOut()" class="flex items-center gap-1.5 px-3 py-2 min-h-[44px] text-xs text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-400/30 rounded-lg transition-colors" title="Sign Out">
@@ -826,13 +843,36 @@
                     <span class="hidden sm:inline">Sign Out</span>
                 </button>
             </div>
-            <div id="signInHeaderBtn" class="hidden">
+            <div id="signInHeaderBtn" class="hidden flex items-center gap-2">
+                <button id="reminderBellBtnGuest" onclick="toggleReminderDropdown()" class="relative flex items-center justify-center w-9 h-9 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white rounded-lg transition-colors" title="Meeting Reminders">
+                    <span class="material-icons-round" style="font-size:20px">notifications</span>
+                    <span id="reminderBellDotGuest" class="hidden absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+                </button>
                 <button onclick="showAuthView()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-400 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded transition-colors min-h-[44px]">
                     <span class="material-icons-round text-sm">login</span> <span class="hidden sm:inline">Sign In</span>
                 </button>
             </div>
         </div>
     </header>
+
+    <!-- Reminder Dropdown Panel -->
+    <div id="reminderDropdown" class="hidden fixed z-[200] w-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl" style="top:52px; right:12px;">
+        <div class="p-4 space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-semibold text-white">Meeting Reminders</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="reminderToggle" onchange="toggleRemindersEnabled()" class="sr-only peer">
+                    <div class="w-9 h-5 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                </label>
+            </div>
+            <div id="reminderPermissionBanner" class="hidden bg-blue-500/10 border border-blue-500/20 rounded-lg p-2.5">
+                <p class="text-xs text-blue-300 mb-2">Allow browser notifications so you don't miss meetings.</p>
+                <button onclick="handleEnableReminders()" class="text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg transition-colors">Allow Notifications</button>
+            </div>
+            <p id="reminderStatusText" class="text-xs text-slate-400"></p>
+            <div id="reminderUpcomingList" class="space-y-2 max-h-48 overflow-y-auto"></div>
+        </div>
+    </div>
 
     <!-- Auth View (visible by default) -->
     <main id="authView" class="flex-1 flex items-center justify-center p-8">
@@ -976,7 +1016,9 @@
                     <div class="text-[11px] uppercase text-slate-500 text-center py-1">Fri</div>
                     <div class="text-[11px] uppercase text-slate-500 text-center py-1">Sat</div>
                 </div>
-                <div id="calendarGrid" class="grid grid-cols-7"></div>
+                <div id="calendarGridWrapper">
+                    <div id="calendarGrid" class="grid grid-cols-7"></div>
+                </div>
             </div>
             <!-- Calendar Day Popover -->
             <div id="calendarPopover" class="hidden fixed z-50 w-72 max-h-80 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl overflow-hidden" style="pointer-events:auto">
@@ -1408,7 +1450,7 @@
                                     <div class="td-field-label">Date & Time</div>
                                     <div class="flex gap-2">
                                         <input type="date" id="mtgDate" class="td-input flex-1">
-                                        <input type="time" id="mtgTime" class="td-input w-[110px]">
+                                        <select id="mtgTime" class="td-input w-[120px] time-select"></select>
                                     </div>
                                 </div>
                             </div>
@@ -1495,7 +1537,7 @@
                                     <div class="td-field-label">Date & Time</div>
                                     <div class="flex gap-2">
                                         <input type="date" id="projMtgDate" class="td-input flex-1">
-                                        <input type="time" id="projMtgTime" class="td-input w-[110px]">
+                                        <select id="projMtgTime" class="td-input w-[120px] time-select"></select>
                                     </div>
                                 </div>
                             </div>
@@ -1910,6 +1952,13 @@
         let projectFiles = [];
         let editingProjectMeetingIndex = null;
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
+
+        // --- Meeting Reminders ---
+        let _reminderIntervalId = null;
+        let _notifiedReminders = new Set(
+            JSON.parse(sessionStorage.getItem('planory_notified_reminders') || '[]')
+        );
+        let _remindersMeetingCache = [];
 
         // --- Dirty Tracking (Phase 2) ---
         let _dirtyTasks = new Set();       // Set of _rowId or tempKey for modified tasks
@@ -2854,6 +2903,10 @@ FEW-SHOT EXAMPLES
                 pendingPlan = null;
                 pendingChatFile = null;
                 _pendingDeletes = [];
+                stopReminderLoop();
+                _notifiedReminders.clear();
+                sessionStorage.removeItem('planory_notified_reminders');
+                _remindersMeetingCache = [];
                 showAuthView();
             }, {title:'Sign Out', okText:'Sign Out', destructive:false});
         }
@@ -2870,6 +2923,7 @@ FEW-SHOT EXAMPLES
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
             pushNavState('dashboard');
             _navReady = true;
+            if (isRemindersEnabled()) { startReminderLoop(); updateReminderBellUI(); }
         }
 
         async function migrateArchivedToSupabase() {
@@ -2903,6 +2957,7 @@ FEW-SHOT EXAMPLES
             try { window.history.replaceState({ nav: 'base' }, ''); } catch(e) {}
             pushNavState('dashboard');
             _navReady = true;
+            if (isRemindersEnabled()) { startReminderLoop(); updateReminderBellUI(); }
         }
 
         // =============================================
@@ -4543,10 +4598,9 @@ FEW-SHOT EXAMPLES
         function buildCalendarMeetingMap(registry) {
             const archivedIds = getArchivedIds(registry);
             const map = {};
-            const yesterday = new Date();
-            yesterday.setHours(0, 0, 0, 0);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+            const nowDate = new Date();
+            nowDate.setHours(0, 0, 0, 0);
+            const todayStr = nowDate.getFullYear() + '-' + String(nowDate.getMonth() + 1).padStart(2, '0') + '-' + String(nowDate.getDate()).padStart(2, '0');
 
             registry.forEach(p => {
                 if (archivedIds.has(p.id)) return;
@@ -4555,7 +4609,7 @@ FEW-SHOT EXAMPLES
                 // Task-level meetings
                 (p._tasks || []).forEach(t => {
                     (t.meetings || []).forEach(mtg => {
-                        if (!mtg.date || mtg.date < yesterdayStr) return;
+                        if (!mtg.date || mtg.date < todayStr) return;
                         if (!map[mtg.date]) map[mtg.date] = [];
                         map[mtg.date].push({
                             meetingTitle: mtg.title, meetingTime: mtg.time || '', meetingDate: mtg.date,
@@ -4567,7 +4621,7 @@ FEW-SHOT EXAMPLES
 
                 // Project-level meetings
                 ((p.metadata && p.metadata.meetings) || []).forEach(mtg => {
-                    if (!mtg.date || mtg.date < yesterdayStr) return;
+                    if (!mtg.date || mtg.date < todayStr) return;
                     if (!map[mtg.date]) map[mtg.date] = [];
                     map[mtg.date].push({
                         meetingTitle: mtg.title, meetingTime: mtg.time || '', meetingDate: mtg.date,
@@ -4706,21 +4760,102 @@ FEW-SHOT EXAMPLES
             }
         }
 
-        function navigateCalendarMonth(delta) {
-            calendarMonth += delta;
-            if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
-            if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+        let _calSliding = false;
+        function navigateCalendarMonth(delta, skipAnimation) {
+            if (_calSliding) return;
+            const grid = document.getElementById('calendarGrid');
+            const direction = delta > 0 ? 'left' : 'right';
+
+            if (skipAnimation || !grid.children.length) {
+                calendarMonth += delta;
+                if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+                if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+                closeCalendarPopover();
+                renderCalendar();
+                return;
+            }
+
+            _calSliding = true;
             closeCalendarPopover();
-            renderCalendar();
+            // Phase 1: slide current grid out
+            grid.classList.add('cal-slide-out-' + direction);
+            setTimeout(() => {
+                calendarMonth += delta;
+                if (calendarMonth > 11) { calendarMonth = 0; calendarYear++; }
+                if (calendarMonth < 0) { calendarMonth = 11; calendarYear--; }
+                renderCalendar();
+                // Phase 2: position new grid on opposite side, then settle
+                grid.classList.remove('cal-slide-out-' + direction);
+                grid.classList.add('cal-slide-in-' + direction);
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        grid.classList.remove('cal-slide-in-' + direction);
+                        grid.classList.add('cal-slide-settle');
+                        setTimeout(() => { grid.classList.remove('cal-slide-settle'); _calSliding = false; }, 280);
+                    });
+                });
+            }, 200);
         }
 
         function calendarGoToToday() {
             const now = new Date();
+            const oldMonth = calendarMonth, oldYear = calendarYear;
             calendarMonth = now.getMonth();
             calendarYear = now.getFullYear();
             closeCalendarPopover();
-            renderCalendar();
+            if (oldMonth === calendarMonth && oldYear === calendarYear) return;
+            const delta = (calendarYear * 12 + calendarMonth) - (oldYear * 12 + oldMonth);
+            const grid = document.getElementById('calendarGrid');
+            const direction = delta > 0 ? 'left' : 'right';
+            if (_calSliding || !grid.children.length) { renderCalendar(); return; }
+            _calSliding = true;
+            grid.classList.add('cal-slide-out-' + direction);
+            setTimeout(() => {
+                renderCalendar();
+                grid.classList.remove('cal-slide-out-' + direction);
+                grid.classList.add('cal-slide-in-' + direction);
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        grid.classList.remove('cal-slide-in-' + direction);
+                        grid.classList.add('cal-slide-settle');
+                        setTimeout(() => { grid.classList.remove('cal-slide-settle'); _calSliding = false; }, 280);
+                    });
+                });
+            }, 200);
         }
+
+        // Calendar swipe gesture support
+        (function initCalendarSwipe() {
+            let startX = 0, startY = 0, tracking = false;
+            const THRESHOLD = 50;
+            const wrapper = () => document.getElementById('calendarGridWrapper');
+
+            document.addEventListener('touchstart', (e) => {
+                const w = wrapper();
+                if (!w || !w.contains(e.target)) return;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                tracking = true;
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!tracking) return;
+                const dx = Math.abs(e.touches[0].clientX - startX);
+                const dy = Math.abs(e.touches[0].clientY - startY);
+                // If vertical scroll dominates, cancel swipe tracking
+                if (dy > dx && dy > 10) tracking = false;
+            }, { passive: true });
+
+            document.addEventListener('touchend', (e) => {
+                if (!tracking) return;
+                tracking = false;
+                const endX = e.changedTouches[0].clientX;
+                const dx = endX - startX;
+                if (Math.abs(dx) < THRESHOLD) return;
+                // Swipe left = next month, swipe right = prev month
+                navigateCalendarMonth(dx < 0 ? 1 : -1);
+            }, { passive: true });
+        })();
 
         function showCalendarPopover(dateStr, dayTasks, dayMeetings, anchorEl) {
             const popover = document.getElementById('calendarPopover');
@@ -4736,7 +4871,15 @@ FEW-SHOT EXAMPLES
             dayMeetings.forEach(m => {
                 const row = document.createElement('div');
                 row.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-700/50 cursor-pointer transition-colors';
-                row.onclick = () => { closeCalendarPopover(); openProject(m.projectId); };
+                row.onclick = () => {
+                    closeCalendarPopover();
+                    if (m.isProjectLevel) {
+                        openProject(m.projectId);
+                    } else {
+                        openProjectAndFindTask(m.projectId, m.taskName);
+                        setTimeout(() => switchDetailTab('meetings'), 300);
+                    }
+                };
                 const timeLabel = formatTime12h(m.meetingTime);
                 const contextLabel = m.isProjectLevel ? m.projectName : escapeHtml(m.taskName);
                 row.innerHTML = `
@@ -4892,8 +5035,15 @@ FEW-SHOT EXAMPLES
                 updateRegistryMetadataLocalForProject(projectId);
             }
 
+            const createdTaskName = name;
+            const createdProjectId = projectId;
             cancelCalendarAdd();
             renderCalendar();
+            showToastWithAction(
+                `Task created: "${createdTaskName}"`,
+                'View',
+                () => openProjectAndFindTask(createdProjectId, createdTaskName)
+            );
         }
 
         function cancelCalendarAdd() {
@@ -4987,6 +5137,290 @@ FEW-SHOT EXAMPLES
             return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ' ' + ampm;
         }
 
+        function populateTimeSelects() {
+            document.querySelectorAll('select.time-select').forEach(sel => {
+                sel.innerHTML = '<option value="">No time</option>';
+                for (let h = 7; h <= 21; h++) {
+                    for (let m = 0; m < 60; m += 30) {
+                        if (h === 21 && m > 0) break;
+                        const val = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+                        sel.innerHTML += `<option value="${val}">${formatTime12h(val)}</option>`;
+                    }
+                }
+            });
+        }
+
+        // =============================================
+        // Meeting Reminder Engine
+        // =============================================
+        function isRemindersEnabled() {
+            return localStorage.getItem('planory_reminders_enabled') === 'true';
+        }
+        function setRemindersEnabled(val) {
+            localStorage.setItem('planory_reminders_enabled', val ? 'true' : 'false');
+        }
+
+        function _persistNotifiedReminders() {
+            sessionStorage.setItem('planory_notified_reminders', JSON.stringify([..._notifiedReminders]));
+        }
+
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) return 'unsupported';
+            if (Notification.permission === 'granted') return 'granted';
+            if (Notification.permission === 'denied') return 'denied';
+            const result = await Notification.requestPermission();
+            return result;
+        }
+
+        function sendReminder(title, body, meetingId, triggerType) {
+            const key = meetingId + ':' + triggerType;
+            if (_notifiedReminders.has(key)) return;
+            _notifiedReminders.add(key);
+            _persistNotifiedReminders();
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(title, { body, icon: 'icon-192.png', tag: key });
+                } catch (e) {
+                    showToast(title + ' — ' + body, 'info', 8000);
+                }
+            } else {
+                showToast(title + ' — ' + body, 'info', 8000);
+            }
+        }
+
+        async function collectAllUpcomingMeetings() {
+            let registry = await loadRegistry();
+            // Hydrate _tasks for guest mode
+            if (!currentUser) {
+                registry.forEach(p => {
+                    if (!p._tasks) {
+                        const raw = localStorage.getItem('planner_proj_' + p.id);
+                        const parsed = raw ? JSON.parse(raw) : { tasks: [] };
+                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, meetings: t.meetings || [] }));
+                    }
+                });
+            }
+            const archivedIds = getArchivedIds(registry);
+            const now = new Date();
+            const today = localDateStr(now);
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = localDateStr(tomorrow);
+            const meetings = [];
+
+            registry.forEach(p => {
+                if (archivedIds.has(p.id)) return;
+                // Task-level meetings
+                (p._tasks || []).forEach(t => {
+                    (t.meetings || []).forEach(mtg => {
+                        if (!mtg.date || (mtg.date !== today && mtg.date !== tomorrowStr)) return;
+                        meetings.push({
+                            id: mtg.id || (p.id + '_' + mtg.title + '_' + mtg.date),
+                            title: mtg.title, date: mtg.date, time: mtg.time || '',
+                            projectName: p.name, taskName: t.name
+                        });
+                    });
+                });
+                // Project-level meetings
+                ((p.metadata && p.metadata.meetings) || []).forEach(mtg => {
+                    if (!mtg.date || (mtg.date !== today && mtg.date !== tomorrowStr)) return;
+                    meetings.push({
+                        id: mtg.id || (p.id + '_proj_' + mtg.title + '_' + mtg.date),
+                        title: mtg.title, date: mtg.date, time: mtg.time || '',
+                        projectName: p.name, taskName: null
+                    });
+                });
+            });
+            return meetings;
+        }
+
+        function checkMeetingReminders() {
+            if (!isRemindersEnabled()) return;
+            const now = new Date();
+            const today = localDateStr(now);
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = localDateStr(tomorrow);
+            const currentHour = now.getHours();
+            const currentMin = now.getMinutes();
+
+            _remindersMeetingCache.forEach(mtg => {
+                const ctx = mtg.taskName
+                    ? `${mtg.title} (${mtg.projectName} / ${mtg.taskName})`
+                    : `${mtg.title} (${mtg.projectName})`;
+                const timeLabel = mtg.time ? formatTime12h(mtg.time) : '';
+
+                // Day-before: fires at 6 PM+ on the day before the meeting
+                if (mtg.date === tomorrowStr && currentHour >= 18) {
+                    const label = timeLabel ? 'Tomorrow at ' + timeLabel : 'Tomorrow';
+                    sendReminder('Meeting Tomorrow', label + ': ' + ctx, mtg.id, 'day-before');
+                }
+
+                // Morning-of: fires at 8 AM+ on the meeting day
+                if (mtg.date === today && currentHour >= 8) {
+                    const label = timeLabel ? 'Today at ' + timeLabel : 'Today';
+                    sendReminder('Meeting Today', label + ': ' + ctx, mtg.id, 'morning-of');
+                }
+
+                // 30-min & at-time: only for meetings with a specific time
+                if (mtg.time && mtg.date === today) {
+                    const [mH, mM] = mtg.time.split(':').map(Number);
+                    const meetingMins = mH * 60 + mM;
+                    const nowMins = currentHour * 60 + currentMin;
+                    const diff = meetingMins - nowMins;
+
+                    if (diff >= 0 && diff <= 30) {
+                        const minLabel = diff > 0 ? 'starts in ' + diff + ' minute' + (diff !== 1 ? 's' : '') : 'is starting now';
+                        sendReminder('Meeting Soon', ctx + ' ' + minLabel, mtg.id, '30min');
+                    }
+                    if (diff >= -1 && diff <= 0) {
+                        sendReminder('Meeting Now', ctx + ' is starting now', mtg.id, 'at-time');
+                    }
+                }
+            });
+        }
+
+        async function refreshReminderCache() {
+            _remindersMeetingCache = await collectAllUpcomingMeetings();
+        }
+
+        async function startReminderLoop() {
+            if (!isRemindersEnabled()) return;
+            stopReminderLoop();
+            await refreshReminderCache();
+            checkMeetingReminders();
+            _reminderIntervalId = setInterval(() => {
+                if (document.hidden) return;
+                checkMeetingReminders();
+            }, 60000);
+        }
+
+        function stopReminderLoop() {
+            if (_reminderIntervalId) {
+                clearInterval(_reminderIntervalId);
+                _reminderIntervalId = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && isRemindersEnabled()) {
+                checkMeetingReminders();
+            }
+        });
+
+        // --- Bell UI functions ---
+        function updateReminderBellUI() {
+            const enabled = isRemindersEnabled();
+            const toggle = document.getElementById('reminderToggle');
+            if (toggle) toggle.checked = enabled;
+
+            // Permission banner
+            const banner = document.getElementById('reminderPermissionBanner');
+            if (banner) {
+                const showBanner = enabled && 'Notification' in window && Notification.permission === 'default';
+                banner.classList.toggle('hidden', !showBanner);
+            }
+
+            // Status text
+            const statusEl = document.getElementById('reminderStatusText');
+            if (statusEl) {
+                if (!enabled) {
+                    statusEl.textContent = 'Reminders are off.';
+                } else if (!('Notification' in window)) {
+                    statusEl.textContent = 'Browser notifications not supported. Toasts will be used.';
+                } else if (Notification.permission === 'denied') {
+                    statusEl.textContent = 'Notifications blocked by browser. Toasts will be used instead.';
+                } else if (Notification.permission === 'granted') {
+                    statusEl.textContent = 'Notifications enabled.';
+                } else {
+                    statusEl.textContent = 'Click "Allow Notifications" to enable browser alerts.';
+                }
+            }
+
+            // Bell dot — show if enabled and upcoming meetings exist
+            const hasMeetings = _remindersMeetingCache.length > 0;
+            ['reminderBellDot', 'reminderBellDotGuest'].forEach(id => {
+                const dot = document.getElementById(id);
+                if (dot) dot.classList.toggle('hidden', !(enabled && hasMeetings));
+            });
+
+            // Upcoming preview list
+            const listEl = document.getElementById('reminderUpcomingList');
+            if (listEl) {
+                if (!enabled || _remindersMeetingCache.length === 0) {
+                    listEl.innerHTML = enabled
+                        ? '<p class="text-xs text-slate-500">No upcoming meetings today or tomorrow.</p>'
+                        : '';
+                } else {
+                    const preview = _remindersMeetingCache.slice(0, 3);
+                    listEl.innerHTML = preview.map(m => {
+                        const timeStr = m.time ? formatTime12h(m.time) : 'No time set';
+                        const dateLabel = m.date === localDateStr() ? 'Today' : 'Tomorrow';
+                        const context = m.taskName ? escapeHtml(m.projectName) + ' / ' + escapeHtml(m.taskName) : escapeHtml(m.projectName);
+                        return `<div class="bg-slate-700/50 rounded-lg p-2">
+                            <p class="text-xs font-medium text-white">${escapeHtml(m.title)}</p>
+                            <p class="text-xs text-slate-400">${dateLabel} &middot; ${timeStr}</p>
+                            <p class="text-xs text-slate-500">${context}</p>
+                        </div>`;
+                    }).join('');
+                    if (_remindersMeetingCache.length > 3) {
+                        listEl.innerHTML += `<p class="text-xs text-slate-500">+${_remindersMeetingCache.length - 3} more</p>`;
+                    }
+                }
+            }
+        }
+
+        function toggleReminderDropdown() {
+            const dd = document.getElementById('reminderDropdown');
+            if (!dd) return;
+            const isOpen = !dd.classList.contains('hidden');
+            if (isOpen) {
+                closeReminderDropdown();
+            } else {
+                updateReminderBellUI();
+                dd.classList.remove('hidden');
+            }
+        }
+
+        function closeReminderDropdown() {
+            const dd = document.getElementById('reminderDropdown');
+            if (dd) dd.classList.add('hidden');
+        }
+
+        async function toggleRemindersEnabled() {
+            const nowEnabled = document.getElementById('reminderToggle').checked;
+            setRemindersEnabled(nowEnabled);
+            if (nowEnabled) {
+                await startReminderLoop();
+            } else {
+                stopReminderLoop();
+            }
+            updateReminderBellUI();
+        }
+
+        async function handleEnableReminders() {
+            const result = await requestNotificationPermission();
+            if (result === 'granted') {
+                showToast('Notifications enabled!', 'success');
+            } else if (result === 'denied') {
+                showToast('Notifications blocked. In-app toasts will be used instead.', 'warning');
+            }
+            updateReminderBellUI();
+        }
+
+        // Close dropdown on outside click
+        document.addEventListener('click', (e) => {
+            const dd = document.getElementById('reminderDropdown');
+            if (!dd || dd.classList.contains('hidden')) return;
+            const bellBtn = document.getElementById('reminderBellBtn');
+            const bellBtnGuest = document.getElementById('reminderBellBtnGuest');
+            if (dd.contains(e.target)) return;
+            if (bellBtn && bellBtn.contains(e.target)) return;
+            if (bellBtnGuest && bellBtnGuest.contains(e.target)) return;
+            closeReminderDropdown();
+        });
+
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
@@ -5009,6 +5443,27 @@ FEW-SHOT EXAMPLES
                 el.classList.add('opacity-0', 'translate-y-2');
                 setTimeout(() => el.remove(), 300);
             }, duration);
+        }
+
+        function showToastWithAction(message, actionText, actionFn, type = 'success', duration = 6000) {
+            const colors = { info: 'bg-blue-600', warning: 'bg-amber-600', error: 'bg-red-600', success: 'bg-emerald-600' };
+            const container = document.getElementById('toastContainer');
+            const el = document.createElement('div');
+            el.className = `${colors[type] || colors.info} text-white text-xs px-4 py-2.5 rounded-lg shadow-lg pointer-events-auto transition-all duration-300 opacity-0 translate-y-2 flex items-center gap-3`;
+            const msg = document.createElement('span');
+            msg.className = 'flex-1';
+            msg.textContent = message;
+            const btn = document.createElement('button');
+            btn.className = 'font-semibold underline underline-offset-2 hover:text-white/80 whitespace-nowrap';
+            btn.textContent = actionText;
+            btn.onclick = () => { dismiss(); actionFn(); };
+            el.appendChild(msg);
+            el.appendChild(btn);
+            container.appendChild(el);
+            requestAnimationFrame(() => { el.classList.remove('opacity-0', 'translate-y-2'); });
+            let dismissed = false;
+            function dismiss() { if (dismissed) return; dismissed = true; el.classList.add('opacity-0', 'translate-y-2'); setTimeout(() => el.remove(), 300); }
+            setTimeout(dismiss, duration);
         }
 
         function showConfirmModal(message, onConfirm, opts = {}) {
@@ -6237,9 +6692,6 @@ FEW-SHOT EXAMPLES
 
                 const bgMap = { '-1': 'bg-violet-500/10 text-violet-400 border-violet-500/20', 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
 
-                const meetingCount = focusTasks.filter(f => f.isMeeting).length;
-                const taskCount = focusTasks.length - meetingCount;
-
                 if (focusTasks.length === 1) {
                     const item = focusTasks[0];
                     const chip = document.createElement('span');
@@ -6257,37 +6709,13 @@ FEW-SHOT EXAMPLES
                     }
                     container.appendChild(chip);
                 } else {
-                    // Show meeting chips individually first, then summary for tasks
-                    const meetingItems = focusTasks.filter(f => f.isMeeting);
-                    const taskItems = focusTasks.filter(f => !f.isMeeting);
-
-                    meetingItems.forEach(item => {
-                        const chip = document.createElement('span');
-                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap['-1']}`;
-                        chip.innerHTML = `<span class="material-icons-round" style="font-size:14px">event</span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
-                        chip.onclick = () => {
-                            const md = item.meetingData;
-                            if (md.isProjectLevel) { switchProjectTab('meetings'); }
-                            else { scrollToTask(md.taskId); setTimeout(() => switchDetailTab('meetings'), 100); }
-                        };
-                        container.appendChild(chip);
-                    });
-
-                    if (taskItems.length === 1) {
-                        const item = taskItems[0];
-                        const chip = document.createElement('span');
-                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
-                        chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
-                        chip.onclick = () => scrollToTask(item.task.id);
-                        container.appendChild(chip);
-                    } else if (taskItems.length > 1) {
-                        const topPriority = taskItems[0].priority;
-                        const chip = document.createElement('span');
-                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
-                        chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${taskItems[0].dotCss}"></span>${taskItems.length} tasks need attention <span class="opacity-60">›</span>`;
-                        chip.onclick = () => openFocusModal(taskItems);
-                        container.appendChild(chip);
-                    }
+                    // 2+ items: single summary chip → opens modal with everything
+                    const topPriority = focusTasks[0].priority;
+                    const chip = document.createElement('span');
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
+                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${focusTasks.length} items need attention <span class="opacity-60">›</span>`;
+                    chip.onclick = () => openFocusModal(focusTasks);
+                    container.appendChild(chip);
                 }
             }
 
@@ -8092,6 +8520,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             markMetadataDirty();
             saveProjectFromHub();
             renderProjectMeetingsTab();
+            if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function deleteProjectMeeting(index) {
@@ -8124,6 +8553,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 markMetadataDirty();
                 saveProjectFromHub();
                 renderProjectMeetingsTab();
+                if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
             }, {title:'Delete Meeting', okText:'Delete'});
         }
 
@@ -9324,6 +9754,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         // Drag and drop support
         document.addEventListener('DOMContentLoaded', () => {
+            populateTimeSelects();
             const dropZone = document.getElementById('fileDropZone');
             if (dropZone) {
                 ['dragenter', 'dragover'].forEach(evt => {
@@ -9528,6 +9959,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             scrollToMeeting(savedMeetingId);
             updateRowIndicators(currentTaskIndex);
             saveProject();
+            if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function deleteMeeting(index) {
@@ -9576,6 +10008,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 renderMeetingsTab(task);
                 updateRowIndicators(currentTaskIndex);
                 saveProject();
+                if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
             }, {title:'Delete Meeting', okText:'Delete'});
         }
 
