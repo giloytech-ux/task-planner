@@ -738,6 +738,9 @@
             background: color-mix(in srgb, var(--marker-color) 12%, transparent);
             color: #cbd5e1;
         }
+        .cal-meeting-marker {
+            border-left-style: dashed;
+        }
         .cal-overflow {
             font-size: 9px;
             color: #64748b;
@@ -794,7 +797,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v39</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v40</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -1402,8 +1405,11 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <div class="td-field-label">Date</div>
-                                    <input type="date" id="mtgDate" class="td-input">
+                                    <div class="td-field-label">Date & Time</div>
+                                    <div class="flex gap-2">
+                                        <input type="date" id="mtgDate" class="td-input flex-1">
+                                        <input type="time" id="mtgTime" class="td-input w-[110px]">
+                                    </div>
                                 </div>
                             </div>
                             <div>
@@ -1486,8 +1492,11 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <div class="td-field-label">Date</div>
-                                    <input type="date" id="projMtgDate" class="td-input">
+                                    <div class="td-field-label">Date & Time</div>
+                                    <div class="flex gap-2">
+                                        <input type="date" id="projMtgDate" class="td-input flex-1">
+                                        <input type="time" id="projMtgTime" class="td-input w-[110px]">
+                                    </div>
                                 </div>
                             </div>
                             <div>
@@ -3124,7 +3133,7 @@ FEW-SHOT EXAMPLES
                 try {
                     const [projectsResult, tasksResult] = await Promise.all([
                         withTimeout(supabase.from('projects').select('*').order('created_at')),
-                        withTimeout(supabase.from('tasks').select('project_id, progress, end_date, start_date, name'))
+                        withTimeout(supabase.from('tasks').select('project_id, progress, end_date, start_date, name, meetings'))
                     ]);
                     const pError = projectsResult.error;
                     const tError = tasksResult.error;
@@ -3178,7 +3187,7 @@ FEW-SHOT EXAMPLES
                         taskMap[t.project_id].deadline = t.end_date;
                     }
                     if (!projectTasksMap[t.project_id]) projectTasksMap[t.project_id] = [];
-                    projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress });
+                    projectTasksMap[t.project_id].push({ name: t.name, start: t.start_date, end: t.end_date, progress: t.progress, meetings: t.meetings || [] });
                 });
 
                 const result = (projects || []).map(p => {
@@ -3941,7 +3950,7 @@ FEW-SHOT EXAMPLES
                     if (!p._tasks) {
                         const raw = localStorage.getItem('planner_proj_' + p.id);
                         const parsed = raw ? JSON.parse(raw) : { tasks: [] };
-                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress, meetings: t.meetings || [] }));
                     }
                 });
             }
@@ -4531,6 +4540,45 @@ FEW-SHOT EXAMPLES
             return map;
         }
 
+        function buildCalendarMeetingMap(registry) {
+            const archivedIds = getArchivedIds(registry);
+            const map = {};
+            const yesterday = new Date();
+            yesterday.setHours(0, 0, 0, 0);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+
+            registry.forEach(p => {
+                if (archivedIds.has(p.id)) return;
+                const pColor = p.color || '#3b82f6';
+
+                // Task-level meetings
+                (p._tasks || []).forEach(t => {
+                    (t.meetings || []).forEach(mtg => {
+                        if (!mtg.date || mtg.date < yesterdayStr) return;
+                        if (!map[mtg.date]) map[mtg.date] = [];
+                        map[mtg.date].push({
+                            meetingTitle: mtg.title, meetingTime: mtg.time || '', meetingDate: mtg.date,
+                            taskName: t.name, projectId: p.id, projectName: p.name,
+                            projectColor: pColor, isProjectLevel: false
+                        });
+                    });
+                });
+
+                // Project-level meetings
+                ((p.metadata && p.metadata.meetings) || []).forEach(mtg => {
+                    if (!mtg.date || mtg.date < yesterdayStr) return;
+                    if (!map[mtg.date]) map[mtg.date] = [];
+                    map[mtg.date].push({
+                        meetingTitle: mtg.title, meetingTime: mtg.time || '', meetingDate: mtg.date,
+                        taskName: null, projectId: p.id, projectName: p.name,
+                        projectColor: pColor, isProjectLevel: true
+                    });
+                });
+            });
+            return map;
+        }
+
         async function renderCalendar() {
             let registry = await loadRegistry();
             // Hydrate _tasks for guest mode
@@ -4539,7 +4587,7 @@ FEW-SHOT EXAMPLES
                     if (!p._tasks) {
                         const raw = localStorage.getItem('planner_proj_' + p.id);
                         const parsed = raw ? JSON.parse(raw) : { tasks: [] };
-                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress }));
+                        p._tasks = (parsed.tasks || []).map(t => ({ name: t.name, start: t.start, end: t.end, progress: t.progress, meetings: t.meetings || [] }));
                     }
                 });
             }
@@ -4567,6 +4615,7 @@ FEW-SHOT EXAMPLES
 
             const filteredRegistry = filterSel.value === 'all' ? registry : registry.filter(p => p.id === filterSel.value);
             const taskMap = buildCalendarTaskMap(filteredRegistry);
+            const meetingMap = buildCalendarMeetingMap(filteredRegistry);
             const grid = document.getElementById('calendarGrid');
             const label = document.getElementById('calendarMonthLabel');
             const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -4597,10 +4646,24 @@ FEW-SHOT EXAMPLES
                 dayNum.textContent = cellDate.getDate();
                 cell.appendChild(dayNum);
 
-                // Task markers
+                // Meeting + Task markers
+                const dayMeetings = meetingMap[dateStr] || [];
                 const dayTasks = taskMap[dateStr] || [];
                 const maxShow = 3;
-                dayTasks.slice(0, maxShow).forEach(t => {
+                let shown = 0;
+
+                // Meeting markers first (higher visual priority)
+                dayMeetings.slice(0, maxShow).forEach(m => {
+                    const marker = document.createElement('div');
+                    marker.className = 'cal-marker cal-meeting-marker';
+                    marker.style.setProperty('--marker-color', '#8b5cf6');
+                    marker.textContent = '▸ ' + m.meetingTitle;
+                    cell.appendChild(marker);
+                    shown++;
+                });
+
+                // Task markers fill remaining slots
+                dayTasks.slice(0, maxShow - shown).forEach(t => {
                     const status = getTaskStatus({ start: t.taskStart, end: t.taskEnd, progress: t.taskProgress });
                     const marker = document.createElement('div');
                     marker.className = 'cal-marker';
@@ -4608,23 +4671,25 @@ FEW-SHOT EXAMPLES
                     const symbol = t.isSingleDay ? '◆ ' : '● ';
                     marker.textContent = symbol + t.taskName;
                     cell.appendChild(marker);
+                    shown++;
                 });
-                if (dayTasks.length > maxShow) {
+
+                const totalItems = dayMeetings.length + dayTasks.length;
+                if (totalItems > maxShow) {
                     const overflow = document.createElement('div');
                     overflow.className = 'cal-overflow';
-                    overflow.textContent = '+' + (dayTasks.length - maxShow) + ' more';
+                    overflow.textContent = '+' + (totalItems - maxShow) + ' more';
                     cell.appendChild(overflow);
                 }
 
                 // Click handler
-                if (dayTasks.length > 0) {
+                if (dayTasks.length > 0 || dayMeetings.length > 0) {
                     cell.onclick = (e) => {
                         e.stopPropagation();
-                        // Update selected highlight
                         document.querySelectorAll('.cal-cell.cal-selected').forEach(el => el.classList.remove('cal-selected'));
                         cell.classList.add('cal-selected');
                         calendarSelectedDate = dateStr;
-                        showCalendarPopover(dateStr, dayTasks, cell);
+                        showCalendarPopover(dateStr, dayTasks, dayMeetings, cell);
                     };
                 } else {
                     cell.onclick = (e) => {
@@ -4657,7 +4722,7 @@ FEW-SHOT EXAMPLES
             renderCalendar();
         }
 
-        function showCalendarPopover(dateStr, dayTasks, anchorEl) {
+        function showCalendarPopover(dateStr, dayTasks, dayMeetings, anchorEl) {
             const popover = document.getElementById('calendarPopover');
             const dateLabel = document.getElementById('calendarPopoverDate');
             const list = document.getElementById('calendarPopoverList');
@@ -4666,6 +4731,26 @@ FEW-SHOT EXAMPLES
             dateLabel.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
             list.innerHTML = '';
+
+            // Meeting rows first
+            dayMeetings.forEach(m => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-700/50 cursor-pointer transition-colors';
+                row.onclick = () => { closeCalendarPopover(); openProject(m.projectId); };
+                const timeLabel = formatTime12h(m.meetingTime);
+                const contextLabel = m.isProjectLevel ? m.projectName : escapeHtml(m.taskName);
+                row.innerHTML = `
+                    <span class="material-icons-round text-xs text-violet-400">event</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs text-white truncate">${escapeHtml(m.meetingTitle)}</div>
+                        <div class="text-[10px] text-slate-500 truncate">${contextLabel}${timeLabel ? ' · ' + timeLabel : ''}</div>
+                    </div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400">Meeting</span>
+                `;
+                list.appendChild(row);
+            });
+
+            // Task rows
             dayTasks.forEach(t => {
                 const status = getTaskStatus({ start: t.taskStart, end: t.taskEnd, progress: t.taskProgress });
                 const pct = t.taskProgress;
@@ -4893,6 +4978,13 @@ FEW-SHOT EXAMPLES
             const diffDays = Math.floor(diffHrs / 24);
             if (diffDays < 30) return diffDays + 'd ago';
             return then.toLocaleDateString();
+        }
+
+        function formatTime12h(time24) {
+            if (!time24) return '';
+            const [h, m] = time24.split(':').map(Number);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ' ' + ampm;
         }
 
         function escapeHtml(str) {
@@ -6018,13 +6110,38 @@ FEW-SHOT EXAMPLES
             if (suggestedContainer) suggestedContainer.innerHTML = '';
             if (suggestedRow) suggestedRow.classList.add('hidden');
 
-            if (tasks.length === 0) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const day3 = new Date(today.getTime() + 3 * 86400000);
+            const day3Str = day3.getFullYear() + '-' + String(day3.getMonth() + 1).padStart(2, '0') + '-' + String(day3.getDate()).padStart(2, '0');
+
+            // Collect upcoming meetings (next 3 days) from task-level + project-level
+            const upcomingMeetings = [];
+            tasks.forEach(task => {
+                (task.meetings || []).forEach(mtg => {
+                    if (mtg.date >= todayStr && mtg.date < day3Str) {
+                        upcomingMeetings.push({ mtg, taskName: task.name, taskId: task.id, isProjectLevel: false });
+                    }
+                });
+            });
+            (projectMeetings || []).forEach(mtg => {
+                if (mtg.date >= todayStr && mtg.date < day3Str) {
+                    upcomingMeetings.push({ mtg, taskName: null, taskId: null, isProjectLevel: true });
+                }
+            });
+            // Sort by date, then time (no time sorts last)
+            upcomingMeetings.sort((a, b) => {
+                if (a.mtg.date !== b.mtg.date) return a.mtg.date.localeCompare(b.mtg.date);
+                const ta = a.mtg.time || 'ZZ'; const tb = b.mtg.time || 'ZZ';
+                return ta.localeCompare(tb);
+            });
+
+            if (tasks.length === 0 && upcomingMeetings.length === 0) {
                 panel.classList.add('hidden');
                 return;
             }
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
             // Look ahead to tomorrow: if no progress is made today, what would the status be?
             const tomorrow = new Date(today.getTime() + 86400000);
 
@@ -6075,6 +6192,27 @@ FEW-SHOT EXAMPLES
             // Sort suggested by nearest deadline first
             suggestedTasks.sort((a, b) => a.sort - b.sort);
 
+            // Prepend upcoming meetings as priority -1
+            upcomingMeetings.forEach(um => {
+                const mtgDate = new Date(um.mtg.date + 'T00:00:00');
+                const diffDays = Math.round((mtgDate - today) / 86400000);
+                const timeLabel = formatTime12h(um.mtg.time);
+                let dayLabel;
+                if (diffDays === 0) dayLabel = 'today' + (timeLabel ? ' · ' + timeLabel : '');
+                else if (diffDays === 1) dayLabel = 'tomorrow' + (timeLabel ? ' · ' + timeLabel : '');
+                else dayLabel = 'in ' + diffDays + 'd' + (timeLabel ? ' · ' + timeLabel : '');
+                focusTasks.push({
+                    task: { name: um.mtg.title, id: um.mtg.id },
+                    priority: -1,
+                    sort: diffDays * 10000 + (um.mtg.time ? parseInt(um.mtg.time.replace(':', '')) : 9999),
+                    label: dayLabel,
+                    color: '#8b5cf6',
+                    dotCss: 'bg-violet-500',
+                    isMeeting: true,
+                    meetingData: um
+                });
+            });
+
             if (focusTasks.length === 0) {
                 // All on track
                 panel.classList.remove('hidden');
@@ -6097,23 +6235,59 @@ FEW-SHOT EXAMPLES
                     return b.sort - a.sort; // most overdue / biggest gap first
                 });
 
-                const bgMap = { 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+                const bgMap = { '-1': 'bg-violet-500/10 text-violet-400 border-violet-500/20', 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+
+                const meetingCount = focusTasks.filter(f => f.isMeeting).length;
+                const taskCount = focusTasks.length - meetingCount;
 
                 if (focusTasks.length === 1) {
                     const item = focusTasks[0];
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
-                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${item.task.name} <span class="opacity-60">· ${item.label}</span>`;
-                    chip.onclick = () => scrollToTask(item.task.id);
+                    if (item.isMeeting) {
+                        chip.innerHTML = `<span class="material-icons-round" style="font-size:14px">event</span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
+                        chip.onclick = () => {
+                            const md = item.meetingData;
+                            if (md.isProjectLevel) { switchProjectTab('meetings'); }
+                            else { scrollToTask(md.taskId); setTimeout(() => switchDetailTab('meetings'), 100); }
+                        };
+                    } else {
+                        chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
+                        chip.onclick = () => scrollToTask(item.task.id);
+                    }
                     container.appendChild(chip);
                 } else {
-                    // 2+ focus tasks: show summary chip that opens modal
-                    const topPriority = focusTasks[0].priority;
-                    const chip = document.createElement('span');
-                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
-                    chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${focusTasks.length} tasks need attention <span class="opacity-60">›</span>`;
-                    chip.onclick = () => openFocusModal(focusTasks);
-                    container.appendChild(chip);
+                    // Show meeting chips individually first, then summary for tasks
+                    const meetingItems = focusTasks.filter(f => f.isMeeting);
+                    const taskItems = focusTasks.filter(f => !f.isMeeting);
+
+                    meetingItems.forEach(item => {
+                        const chip = document.createElement('span');
+                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap['-1']}`;
+                        chip.innerHTML = `<span class="material-icons-round" style="font-size:14px">event</span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
+                        chip.onclick = () => {
+                            const md = item.meetingData;
+                            if (md.isProjectLevel) { switchProjectTab('meetings'); }
+                            else { scrollToTask(md.taskId); setTimeout(() => switchDetailTab('meetings'), 100); }
+                        };
+                        container.appendChild(chip);
+                    });
+
+                    if (taskItems.length === 1) {
+                        const item = taskItems[0];
+                        const chip = document.createElement('span');
+                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
+                        chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
+                        chip.onclick = () => scrollToTask(item.task.id);
+                        container.appendChild(chip);
+                    } else if (taskItems.length > 1) {
+                        const topPriority = taskItems[0].priority;
+                        const chip = document.createElement('span');
+                        chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
+                        chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${taskItems[0].dotCss}"></span>${taskItems.length} tasks need attention <span class="opacity-60">›</span>`;
+                        chip.onclick = () => openFocusModal(taskItems);
+                        container.appendChild(chip);
+                    }
                 }
             }
 
@@ -6133,19 +6307,35 @@ FEW-SHOT EXAMPLES
             const list = document.getElementById('focusModalList');
             list.innerHTML = '';
             document.getElementById('focusModalTitle').textContent = title || "Today's Focus";
-            const statusMap = { 0: { text: 'text-red-400', dot: 'bg-red-500' }, 1: { text: 'text-amber-400', dot: 'bg-amber-400' }, 1.5: { text: 'text-orange-400', dot: 'bg-orange-400' }, 2: { text: 'text-blue-400', dot: 'bg-blue-500' } };
+            const statusMap = { '-1': { text: 'text-violet-400', dot: 'bg-violet-500' }, 0: { text: 'text-red-400', dot: 'bg-red-500' }, 1: { text: 'text-amber-400', dot: 'bg-amber-400' }, 1.5: { text: 'text-orange-400', dot: 'bg-orange-400' }, 2: { text: 'text-blue-400', dot: 'bg-blue-500' } };
             const defaultStyle = { text: 'text-slate-400', dot: 'bg-slate-400' };
             focusTasks.forEach(item => {
                 const s = statusMap[item.priority] || defaultStyle;
                 const btn = document.createElement('button');
                 btn.className = `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
-                btn.innerHTML = `<span class="w-2 h-2 rounded-full ${s.dot} shrink-0"></span>
-                    <span class="flex-1 text-left min-w-0">
-                        <span class="text-sm text-white truncate block">${item.task.name}</span>
-                        <span class="text-xs ${s.text} opacity-80">${item.label}</span>
-                    </span>
-                    <span class="material-icons-round text-slate-500 group-hover:text-slate-300 text-sm shrink-0">chevron_right</span>`;
-                btn.onclick = () => { closeFocusModal(); scrollToTask(item.task.id); };
+                if (item.isMeeting) {
+                    const md = item.meetingData;
+                    const context = md.isProjectLevel ? '· Project' : ('· ' + escapeHtml(md.taskName));
+                    btn.innerHTML = `<span class="material-icons-round text-violet-400 shrink-0" style="font-size:16px">event</span>
+                        <span class="flex-1 text-left min-w-0">
+                            <span class="text-sm text-white truncate block">${escapeHtml(item.task.name)}</span>
+                            <span class="text-xs ${s.text} opacity-80">${item.label} ${context}</span>
+                        </span>
+                        <span class="material-icons-round text-slate-500 group-hover:text-slate-300 text-sm shrink-0">chevron_right</span>`;
+                    btn.onclick = () => {
+                        closeFocusModal();
+                        if (md.isProjectLevel) { switchProjectTab('meetings'); }
+                        else { scrollToTask(md.taskId); setTimeout(() => switchDetailTab('meetings'), 100); }
+                    };
+                } else {
+                    btn.innerHTML = `<span class="w-2 h-2 rounded-full ${s.dot} shrink-0"></span>
+                        <span class="flex-1 text-left min-w-0">
+                            <span class="text-sm text-white truncate block">${escapeHtml(item.task.name)}</span>
+                            <span class="text-xs ${s.text} opacity-80">${item.label}</span>
+                        </span>
+                        <span class="material-icons-round text-slate-500 group-hover:text-slate-300 text-sm shrink-0">chevron_right</span>`;
+                    btn.onclick = () => { closeFocusModal(); scrollToTask(item.task.id); };
+                }
                 list.appendChild(btn);
             });
             document.getElementById('focusModal').classList.remove('hidden');
@@ -7777,12 +7967,14 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 card.className = 'meeting-card cursor-pointer hover:border-slate-600';
                 card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editProjectMeeting(i); };
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                const timeStr = formatTime12h(mtg.time);
+                const dateTimeStr = timeStr ? dateStr + ' · ' + timeStr : dateStr;
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-1">
                                 <span class="material-icons-round text-sm text-blue-400">event</span>
-                                <span class="text-xs text-slate-400">${dateStr}</span>
+                                <span class="text-xs text-slate-400">${dateTimeStr}</span>
                             </div>
                             <h4 class="text-sm font-semibold text-white mb-2">${escapeHtml(mtg.title)}</h4>
                             ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
@@ -7803,6 +7995,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             editingProjectMeetingIndex = null;
             document.getElementById('projMtgTitle').value = '';
             document.getElementById('projMtgDate').value = localDateStr();
+            document.getElementById('projMtgTime').value = '';
             document.getElementById('projMtgAttendees').value = '';
             document.getElementById('projMtgNotes').value = '';
             document.getElementById('projMeetingForm').classList.remove('hidden');
@@ -7813,6 +8006,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             editingProjectMeetingIndex = index;
             document.getElementById('projMtgTitle').value = mtg.title;
             document.getElementById('projMtgDate').value = mtg.date;
+            document.getElementById('projMtgTime').value = mtg.time || '';
             document.getElementById('projMtgAttendees').value = mtg.attendees || '';
             document.getElementById('projMtgNotes').value = mtg.notes || '';
             document.getElementById('projMeetingForm').classList.remove('hidden');
@@ -7837,6 +8031,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         function saveProjectMeeting() {
             const title = document.getElementById('projMtgTitle').value.trim();
             const date = document.getElementById('projMtgDate').value;
+            const time = document.getElementById('projMtgTime').value;
             const attendees = document.getElementById('projMtgAttendees').value.trim();
             const notes = document.getElementById('projMtgNotes').value.trim();
             if (!title || !date) { alert('Title and date are required.'); return; }
@@ -7845,7 +8040,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const oldMtgCopy = isEdit ? JSON.parse(JSON.stringify(projectMeetings[editingProjectMeetingIndex])) : null;
             const mtgData = {
                 id: isEdit ? projectMeetings[editingProjectMeetingIndex].id : Date.now().toString(36),
-                title, date, attendees, notes
+                title, date, time, attendees, notes
             };
 
             if (isEdit) {
@@ -9180,12 +9375,14 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn') && _canEdit) editMeeting(i); };
                 if (!_canEdit) card.classList.remove('cursor-pointer');
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+                const timeStr = formatTime12h(mtg.time);
+                const dateTimeStr = timeStr ? dateStr + ' · ' + timeStr : dateStr;
                 card.innerHTML = `
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-1">
                                 <span class="material-icons-round text-sm text-blue-400">event</span>
-                                <span class="text-xs text-slate-400">${dateStr}</span>
+                                <span class="text-xs text-slate-400">${dateTimeStr}</span>
                             </div>
                             <h4 class="text-sm font-semibold text-white mb-2">${escapeHtml(mtg.title)}</h4>
                             ${mtg.attendees ? `<div class="flex items-center gap-1 text-xs text-slate-400 mb-2"><span class="material-icons-round text-sm">group</span> ${escapeHtml(mtg.attendees)}</div>` : ''}
@@ -9207,6 +9404,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             editingMeetingIndex = null;
             document.getElementById('mtgTitle').value = '';
             document.getElementById('mtgDate').value = localDateStr();
+            document.getElementById('mtgTime').value = '';
             document.getElementById('mtgAttendees').value = '';
             document.getElementById('mtgNotes').value = '';
             document.getElementById('meetingForm').classList.remove('hidden');
@@ -9218,6 +9416,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             editingMeetingIndex = index;
             document.getElementById('mtgTitle').value = mtg.title;
             document.getElementById('mtgDate').value = mtg.date;
+            document.getElementById('mtgTime').value = mtg.time || '';
             document.getElementById('mtgAttendees').value = mtg.attendees || '';
             document.getElementById('mtgNotes').value = mtg.notes || '';
             document.getElementById('meetingForm').classList.remove('hidden');
@@ -9246,6 +9445,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (!canEditTaskDetails()) return;
             const title = document.getElementById('mtgTitle').value.trim();
             const date = document.getElementById('mtgDate').value;
+            const time = document.getElementById('mtgTime').value;
             const attendees = document.getElementById('mtgAttendees').value.trim();
             const notes = document.getElementById('mtgNotes').value.trim();
             if (!title || !date) { alert('Title and date are required.'); return; }
@@ -9255,7 +9455,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const oldMtgCopy = isEdit ? JSON.parse(JSON.stringify(task.meetings[editingMeetingIndex])) : null;
             const mtgData = {
                 id: isEdit ? task.meetings[editingMeetingIndex].id : Date.now().toString(36),
-                title, date, attendees, notes
+                title, date, time, attendees, notes
             };
             const savedMeetingId = mtgData.id;
 
