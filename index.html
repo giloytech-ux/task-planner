@@ -810,7 +810,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v44</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v45</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -1061,7 +1061,7 @@
                         </div>
                         <div id="calAddMeetingFields" class="hidden space-y-3">
                             <div>
-                                <label class="block text-xs font-medium text-slate-400 mb-1">Task</label>
+                                <label class="block text-xs font-medium text-slate-400 mb-1">Assign to</label>
                                 <select id="calAddTask" class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
                             </div>
                             <div>
@@ -5105,7 +5105,7 @@ FEW-SHOT EXAMPLES
                 taskBtn.className = 'flex-1 text-xs font-medium py-1.5 rounded-md text-slate-400';
                 taskFields.classList.add('hidden');
                 mtgFields.classList.remove('hidden');
-                heading.innerHTML = 'Add Meeting <span class="text-xs font-normal text-slate-400">(to task)</span>';
+                heading.innerHTML = 'Add Meeting <span class="text-xs font-normal text-slate-400">(to project or task)</span>';
                 populateCalAddTaskDropdown();
                 setTimeout(() => document.getElementById('calAddMtgTitle').focus(), 50);
             }
@@ -5121,6 +5121,11 @@ FEW-SHOT EXAMPLES
             const sel = document.getElementById('calAddTask');
             sel.innerHTML = '';
             if (!projectId) return;
+            // Always add project-level meeting option first
+            const projOpt = document.createElement('option');
+            projOpt.value = '__project__';
+            projOpt.textContent = '\u2014 Project meeting \u2014';
+            sel.appendChild(projOpt);
             let taskList = [];
             if (currentUser) {
                 const { data } = await supabase.from('tasks')
@@ -5132,13 +5137,6 @@ FEW-SHOT EXAMPLES
                 const projRaw = localStorage.getItem('planner_proj_' + projectId);
                 const data = projRaw ? JSON.parse(projRaw) : { tasks: [] };
                 taskList = (data.tasks || []).map(t => ({ id: t.id, name: t.name }));
-            }
-            if (taskList.length === 0) {
-                const opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = 'No tasks in this project';
-                sel.appendChild(opt);
-                return;
             }
             taskList.forEach(t => {
                 const opt = document.createElement('option');
@@ -5161,62 +5159,114 @@ FEW-SHOT EXAMPLES
                 id: Date.now().toString(36),
                 title, date: dateStr, time: time || '', attendees: '', notes: ''
             };
-            const activityEntry = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
-                type: 'system',
-                message: `Meeting logged: "${title}"`,
-                timestamp: new Date().toISOString()
-            };
-            let taskName = '';
+            const isProjectMeeting = taskId === '__project__';
 
-            if (currentUser) {
-                const { data: taskRow, error: fetchErr } = await supabase.from('tasks')
-                    .select('*')
-                    .eq('project_id', projectId)
-                    .eq('task_number', taskId)
-                    .single();
-                if (fetchErr || !taskRow) { console.error('Fetch task error:', fetchErr); return; }
-                taskName = taskRow.name;
-                const meetings = [...(taskRow.meetings || []), mtgData];
-                const activity = [...(taskRow.activity || []), activityEntry];
-                const { error } = await supabase.from('tasks')
-                    .update({ meetings, activity })
-                    .eq('id', taskRow.id);
-                if (error) { console.error('Calendar add meeting error:', error); return; }
-                DataStore.invalidate('project:' + projectId);
-            } else {
-                const projRaw = localStorage.getItem('planner_proj_' + projectId);
-                const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
-                const task = (data.tasks || []).find(t => t.id === taskId);
-                if (!task) return;
-                taskName = task.name;
-                if (!task.meetings) task.meetings = [];
-                if (!task.activity) task.activity = [];
-                task.meetings.push(mtgData);
-                task.activity.push(activityEntry);
-                data.logs = data.logs || [];
-                data.logs.push({
+            if (isProjectMeeting) {
+                // Save to project-level meetings
+                const logEntry = {
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
                     action: 'meeting',
-                    taskId: task.id,
-                    taskName: task.name,
+                    taskId: null,
+                    taskName: 'Project',
                     tab: 'meetings',
                     detail: title,
                     timestamp: new Date().toISOString()
-                });
-                localStorage.setItem('planner_proj_' + projectId, JSON.stringify(data));
-            }
+                };
+                if (currentUser) {
+                    const { data: projRow, error: fetchErr } = await supabase.from('projects')
+                        .select('metadata')
+                        .eq('id', projectId)
+                        .single();
+                    if (fetchErr || !projRow) { console.error('Fetch project error:', fetchErr); return; }
+                    const meta = projRow.metadata || {};
+                    const meetings = [...(meta.meetings || []), mtgData];
+                    const logs = [...(meta.logs || []), logEntry];
+                    const { error } = await supabase.from('projects')
+                        .update({ updated_at: new Date().toISOString(), metadata: { ...meta, meetings, logs } })
+                        .eq('id', projectId);
+                    if (error) { console.error('Calendar add project meeting error:', error); return; }
+                    DataStore.invalidate('project:' + projectId);
+                } else {
+                    const projRaw = localStorage.getItem('planner_proj_' + projectId);
+                    const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [], projectMeetings: [] };
+                    data.projectMeetings = data.projectMeetings || [];
+                    data.projectMeetings.push(mtgData);
+                    data.logs = data.logs || [];
+                    data.logs.push(logEntry);
+                    localStorage.setItem('planner_proj_' + projectId, JSON.stringify(data));
+                }
+                // Sync in-memory if this project is currently open
+                if (currentProjectId === projectId) {
+                    projectMeetings.push(mtgData);
+                }
+                const createdTitle = title;
+                const createdProjectId = projectId;
+                cancelCalendarAdd();
+                renderCalendar();
+                showToastWithAction(
+                    `Meeting added: "${createdTitle}"`,
+                    'View',
+                    () => openProjectAndSwitchTab(createdProjectId, 'meetings')
+                );
+            } else {
+                // Save to task-level meetings (existing behavior)
+                const activityEntry = {
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                    type: 'system',
+                    message: `Meeting logged: "${title}"`,
+                    timestamp: new Date().toISOString()
+                };
+                let taskName = '';
 
-            const createdTitle = title;
-            const createdProjectId = projectId;
-            const createdTaskName = taskName;
-            cancelCalendarAdd();
-            renderCalendar();
-            showToastWithAction(
-                `Meeting added: "${createdTitle}"`,
-                'View',
-                () => openProjectAndFindTaskMeeting(createdProjectId, createdTaskName)
-            );
+                if (currentUser) {
+                    const { data: taskRow, error: fetchErr } = await supabase.from('tasks')
+                        .select('*')
+                        .eq('project_id', projectId)
+                        .eq('task_number', taskId)
+                        .single();
+                    if (fetchErr || !taskRow) { console.error('Fetch task error:', fetchErr); return; }
+                    taskName = taskRow.name;
+                    const meetings = [...(taskRow.meetings || []), mtgData];
+                    const activity = [...(taskRow.activity || []), activityEntry];
+                    const { error } = await supabase.from('tasks')
+                        .update({ meetings, activity })
+                        .eq('id', taskRow.id);
+                    if (error) { console.error('Calendar add meeting error:', error); return; }
+                    DataStore.invalidate('project:' + projectId);
+                } else {
+                    const projRaw = localStorage.getItem('planner_proj_' + projectId);
+                    const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
+                    const task = (data.tasks || []).find(t => t.id === taskId);
+                    if (!task) return;
+                    taskName = task.name;
+                    if (!task.meetings) task.meetings = [];
+                    if (!task.activity) task.activity = [];
+                    task.meetings.push(mtgData);
+                    task.activity.push(activityEntry);
+                    data.logs = data.logs || [];
+                    data.logs.push({
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                        action: 'meeting',
+                        taskId: task.id,
+                        taskName: task.name,
+                        tab: 'meetings',
+                        detail: title,
+                        timestamp: new Date().toISOString()
+                    });
+                    localStorage.setItem('planner_proj_' + projectId, JSON.stringify(data));
+                }
+
+                const createdTitle = title;
+                const createdProjectId = projectId;
+                const createdTaskName = taskName;
+                cancelCalendarAdd();
+                renderCalendar();
+                showToastWithAction(
+                    `Meeting added: "${createdTitle}"`,
+                    'View',
+                    () => openProjectAndFindTaskMeeting(createdProjectId, createdTaskName)
+                );
+            }
         }
 
         let _pendingTaskOpen = null;
@@ -5228,6 +5278,12 @@ FEW-SHOT EXAMPLES
         function openProjectAndFindTaskMeeting(projectId, taskName) {
             _pendingTaskOpen = taskName;
             _pendingDetailTab = 'meetings';
+            openProject(projectId);
+        }
+
+        let _pendingProjectTab = null;
+        function openProjectAndSwitchTab(projectId, tabName) {
+            _pendingProjectTab = tabName;
             openProject(projectId);
         }
 
@@ -6100,6 +6156,11 @@ FEW-SHOT EXAMPLES
                     }
                 }
             }
+            if (_pendingProjectTab) {
+                const tab = _pendingProjectTab;
+                _pendingProjectTab = null;
+                setTimeout(() => switchProjectTab(tab), 150);
+            }
 
             // Background refresh: always re-fetch from server to pick up remote changes
             if (currentUser) {
@@ -6767,15 +6828,6 @@ FEW-SHOT EXAMPLES
                     upcomingMeetings.push({ mtg, taskName: null, taskId: null, isProjectLevel: true });
                 }
             });
-            // Filter out today's meetings whose time has already passed
-            const nowHHMM = String(new Date().getHours()).padStart(2, '0') + ':' + String(new Date().getMinutes()).padStart(2, '0');
-            for (let i = upcomingMeetings.length - 1; i >= 0; i--) {
-                const um = upcomingMeetings[i];
-                if (um.mtg.date === todayStr && um.mtg.time && um.mtg.time < nowHHMM) {
-                    upcomingMeetings.splice(i, 1);
-                }
-            }
-
             // Sort by date, then time (no time sorts last)
             upcomingMeetings.sort((a, b) => {
                 if (a.mtg.date !== b.mtg.date) return a.mtg.date.localeCompare(b.mtg.date);
