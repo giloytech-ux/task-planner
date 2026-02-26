@@ -810,7 +810,7 @@
             <img src="icon-192.png" alt="Planory" class="w-7 h-7 rounded-lg hidden sm:block">
             <h1 class="font-bold text-lg tracking-wide hidden sm:block">Planory</h1>
             <!-- Breadcrumb (visible in project view) -->
-            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v45</span></span>
+            <span id="dashboardTitle" class="hidden items-center gap-1.5 text-lg font-bold text-white">Your Projects <span class="text-[10px] font-normal text-slate-600">v46</span></span>
             <span id="breadcrumbSep" class="text-slate-600 hidden">/</span>
             <span id="breadcrumbName" class="text-sm text-slate-300 breadcrumb-name hidden truncate max-w-[120px] sm:max-w-none" onclick="renameCurrentProject()" title="Click to rename"></span>
             <span id="networkStatus" class="hidden text-[10px] font-medium px-2 py-0.5 rounded-full"></span>
@@ -1063,6 +1063,12 @@
                             <div>
                                 <label class="block text-xs font-medium text-slate-400 mb-1">Assign to</label>
                                 <select id="calAddTask" class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                                <div id="calAddNewTaskRow" class="hidden mt-1.5">
+                                    <input type="text" id="calAddNewTaskName" placeholder="New task name..."
+                                        class="w-full bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2
+                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();confirmCalendarAddDispatch();}">
+                                </div>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-slate-400 mb-1">Meeting title</label>
@@ -1491,7 +1497,7 @@
                                 </div>
                                 <textarea id="mtgNotes" class="td-textarea flex-1" rows="6" placeholder="Meeting notes, decisions, discussion points..."></textarea>
                             </div>
-                            <div class="flex justify-end gap-2">
+                            <div id="mtgFormButtons" class="flex justify-end gap-2">
                                 <button onclick="cancelMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button>
                                 <button onclick="saveMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Save Meeting</button>
                             </div>
@@ -1578,7 +1584,7 @@
                                 </div>
                                 <textarea id="projMtgNotes" class="td-textarea flex-1" rows="6" placeholder="Meeting notes, decisions, discussion points..."></textarea>
                             </div>
-                            <div class="flex justify-end gap-2">
+                            <div id="projMtgFormButtons" class="flex justify-end gap-2">
                                 <button onclick="cancelProjectMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button>
                                 <button onclick="saveProjectMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Save Meeting</button>
                             </div>
@@ -1663,7 +1669,7 @@
     </div>
 
     <!-- Focus Modal -->
-    <div id="focusModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this)closeFocusModal()">
+    <div id="focusModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 md:p-6 hidden" onclick="if(event.target===this){event.stopPropagation();closeFocusModal();}">
         <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl max-w-sm w-full max-h-[70vh] flex flex-col">
             <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700">
                 <div class="flex items-center gap-2">
@@ -1675,6 +1681,9 @@
                 </button>
             </div>
             <div id="focusModalList" class="flex-1 overflow-y-auto p-2"></div>
+            <div id="focusScrollHint" class="hidden flex justify-center py-1.5 border-t border-slate-700/50">
+                <span class="material-icons-round text-slate-500 text-sm animate-bounce" style="font-size:16px">keyboard_arrow_down</span>
+            </div>
         </div>
     </div>
 
@@ -1972,6 +1981,8 @@
         let projectActivity = [];
         let projectFiles = [];
         let editingProjectMeetingIndex = null;
+        let _projMtgAutoSaveTimer = null;
+        let _projMtgEditSnapshot = null;
         let _pendingDeletes = [];  // _rowIds of tasks deleted by user, awaiting DB cleanup
 
         // --- Meeting Reminders ---
@@ -3168,13 +3179,17 @@ FEW-SHOT EXAMPLES
                 closeMobileSummaryPanel(); return;
             }
             if (!document.getElementById('meetingForm').classList.contains('hidden')) {
-                cancelMeeting(); return;
+                if (editingMeetingIndex !== null) closeMeetingEdit();
+                else cancelMeeting();
+                return;
             }
             if (mobileSidebarOpen) {
                 closeMobileSidebar(); return;
             }
             if (!document.getElementById('projMeetingForm').classList.contains('hidden')) {
-                cancelProjectMeeting(); return;
+                if (editingProjectMeetingIndex !== null) closeProjectMeetingEdit();
+                else cancelProjectMeeting();
+                return;
             }
             if (!document.getElementById('projectLogsView').classList.contains('hidden')) {
                 closeProjectLogs(); return;
@@ -5078,6 +5093,8 @@ FEW-SHOT EXAMPLES
             document.getElementById('calAddTaskName').value = '';
             document.getElementById('calAddMtgTitle').value = '';
             document.getElementById('calAddMtgTime').value = '';
+            document.getElementById('calAddNewTaskName').value = '';
+            document.getElementById('calAddNewTaskRow').classList.add('hidden');
             toggleClearBtn('calAddTaskName');
             toggleClearBtn('calAddMtgTitle');
             calAddMode = 'task';
@@ -5120,6 +5137,8 @@ FEW-SHOT EXAMPLES
             const projectId = document.getElementById('calAddProject').value;
             const sel = document.getElementById('calAddTask');
             sel.innerHTML = '';
+            document.getElementById('calAddNewTaskRow').classList.add('hidden');
+            document.getElementById('calAddNewTaskName').value = '';
             if (!projectId) return;
             // Always add project-level meeting option first
             const projOpt = document.createElement('option');
@@ -5144,6 +5163,15 @@ FEW-SHOT EXAMPLES
                 opt.textContent = t.name;
                 sel.appendChild(opt);
             });
+            // Always add "+ Create new task" option at the bottom
+            const newOpt = document.createElement('option');
+            newOpt.value = '__new__';
+            newOpt.textContent = '+ Create new task';
+            sel.appendChild(newOpt);
+            sel.onchange = function() {
+                document.getElementById('calAddNewTaskRow').classList.toggle('hidden', sel.value !== '__new__');
+                if (sel.value === '__new__') document.getElementById('calAddNewTaskName').focus();
+            };
         }
 
         async function confirmCalendarAddMeeting() {
@@ -5159,7 +5187,52 @@ FEW-SHOT EXAMPLES
                 id: Date.now().toString(36),
                 title, date: dateStr, time: time || '', attendees: '', notes: ''
             };
-            const isProjectMeeting = taskId === '__project__';
+
+            // Handle inline task creation
+            let resolvedTaskId = taskId;
+            let resolvedTaskName = '';
+            if (taskId === '__new__') {
+                const newName = document.getElementById('calAddNewTaskName').value.trim();
+                if (!newName) { document.getElementById('calAddNewTaskName').focus(); return; }
+
+                if (currentUser) {
+                    const { data: existing } = await supabase.from('tasks')
+                        .select('task_number, sort_order')
+                        .eq('project_id', projectId);
+                    const maxTaskNum = (existing || []).reduce((max, t) => Math.max(max, parseInt(t.task_number) || 0), 0);
+                    const maxSort = (existing || []).reduce((max, t) => Math.max(max, t.sort_order ?? 0), 0);
+                    const { error } = await supabase.from('tasks').insert({
+                        project_id: projectId,
+                        task_number: String(maxTaskNum + 1),
+                        name: newName, start_date: dateStr, end_date: dateStr,
+                        progress: 0, sort_order: maxSort + 1, priority: 'medium',
+                        assigned: 'Me', description: '', dependencies: '',
+                        checklist: [], activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
+                        files: [], meetings: []
+                    });
+                    if (error) { console.error('Create task for meeting error:', error); return; }
+                    resolvedTaskId = String(maxTaskNum + 1);
+                    DataStore.invalidate('registry');
+                    DataStore.invalidate('project:' + projectId);
+                } else {
+                    const projRaw = localStorage.getItem('planner_proj_' + projectId);
+                    const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
+                    const maxId = (data.tasks || []).reduce((max, t) => Math.max(max, parseInt(t.id) || 0), 0);
+                    const newTaskId = String(maxId + 1);
+                    data.tasks.push({
+                        id: newTaskId, name: newName, start: dateStr, end: dateStr,
+                        progress: 0, dependencies: '', priority: 'medium', assigned: 'Me',
+                        description: '', checklist: [],
+                        activity: [{ id: Date.now().toString(36), type: 'system', message: 'Task created', timestamp: new Date().toISOString() }],
+                        files: [], meetings: []
+                    });
+                    localStorage.setItem('planner_proj_' + projectId, JSON.stringify(data));
+                    resolvedTaskId = newTaskId;
+                }
+                resolvedTaskName = newName;
+            }
+
+            const isProjectMeeting = resolvedTaskId === '__project__';
 
             if (isProjectMeeting) {
                 // Save to project-level meetings
@@ -5222,7 +5295,7 @@ FEW-SHOT EXAMPLES
                     const { data: taskRow, error: fetchErr } = await supabase.from('tasks')
                         .select('*')
                         .eq('project_id', projectId)
-                        .eq('task_number', taskId)
+                        .eq('task_number', resolvedTaskId)
                         .single();
                     if (fetchErr || !taskRow) { console.error('Fetch task error:', fetchErr); return; }
                     taskName = taskRow.name;
@@ -5236,7 +5309,7 @@ FEW-SHOT EXAMPLES
                 } else {
                     const projRaw = localStorage.getItem('planner_proj_' + projectId);
                     const data = projRaw ? JSON.parse(projRaw) : { tasks: [], history: [], logs: [] };
-                    const task = (data.tasks || []).find(t => t.id === taskId);
+                    const task = (data.tasks || []).find(t => t.id === resolvedTaskId);
                     if (!task) return;
                     taskName = task.name;
                     if (!task.meetings) task.meetings = [];
@@ -6860,16 +6933,20 @@ FEW-SHOT EXAMPLES
                 if (status.css === 'status-overdue') {
                     const daysOverdue = Math.ceil((today - end) / 86400000);
                     const label = status.label === 'Due Today' ? 'due today' : (daysOverdue <= 0 ? 'due today' : `${daysOverdue}d overdue`);
-                    focusTasks.push({ task, priority: 0, sort: daysOverdue, label, color: '#ef4444', dotCss: 'bg-red-500' });
+                    focusTasks.push({ task, priority: 0, sort: daysOverdue, daysLeft: daysUntilEnd, gap: 100, label, color: '#ef4444', dotCss: 'bg-red-500' });
                     focusTaskIds.add(task.id);
                 } else if (status.label === 'Attention') {
-                    focusTasks.push({ task, priority: 1, sort: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#fbbf24', dotCss: 'bg-amber-400' });
+                    focusTasks.push({ task, priority: 2, sort: daysUntilEnd, daysLeft: daysUntilEnd, gap: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#fbbf24', dotCss: 'bg-amber-400', visualPriority: 1 });
                     focusTaskIds.add(task.id);
                 } else if (status.label === 'Overdue Soon') {
-                    focusTasks.push({ task, priority: 1.5, sort: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#f97316', dotCss: 'bg-orange-400' });
+                    focusTasks.push({ task, priority: 2, sort: daysUntilEnd, daysLeft: daysUntilEnd, gap: status.gap, label: `${daysUntilEnd}d left · needs +${status.gap}%`, color: '#f97316', dotCss: 'bg-orange-400', visualPriority: 1.5 });
                     focusTaskIds.add(task.id);
                 } else if (today >= start && daysUntilEnd <= 5 && daysUntilEnd >= 0) {
-                    focusTasks.push({ task, priority: 2, sort: daysUntilEnd, label: `${daysUntilEnd}d left`, color: '#3b82f6', dotCss: 'bg-blue-500' });
+                    const totalDays = Math.max((end - start) / 86400000, 1);
+                    const daysPassed = Math.max((tomorrow - start) / 86400000, 0);
+                    const expectedPct = Math.min((daysPassed / totalDays) * 100, 100);
+                    const taskGap = Math.max(Math.round(expectedPct - (parseInt(task.progress) || 0)), 0);
+                    focusTasks.push({ task, priority: 2, sort: daysUntilEnd, daysLeft: daysUntilEnd, gap: taskGap, label: `${daysUntilEnd}d left`, color: '#3b82f6', dotCss: 'bg-blue-500', visualPriority: 2 });
                     focusTaskIds.add(task.id);
                 }
             });
@@ -6930,8 +7007,12 @@ FEW-SHOT EXAMPLES
                 // Sort: by priority tier, then by sort value
                 focusTasks.sort((a, b) => {
                     if (a.priority !== b.priority) return a.priority - b.priority;
-                    if (a.priority === 2) return a.sort - b.sort; // nearest deadline first
-                    return b.sort - a.sort; // most overdue / biggest gap first
+                    if (a.priority === 0) return b.sort - a.sort; // most overdue first
+                    if (a.priority === 2) {
+                        if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft; // nearest deadline first
+                        return (b.gap || 0) - (a.gap || 0); // highest gap first (tiebreaker)
+                    }
+                    return b.sort - a.sort; // meetings: by date+time
                 });
 
                 // Group meetings under their parent task
@@ -6955,11 +7036,12 @@ FEW-SHOT EXAMPLES
 
                 const chipCount = focusTasks.filter(f => !f._grouped).length;
                 const bgMap = { '-1': 'bg-violet-500/10 text-violet-400 border-violet-500/20', 0: 'bg-red-500/10 text-red-400 border-red-500/20', 1: 'bg-amber-500/10 text-amber-400 border-amber-500/20', 1.5: 'bg-orange-500/10 text-orange-400 border-orange-500/20', 2: 'bg-blue-500/10 text-blue-400 border-blue-500/20' };
+                const getPriorityKey = (item) => item.visualPriority ?? item.priority;
 
                 if (chipCount === 1 && focusTasks.length === 1) {
                     const item = focusTasks[0];
                     const chip = document.createElement('span');
-                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[getPriorityKey(item)]}`;
                     if (item.isMeeting) {
                         chip.innerHTML = `<span class="material-icons-round" style="font-size:14px">event</span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label}</span>`;
                         chip.onclick = () => {
@@ -6976,13 +7058,13 @@ FEW-SHOT EXAMPLES
                     // Single task with grouped meetings — show task name chip, open modal on click
                     const item = focusTasks[0];
                     const chip = document.createElement('span');
-                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[item.priority]}`;
+                    chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[getPriorityKey(item)]}`;
                     chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotCss}"></span>${escapeHtml(item.task.name)} <span class="opacity-60">· ${item.label} ›</span>`;
                     chip.onclick = () => openFocusModal(focusTasks);
                     container.appendChild(chip);
                 } else {
                     // 2+ items: single summary chip → opens modal with everything
-                    const topPriority = focusTasks[0].priority;
+                    const topPriority = getPriorityKey(focusTasks[0]);
                     const chip = document.createElement('span');
                     chip.className = `inline-flex items-center gap-1.5 px-3 py-2 md:py-1 min-h-[44px] md:min-h-0 rounded-full text-xs font-medium border cursor-pointer hover:brightness-125 transition ${bgMap[topPriority]}`;
                     chip.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${focusTasks[0].dotCss}"></span>${chipCount} items need attention <span class="opacity-60">›</span>`;
@@ -7010,7 +7092,7 @@ FEW-SHOT EXAMPLES
             const statusMap = { '-1': { text: 'text-violet-400', dot: 'bg-violet-500' }, 0: { text: 'text-red-400', dot: 'bg-red-500' }, 1: { text: 'text-amber-400', dot: 'bg-amber-400' }, 1.5: { text: 'text-orange-400', dot: 'bg-orange-400' }, 2: { text: 'text-blue-400', dot: 'bg-blue-500' } };
             const defaultStyle = { text: 'text-slate-400', dot: 'bg-slate-400' };
             focusTasks.forEach(item => {
-                const s = statusMap[item.priority] || defaultStyle;
+                const s = statusMap[item.visualPriority ?? item.priority] || defaultStyle;
                 const btn = document.createElement('button');
                 const isNested = item._grouped;
                 btn.className = `w-full flex items-center gap-3 ${isNested ? 'pl-8' : 'px-3'} pr-3 py-2.5 rounded-lg hover:bg-slate-700/50 transition-colors group`;
@@ -7041,10 +7123,25 @@ FEW-SHOT EXAMPLES
             });
             document.getElementById('focusModal').classList.remove('hidden');
             pushNavState('focusModal');
+            const scrollHint = document.getElementById('focusScrollHint');
+            requestAnimationFrame(() => {
+                if (list.scrollHeight > list.clientHeight) {
+                    scrollHint.classList.remove('hidden');
+                    list.onscroll = () => {
+                        const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 8;
+                        scrollHint.classList.toggle('hidden', atBottom);
+                    };
+                } else {
+                    scrollHint.classList.add('hidden');
+                    list.onscroll = null;
+                }
+            });
         }
 
         function closeFocusModal() {
             document.getElementById('focusModal').classList.add('hidden');
+            document.getElementById('focusScrollHint').classList.add('hidden');
+            document.getElementById('focusModalList').onscroll = null;
         }
 
         function renderTable() {
@@ -7510,6 +7607,8 @@ FEW-SHOT EXAMPLES
 
         let currentTaskIndex = null;
         let editingMeetingIndex = null;
+        let _mtgAutoSaveTimer = null;
+        let _mtgEditSnapshot = null;
 
         function ensureTaskRichData(task) {
             if (!task.assigned) task.assigned = '';
@@ -7576,6 +7675,7 @@ FEW-SHOT EXAMPLES
         }
 
         function closeTaskDetail() {
+            if (editingMeetingIndex !== null) closeMeetingEdit();
             saveProject(); // non-blocking — mutation queue handles failures
             clearTaskUndoStacks();
             const savedTaskId = currentTaskIndex != null ? tasks[currentTaskIndex]?.id : null;
@@ -7639,6 +7739,7 @@ FEW-SHOT EXAMPLES
             updateTaskUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
             showUndoStatus('task', 'Undo: ' + entry.description);
+            if (entry.tab === 'meetings' && isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function taskRedo() {
@@ -7650,6 +7751,7 @@ FEW-SHOT EXAMPLES
             updateTaskUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'task');
             showUndoStatus('task', 'Redo: ' + entry.description);
+            if (entry.tab === 'meetings' && isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function projUndo() {
@@ -7661,6 +7763,7 @@ FEW-SHOT EXAMPLES
             updateProjUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
             showUndoStatus('project', 'Undo: ' + entry.description);
+            if (entry.tab === 'meetings' && isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function projRedo() {
@@ -7672,6 +7775,7 @@ FEW-SHOT EXAMPLES
             updateProjUndoButtons();
             if (entry.tab) switchToTabWithFlash(entry.tab, 'project');
             showUndoStatus('project', 'Redo: ' + entry.description);
+            if (entry.tab === 'meetings' && isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
         function updateTaskUndoButtons() {
@@ -7723,6 +7827,7 @@ FEW-SHOT EXAMPLES
         }
 
         function switchDetailTab(tabName) {
+            if (editingMeetingIndex !== null) closeMeetingEdit();
             const tabs = ['details', 'meetings', 'checklist', 'activitylog', 'files'];
             const tabIds = { details: 'tabDetails', meetings: 'tabMeetings', checklist: 'tabChecklist', activitylog: 'tabActivityLog', files: 'tabFiles' };
 
@@ -8549,6 +8654,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         // ---- PROJECT INFO HUB — TAB SWITCHING & SAVE HELPER ----
 
         function switchProjectTab(tabName) {
+            if (editingProjectMeetingIndex !== null) closeProjectMeetingEdit();
             const tabs = ['details', 'meetings', 'checklist', 'activitylog', 'files', 'logs'];
             const tabIds = { details: 'projTabDetails', meetings: 'projTabMeetings', checklist: 'projTabChecklist', activitylog: 'projTabActivity', files: 'projTabFiles', logs: 'projTabLogs' };
             document.querySelectorAll('.proj-tab').forEach((btn, i) => {
@@ -8666,7 +8772,12 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 const card = document.createElement('div');
                 card.setAttribute('data-proj-meeting-id', mtg.id);
                 card.className = 'meeting-card cursor-pointer hover:border-slate-600';
-                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn')) editProjectMeeting(i); };
+                card.onclick = (e) => {
+                    if (!e.target.closest('.meeting-delete-btn')) {
+                        if (editingProjectMeetingIndex === i) { closeProjectMeetingEdit(); }
+                        else { if (editingProjectMeetingIndex !== null) closeProjectMeetingEdit(); editProjectMeeting(i); }
+                    }
+                };
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
                 const timeStr = formatTime12h(mtg.time);
                 const dateTimeStr = timeStr ? dateStr + ' · ' + timeStr : dateStr;
@@ -8692,6 +8803,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function showAddProjectMeeting() {
+            if (editingProjectMeetingIndex !== null) closeProjectMeetingEdit();
             pushNavState('modal');
             editingProjectMeetingIndex = null;
             document.getElementById('projMtgTitle').value = '';
@@ -8699,18 +8811,22 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             document.getElementById('projMtgTime').value = '';
             document.getElementById('projMtgAttendees').value = '';
             document.getElementById('projMtgNotes').value = '';
+            updateProjMeetingFormButtons(false);
             document.getElementById('projMeetingForm').classList.remove('hidden');
         }
 
         function editProjectMeeting(index) {
             const mtg = projectMeetings[index];
             editingProjectMeetingIndex = index;
+            _projMtgEditSnapshot = JSON.parse(JSON.stringify(mtg));
             document.getElementById('projMtgTitle').value = mtg.title;
             document.getElementById('projMtgDate').value = mtg.date;
             document.getElementById('projMtgTime').value = mtg.time || '';
             document.getElementById('projMtgAttendees').value = mtg.attendees || '';
             document.getElementById('projMtgNotes').value = mtg.notes || '';
+            updateProjMeetingFormButtons(true);
             document.getElementById('projMeetingForm').classList.remove('hidden');
+            attachProjMeetingAutoSaveListeners();
         }
 
         function toggleProjectMeetingFullscreen() {
@@ -8722,6 +8838,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function cancelProjectMeeting() {
+            if (editingProjectMeetingIndex !== null) { closeProjectMeetingEdit(); return; }
             editingProjectMeetingIndex = null;
             const form = document.getElementById('projMeetingForm');
             form.classList.remove('meeting-fullscreen');
@@ -8796,8 +8913,141 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
+        // ---- PROJECT MEETING AUTO-SAVE ----
+
+        const _projMtgAddButtonsHTML = `<button onclick="cancelProjectMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button><button onclick="saveProjectMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Save Meeting</button>`;
+
+        function updateProjMeetingFormButtons(isEdit) {
+            const container = document.getElementById('projMtgFormButtons');
+            if (!container) return;
+            if (isEdit) {
+                container.innerHTML = `<span id="projMtgSavedIndicator" class="text-xs text-green-400 self-center mr-2 opacity-0 transition-opacity duration-300">Saved &#10003;</span><button onclick="closeProjectMeetingEdit()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Done</button>`;
+            } else {
+                container.innerHTML = _projMtgAddButtonsHTML;
+            }
+        }
+
+        function flashProjMtgSaveIndicator() {
+            const el = document.getElementById('projMtgSavedIndicator');
+            if (!el) return;
+            el.style.opacity = '1';
+            setTimeout(() => { if (el) el.style.opacity = '0'; }, 1500);
+        }
+
+        function autoSaveProjectMeeting() {
+            if (editingProjectMeetingIndex === null) return;
+            if (!projectMeetings || !projectMeetings[editingProjectMeetingIndex]) return;
+            const title = document.getElementById('projMtgTitle').value.trim();
+            const date = document.getElementById('projMtgDate').value;
+            if (!title || !date) return;
+            const time = document.getElementById('projMtgTime').value;
+            const attendees = document.getElementById('projMtgAttendees').value.trim();
+            const notes = document.getElementById('projMtgNotes').value.trim();
+            const mtg = projectMeetings[editingProjectMeetingIndex];
+            mtg.title = title;
+            mtg.date = date;
+            mtg.time = time;
+            mtg.attendees = attendees;
+            mtg.notes = notes;
+            markMetadataDirty();
+            saveProjectFromHub();
+            flashProjMtgSaveIndicator();
+        }
+
+        let _projMtgAutoSaveListeners = [];
+
+        function attachProjMeetingAutoSaveListeners() {
+            detachProjMeetingAutoSaveListeners();
+            const textIds = ['projMtgTitle', 'projMtgAttendees', 'projMtgNotes'];
+            const selectIds = ['projMtgDate', 'projMtgTime'];
+            textIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const handler = () => {
+                    clearTimeout(_projMtgAutoSaveTimer);
+                    _projMtgAutoSaveTimer = setTimeout(autoSaveProjectMeeting, 800);
+                };
+                el.addEventListener('input', handler);
+                _projMtgAutoSaveListeners.push({ el, event: 'input', handler });
+            });
+            selectIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const handler = () => {
+                    clearTimeout(_projMtgAutoSaveTimer);
+                    autoSaveProjectMeeting();
+                };
+                el.addEventListener('change', handler);
+                _projMtgAutoSaveListeners.push({ el, event: 'change', handler });
+            });
+        }
+
+        function detachProjMeetingAutoSaveListeners() {
+            clearTimeout(_projMtgAutoSaveTimer);
+            _projMtgAutoSaveTimer = null;
+            _projMtgAutoSaveListeners.forEach(({ el, event, handler }) => {
+                el.removeEventListener(event, handler);
+            });
+            _projMtgAutoSaveListeners = [];
+        }
+
+        function closeProjectMeetingEdit() {
+            if (editingProjectMeetingIndex === null) return;
+            clearTimeout(_projMtgAutoSaveTimer);
+            autoSaveProjectMeeting();
+            const mtg = projectMeetings ? projectMeetings[editingProjectMeetingIndex] : null;
+            if (_projMtgEditSnapshot && mtg && JSON.stringify(_projMtgEditSnapshot) !== JSON.stringify(mtg)) {
+                if (!_isUndoRedo) {
+                    addProjectLog('meeting', null, 'Project', null, 'updated: ' + mtg.title);
+                    const snapshotCopy = JSON.parse(JSON.stringify(_projMtgEditSnapshot));
+                    const finalCopy = JSON.parse(JSON.stringify(mtg));
+                    pushProjUndo({
+                        tab: 'meetings',
+                        description: 'Edited meeting',
+                        undoFn() {
+                            const mi = projectMeetings.findIndex(m => m.id === finalCopy.id);
+                            if (mi > -1) projectMeetings[mi] = JSON.parse(JSON.stringify(snapshotCopy));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectMeetingsTab();
+                        },
+                        redoFn() {
+                            const mi = projectMeetings.findIndex(m => m.id === snapshotCopy.id);
+                            if (mi > -1) projectMeetings[mi] = JSON.parse(JSON.stringify(finalCopy));
+                            markMetadataDirty();
+                            saveProjectFromHub();
+                            renderProjectMeetingsTab();
+                        }
+                    });
+                }
+                if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
+            }
+            detachProjMeetingAutoSaveListeners();
+            _projMtgEditSnapshot = null;
+            editingProjectMeetingIndex = null;
+            const form = document.getElementById('projMeetingForm');
+            form.classList.remove('meeting-fullscreen');
+            form.classList.add('hidden');
+            document.getElementById('projMtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+            updateProjMeetingFormButtons(false);
+            renderProjectMeetingsTab();
+            saveProjectFromHub();
+        }
+
         function deleteProjectMeeting(index) {
             showConfirmModal('Delete this meeting?', () => {
+                if (editingProjectMeetingIndex === index) {
+                    detachProjMeetingAutoSaveListeners();
+                    _projMtgEditSnapshot = null;
+                    editingProjectMeetingIndex = null;
+                    const form = document.getElementById('projMeetingForm');
+                    form.classList.remove('meeting-fullscreen');
+                    form.classList.add('hidden');
+                    document.getElementById('projMtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+                    updateProjMeetingFormButtons(false);
+                } else if (editingProjectMeetingIndex !== null && index < editingProjectMeetingIndex) {
+                    editingProjectMeetingIndex--;
+                }
                 const mtgCopy = JSON.parse(JSON.stringify(projectMeetings[index]));
                 const capturedIdx = index;
                 const removed = projectMeetings.splice(index, 1);
@@ -10076,7 +10326,12 @@ Write for a management audience: concise, factual, focused on outcomes not proce
                 card.setAttribute('data-meeting-id', mtg.id);
                 card.className = 'meeting-card cursor-pointer hover:border-slate-600';
                 const _canEdit = canEditTaskDetails();
-                card.onclick = (e) => { if (!e.target.closest('.meeting-delete-btn') && _canEdit) editMeeting(i); };
+                card.onclick = (e) => {
+                    if (!e.target.closest('.meeting-delete-btn') && _canEdit) {
+                        if (editingMeetingIndex === i) { closeMeetingEdit(); }
+                        else { if (editingMeetingIndex !== null) closeMeetingEdit(); editMeeting(i); }
+                    }
+                };
                 if (!_canEdit) card.classList.remove('cursor-pointer');
                 const dateStr = new Date(mtg.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
                 const timeStr = formatTime12h(mtg.time);
@@ -10104,6 +10359,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
 
         function showAddMeeting() {
             if (!canEditTaskDetails()) return;
+            if (editingMeetingIndex !== null) closeMeetingEdit();
             pushNavState('modal');
             editingMeetingIndex = null;
             document.getElementById('mtgTitle').value = '';
@@ -10111,6 +10367,7 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             document.getElementById('mtgTime').value = '';
             document.getElementById('mtgAttendees').value = '';
             document.getElementById('mtgNotes').value = '';
+            updateMeetingFormButtons(false);
             document.getElementById('meetingForm').classList.remove('hidden');
         }
 
@@ -10118,12 +10375,15 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             const task = tasks[currentTaskIndex];
             const mtg = task.meetings[index];
             editingMeetingIndex = index;
+            _mtgEditSnapshot = JSON.parse(JSON.stringify(mtg));
             document.getElementById('mtgTitle').value = mtg.title;
             document.getElementById('mtgDate').value = mtg.date;
             document.getElementById('mtgTime').value = mtg.time || '';
             document.getElementById('mtgAttendees').value = mtg.attendees || '';
             document.getElementById('mtgNotes').value = mtg.notes || '';
+            updateMeetingFormButtons(true);
             document.getElementById('meetingForm').classList.remove('hidden');
+            attachMeetingAutoSaveListeners();
         }
 
         function toggleMeetingFullscreen() {
@@ -10135,14 +10395,12 @@ Write for a management audience: concise, factual, focused on outcomes not proce
         }
 
         function cancelMeeting() {
-            const task = tasks[currentTaskIndex];
-            const savedMeetingId = editingMeetingIndex != null && task?.meetings?.[editingMeetingIndex] ? task.meetings[editingMeetingIndex].id : null;
+            if (editingMeetingIndex !== null) { closeMeetingEdit(); return; }
             editingMeetingIndex = null;
             const form = document.getElementById('meetingForm');
             form.classList.remove('meeting-fullscreen');
             form.classList.add('hidden');
             document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
-            scrollToMeeting(savedMeetingId);
         }
 
         function saveMeeting() {
@@ -10235,10 +10493,163 @@ Write for a management audience: concise, factual, focused on outcomes not proce
             if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
         }
 
+        // ---- MEETING AUTO-SAVE (task-level) ----
+
+        const _mtgAddButtonsHTML = `<button onclick="cancelMeeting()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors min-h-[44px]">Cancel</button><button onclick="saveMeeting()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Save Meeting</button>`;
+
+        function updateMeetingFormButtons(isEdit) {
+            const container = document.getElementById('mtgFormButtons');
+            if (!container) return;
+            if (isEdit) {
+                container.innerHTML = `<span id="mtgSavedIndicator" class="text-xs text-green-400 self-center mr-2 opacity-0 transition-opacity duration-300">Saved &#10003;</span><button onclick="closeMeetingEdit()" class="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors min-h-[44px]">Done</button>`;
+            } else {
+                container.innerHTML = _mtgAddButtonsHTML;
+            }
+        }
+
+        function flashMtgSaveIndicator() {
+            const el = document.getElementById('mtgSavedIndicator');
+            if (!el) return;
+            el.style.opacity = '1';
+            setTimeout(() => { if (el) el.style.opacity = '0'; }, 1500);
+        }
+
+        function autoSaveMeeting() {
+            if (editingMeetingIndex === null) return;
+            const task = tasks[currentTaskIndex];
+            if (!task || !task.meetings || !task.meetings[editingMeetingIndex]) return;
+            const title = document.getElementById('mtgTitle').value.trim();
+            const date = document.getElementById('mtgDate').value;
+            if (!title || !date) return;
+            const time = document.getElementById('mtgTime').value;
+            const attendees = document.getElementById('mtgAttendees').value.trim();
+            const notes = document.getElementById('mtgNotes').value.trim();
+            const mtg = task.meetings[editingMeetingIndex];
+            mtg.title = title;
+            mtg.date = date;
+            mtg.time = time;
+            mtg.attendees = attendees;
+            mtg.notes = notes;
+            autoLockTask(task);
+            markTaskDirty(task, 'meetings');
+            saveProject();
+            flashMtgSaveIndicator();
+        }
+
+        let _mtgAutoSaveListeners = [];
+
+        function attachMeetingAutoSaveListeners() {
+            detachMeetingAutoSaveListeners();
+            const textIds = ['mtgTitle', 'mtgAttendees', 'mtgNotes'];
+            const selectIds = ['mtgDate', 'mtgTime'];
+            textIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const handler = () => {
+                    clearTimeout(_mtgAutoSaveTimer);
+                    _mtgAutoSaveTimer = setTimeout(autoSaveMeeting, 800);
+                };
+                el.addEventListener('input', handler);
+                _mtgAutoSaveListeners.push({ el, event: 'input', handler });
+            });
+            selectIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const handler = () => {
+                    clearTimeout(_mtgAutoSaveTimer);
+                    autoSaveMeeting();
+                };
+                el.addEventListener('change', handler);
+                _mtgAutoSaveListeners.push({ el, event: 'change', handler });
+            });
+        }
+
+        function detachMeetingAutoSaveListeners() {
+            clearTimeout(_mtgAutoSaveTimer);
+            _mtgAutoSaveTimer = null;
+            _mtgAutoSaveListeners.forEach(({ el, event, handler }) => {
+                el.removeEventListener(event, handler);
+            });
+            _mtgAutoSaveListeners = [];
+        }
+
+        function closeMeetingEdit() {
+            if (editingMeetingIndex === null) return;
+            clearTimeout(_mtgAutoSaveTimer);
+            autoSaveMeeting();
+            const task = tasks[currentTaskIndex];
+            const mtg = task && task.meetings ? task.meetings[editingMeetingIndex] : null;
+            const savedMeetingId = mtg ? mtg.id : null;
+            if (_mtgEditSnapshot && mtg && JSON.stringify(_mtgEditSnapshot) !== JSON.stringify(mtg)) {
+                if (!_isUndoRedo) {
+                    addActivityEntry(task, 'system', `Meeting updated: "${mtg.title}"`);
+                    addProjectLog('meeting', task.id, task.name, 'meetings', 'updated: ' + mtg.title);
+                    markTaskDirty(task, 'activity');
+                    markMetadataDirty();
+                    const capturedIndex = currentTaskIndex;
+                    const snapshotCopy = JSON.parse(JSON.stringify(_mtgEditSnapshot));
+                    const finalCopy = JSON.parse(JSON.stringify(mtg));
+                    pushTaskUndo({
+                        tab: 'meetings',
+                        description: 'Edited meeting',
+                        undoFn() {
+                            const t = tasks[capturedIndex];
+                            const mi = t.meetings.findIndex(m => m.id === finalCopy.id);
+                            if (mi > -1) t.meetings[mi] = JSON.parse(JSON.stringify(snapshotCopy));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'meetings');
+                            renderMeetingsTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        },
+                        redoFn() {
+                            const t = tasks[capturedIndex];
+                            const mi = t.meetings.findIndex(m => m.id === snapshotCopy.id);
+                            if (mi > -1) t.meetings[mi] = JSON.parse(JSON.stringify(finalCopy));
+                            autoLockTask(t);
+                            markTaskDirty(t, 'meetings');
+                            renderMeetingsTab(t);
+                            renderTaskDetailHeader();
+                            updateRowIndicators(capturedIndex);
+                            saveProject();
+                        }
+                    });
+                }
+                if (isRemindersEnabled()) refreshReminderCache().then(() => updateReminderBellUI());
+            }
+            detachMeetingAutoSaveListeners();
+            _mtgEditSnapshot = null;
+            editingMeetingIndex = null;
+            const form = document.getElementById('meetingForm');
+            form.classList.remove('meeting-fullscreen');
+            form.classList.add('hidden');
+            document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+            updateMeetingFormButtons(false);
+            if (task) {
+                renderMeetingsTab(task);
+                updateRowIndicators(currentTaskIndex);
+            }
+            scrollToMeeting(savedMeetingId);
+            saveProject();
+        }
+
         function deleteMeeting(index) {
             if (!canEditTaskDetails()) return;
             const task = tasks[currentTaskIndex];
             showConfirmModal('Delete this meeting?', () => {
+                if (editingMeetingIndex === index) {
+                    detachMeetingAutoSaveListeners();
+                    _mtgEditSnapshot = null;
+                    editingMeetingIndex = null;
+                    const form = document.getElementById('meetingForm');
+                    form.classList.remove('meeting-fullscreen');
+                    form.classList.add('hidden');
+                    document.getElementById('mtgExpandBtn').innerHTML = '<span class="material-icons-round text-sm">fullscreen</span>';
+                    updateMeetingFormButtons(false);
+                } else if (editingMeetingIndex !== null && index < editingMeetingIndex) {
+                    editingMeetingIndex--;
+                }
                 const mtgCopy = JSON.parse(JSON.stringify(task.meetings[index]));
                 const capturedIdx = index;
                 autoLockTask(task);
